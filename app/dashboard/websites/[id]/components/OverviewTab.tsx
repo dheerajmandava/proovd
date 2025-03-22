@@ -75,7 +75,7 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="loading loading-spinner loading-lg"></div>
+        <span className="loading loading-spinner loading-lg text-primary"></span>
       </div>
     );
   }
@@ -83,22 +83,26 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
   // Show error state
   if (error) {
     return (
-      <div className="alert alert-error">
-        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <span>{error}</span>
+      <div className="alert alert-error shadow-lg">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{error}</span>
+        </div>
       </div>
     );
   }
 
   if (!websiteData) {
     return (
-      <div className="alert alert-error">
-        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <span>Website data not available</span>
+      <div className="alert alert-error shadow-lg">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Website data not available</span>
+        </div>
       </div>
     );
   }
@@ -115,118 +119,112 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
   return (
     <div>
       {/* Stats Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <ClientStatsCard 
-          title="Total Impressions" 
-          value={websiteData.totalImpressions || 0} 
-          iconName="ChartBarIcon" 
-          description="Total number of notification views" 
-        />
-        <ClientStatsCard 
-          title="Total Clicks" 
-          value={websiteData.totalClicks || 0} 
-          iconName="CursorArrowRippleIcon" 
-          description="Total number of notification clicks" 
-        />
-        <ClientStatsCard 
-          title="Conversion Rate" 
-          value={formattedConversionRate} 
-          iconName="ArrowTrendingUpIcon" 
-          description="Percentage of views that led to clicks" 
-          valueFormatting={false}
-        />
+      <div className="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full mb-8">
+        <div className="stat">
+          <div className="stat-title">Total Impressions</div>
+          <div className="stat-value text-primary">{formatNumber(websiteData.totalImpressions || 0)}</div>
+          <div className="stat-desc">Total notification views</div>
+        </div>
+        
+        <div className="stat">
+          <div className="stat-title">Total Clicks</div>
+          <div className="stat-value text-secondary">{formatNumber(websiteData.totalClicks || 0)}</div>
+          <div className="stat-desc">Total notification clicks</div>
+        </div>
+        
+        <div className="stat">
+          <div className="stat-title">Conversion Rate</div>
+          <div className="stat-value text-accent">{formattedConversionRate}</div>
+          <div className="stat-desc">Views that led to clicks</div>
+        </div>
       </div>
 
       {/* API Information */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <h2 className="text-lg font-medium mb-4">Integration Details</h2>
-        <div className="border rounded-md p-4 bg-gray-50">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              API Key
+      <div className="card bg-base-100 shadow-xl mb-8">
+        <div className="card-body">
+          <h2 className="card-title">Integration Details</h2>
+          
+          <div className="form-control w-full mb-4">
+            <label className="label">
+              <span className="label-text">API Key</span>
             </label>
-            <div className="flex">
-              <div className="bg-gray-100 rounded-l-md border border-r-0 border-gray-300 px-3 py-2 text-gray-500 text-sm font-mono flex-grow">
-                {websiteData.apiKey}
-              </div>
+            <div className="input-group">
+              <input type="text" readOnly value={websiteData.apiKey} className="input input-bordered font-mono w-full" />
               <CopyButton textToCopy={websiteData.apiKey} />
             </div>
           </div>
           
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Installation Code
+          <div className="form-control w-full">
+            <label className="label">
+              <span className="label-text">Installation Code</span>
             </label>
-            <div className="bg-gray-100 rounded-md border border-gray-300 p-3 text-sm font-mono overflow-x-auto">
-              {installationCode}
+            <pre className="bg-base-200 rounded-box p-3 text-sm font-mono overflow-x-auto">{installationCode}</pre>
+            <div className="mt-2">
+              <CopyButton 
+                textToCopy={installationCode}
+                className="btn btn-sm btn-ghost gap-2"
+                iconClassName="h-4 w-4"
+                label="Copy to clipboard"
+              />
             </div>
-            <CopyButton 
-              textToCopy={installationCode}
-              className="mt-2 text-sm text-blue-600 hover:text-blue-800 flex items-center"
-              iconClassName="h-4 w-4 mr-1"
-              label="Copy to clipboard"
-            />
           </div>
         </div>
       </div>
 
       {/* Recent Notifications */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-medium">Recent Notifications</h2>
-          <button 
-            className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
-            onClick={() => window.location.href = `/dashboard/websites/${websiteData.id}/notifications`}
-          >
-            View All <ArrowTopRightOnSquareIcon className="h-4 w-4 ml-1" />
-          </button>
-        </div>
+      <div className="card bg-base-100 shadow-xl">
+        <div className="card-body">
+          <div className="flex items-center justify-between">
+            <h2 className="card-title">Recent Notifications</h2>
+            <Link 
+              href={`/dashboard/websites/${websiteData.id}/notifications`}
+              className="btn btn-sm btn-ghost gap-2"
+            >
+              View All 
+              <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+            </Link>
+          </div>
 
-        {formattedNotifications.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Action
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Location
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Time
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {formattedNotifications.map((notification) => (
-                  <tr key={notification.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {notification.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {notification.action}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {notification.location}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {notification.timeAgo}
-                    </td>
+          {formattedNotifications.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="table table-zebra">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Action</th>
+                    <th>Location</th>
+                    <th>Time</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <BellIcon className="h-12 w-12 mx-auto text-gray-300" />
-            <p className="mt-2 text-gray-500">No notifications yet</p>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {formattedNotifications.map((notification) => (
+                    <tr key={notification.id}>
+                      <td className="font-medium">{notification.name}</td>
+                      <td>
+                        <div className="badge badge-outline">{notification.action}</div>
+                      </td>
+                      <td>
+                        <div className="badge badge-neutral">{notification.location}</div>
+                      </td>
+                      <td>{notification.timeAgo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-16 h-16 bg-base-200 rounded-full flex items-center justify-center text-base-content/40 mb-4">
+                <BellIcon className="h-8 w-8" />
+              </div>
+              <h3 className="font-bold">No notifications yet</h3>
+              <p className="text-sm text-base-content/60 mt-1">Create your first notification to get started</p>
+              <Link href={`/dashboard/websites/${websiteId}/notifications/new`} className="btn btn-primary mt-4">
+                Create Notification
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

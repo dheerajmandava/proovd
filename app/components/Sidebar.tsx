@@ -64,7 +64,7 @@ export default function Sidebar() {
   return (
     <div className="drawer-side z-20">
       <label htmlFor="drawer-toggle" className="drawer-overlay"></label>
-      <aside className="bg-base-200 w-72 h-screen">
+      <aside className="bg-base-200 w-72 h-screen flex flex-col">
         <div className="px-4 py-6">
           <Link href="/dashboard" className="flex items-center gap-2 text-2xl font-bold text-primary">
             <div className="mask mask-squircle bg-primary w-10 h-10 flex items-center justify-center">
@@ -82,17 +82,15 @@ export default function Sidebar() {
           />
         </div>
         
-        <div className="px-4">
-          <ul className="menu menu-md gap-1">
+        <div className="px-4 flex-grow">
+          <ul className="menu menu-md bg-base-200 rounded-box gap-1">
             {navigation.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <li key={item.name}>
                   <Link
                     href={item.href}
-                    className={`flex items-center gap-3 ${
-                      isActive ? 'active' : ''
-                    }`}
+                    className={isActive ? 'active' : ''}
                   >
                     <item.icon
                       className="h-5 w-5"
@@ -106,15 +104,18 @@ export default function Sidebar() {
           </ul>
         </div>
         
-        <div className="divider mx-4"></div>
+        <div className="divider px-4 my-2"></div>
         
-        <div className="px-4 mt-4">
-          <div className="card bg-base-100 shadow-sm">
+        <div className="px-4 py-4">
+          <div className="card bg-base-100 shadow-lg">
             <div className="card-body p-4">
               <h3 className="card-title text-sm">Need help?</h3>
-              <p className="text-xs">Check our documentation or contact support</p>
+              <p className="text-base-content/70 text-xs">Check our documentation or contact support</p>
               <div className="card-actions justify-end mt-2">
-                <Link href="/dashboard/help" className="btn btn-primary btn-sm">Help Center</Link>
+                <Link href="/dashboard/help" className="btn btn-primary btn-sm">
+                  <QuestionMarkCircleIcon className="h-4 w-4 mr-1" />
+                  Help Center
+                </Link>
               </div>
             </div>
           </div>

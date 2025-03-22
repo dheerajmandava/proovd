@@ -136,22 +136,6 @@ export default function WebsiteDetailsPage({
               Verify Domain
             </Link>
           )}
-
-          <Link
-            href={`/dashboard/websites/${websiteId}/edit`}
-            className="btn btn-sm btn-outline"
-          >
-            <PencilSquareIcon className="h-4 w-4 mr-1" />
-            Edit
-          </Link>
-
-          <Link
-            href={`/dashboard/websites/${websiteId}/settings`}
-            className="btn btn-sm btn-outline"
-          >
-            <CogIcon className="h-4 w-4 mr-1" />
-            Settings
-          </Link>
         </div>
       </div>
 
@@ -184,13 +168,6 @@ export default function WebsiteDetailsPage({
           onClick={() => handleTabChange('settings')}
         >
           Settings
-        </button>
-        <button 
-          role="tab"
-          className={`tab ${activeTab === 'setup' ? 'tab-active' : ''}`}
-          onClick={() => handleTabChange('setup')}
-        >
-          Setup
         </button>
       </div>
 
@@ -231,7 +208,6 @@ export default function WebsiteDetailsPage({
         </div>
       )}
       {activeTab === 'settings' && <WebsiteSettingsPage />}
-      {activeTab === 'setup' && <WebsiteSetupPage />}
     </div>
   );
 } 

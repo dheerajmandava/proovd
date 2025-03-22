@@ -90,7 +90,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="loading loading-spinner loading-lg"></div>
+        <span className="loading loading-spinner loading-lg text-primary"></span>
       </div>
     );
   }
@@ -98,11 +98,13 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
   // Show error state
   if (error) {
     return (
-      <div className="alert alert-error">
-        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <span>{error}</span>
+      <div className="alert alert-error shadow-lg">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{error}</span>
+        </div>
       </div>
     );
   }
@@ -112,7 +114,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl font-bold">Notifications</h2>
-          <p className="text-gray-700">
+          <p className="text-base-content/70">
             Manage notifications for {website?.name || 'this website'}
           </p>
         </div>
@@ -127,14 +129,21 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
       {notifications.length === 0 ? (
         <div className="card bg-base-100 shadow-lg">
           <div className="card-body items-center text-center">
-            <h2 className="card-title mb-2">No notifications yet</h2>
-            <p className="mb-4">Add your first notification to start showing social proof on your website</p>
-            <Link href={`/dashboard/websites/${websiteId}/notifications/new`} className="btn btn-primary">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
-                <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+            <div className="w-16 h-16 bg-base-200 rounded-full flex items-center justify-center text-base-content/40 mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              Create Your First Notification
-            </Link>
+            </div>
+            <h2 className="card-title mb-2">No notifications yet</h2>
+            <p className="mb-4 text-base-content/70">Add your first notification to start showing social proof on your website</p>
+            <div className="card-actions">
+              <Link href={`/dashboard/websites/${websiteId}/notifications/new`} className="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
+                  <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                </svg>
+                Create Your First Notification
+              </Link>
+            </div>
           </div>
         </div>
       ) : (
@@ -146,10 +155,24 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <h2 className="card-title">{notification.name}</h2>
-                      <div className={`badge badge-${notification.status === 'active' ? 'success' : notification.status === 'draft' ? 'warning' : 'error'} gap-1`}>
-                        <div className={`w-2 h-2 rounded-full bg-${notification.status === 'active' ? 'success' : notification.status === 'draft' ? 'warning' : 'error'}-content`}></div>
-                        {notification.status === 'active' ? 'Active' : notification.status === 'draft' ? 'Draft' : 'Inactive'}
-                      </div>
+                      {notification.status === 'active' && (
+                        <div className="badge badge-success gap-1">
+                          <span className="w-2 h-2 rounded-full bg-success-content"></span>
+                          Active
+                        </div>
+                      )}
+                      {notification.status === 'draft' && (
+                        <div className="badge badge-warning gap-1">
+                          <span className="w-2 h-2 rounded-full bg-warning-content"></span>
+                          Draft
+                        </div>
+                      )}
+                      {notification.status === 'inactive' && (
+                        <div className="badge badge-error gap-1">
+                          <span className="w-2 h-2 rounded-full bg-error-content"></span>
+                          Inactive
+                        </div>
+                      )}
                     </div>
 
                     <div className="badge badge-outline mb-2">
@@ -157,7 +180,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
                        notification.type === 'signup' ? 'Sign Up' : 'Custom'}
                     </div>
 
-                    <p className="text-gray-700 mb-2">
+                    <p className="text-base-content/80 mb-2">
                       {notification.type === 'purchase' && notification.productName && (
                         <span>Someone purchased {notification.productName}</span>
                       )}
@@ -169,7 +192,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
                       )}
                     </p>
 
-                    <div className="flex items-center gap-2 text-xs text-gray-700 mb-2">
+                    <div className="flex items-center gap-2 text-xs text-base-content/60 mb-2">
                       <span>Created {notification.createdAt ? timeAgo(notification.createdAt) : 'recently'}</span>
                       <span>•</span>
                       <span className="capitalize">
@@ -211,30 +234,38 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
                 </div>
                 
                 {/* Preview of the notification */}
-                <div className="mt-4 p-4 bg-base-200 rounded-lg">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 rounded-full overflow-hidden mr-3 bg-base-300">
-                      {notification.image ? (
-                        <img src={notification.image} alt="Avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xl font-bold">
-                          {notification.name.substring(0, 1)}
+                <div className="collapse collapse-plus bg-base-200 rounded-box mt-4">
+                  <input type="checkbox" className="peer" /> 
+                  <div className="collapse-title text-sm font-medium">
+                    Preview Notification
+                  </div>
+                  <div className="collapse-content">
+                    <div className="flex items-center mt-2">
+                      <div className="avatar">
+                        <div className="w-10 h-10 rounded-full bg-base-300">
+                          {notification.image ? (
+                            <img src={notification.image} alt="Avatar" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xl font-bold">
+                              {notification.name.substring(0, 1)}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-sm">
-                        {notification.type === 'purchase' && notification.productName && (
-                          <span>Someone purchased {notification.productName}</span>
-                        )}
-                        {notification.type === 'signup' && (
-                          <span>Someone signed up</span>
-                        )}
-                        {notification.message && (
-                          <span> {notification.message}</span>
-                        )}
                       </div>
-                      <div className="text-xs text-gray-500">just now</div>
+                      <div className="ml-3">
+                        <div className="font-semibold text-sm">
+                          {notification.type === 'purchase' && notification.productName && (
+                            <span>Someone purchased {notification.productName}</span>
+                          )}
+                          {notification.type === 'signup' && (
+                            <span>Someone signed up</span>
+                          )}
+                          {notification.message && (
+                            <span> {notification.message}</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-base-content/60">just now</div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -245,4 +276,4 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
       )}
     </div>
   );
-} 
+}
