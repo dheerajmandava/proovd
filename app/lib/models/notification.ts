@@ -66,6 +66,18 @@ const notificationSchema = new Schema(
         type: Date,
       },
     },
+    displayCount: {
+      type: Number,
+      default: 0,
+    },
+    uniqueImpressionCount: {
+      type: Number,
+      default: 0,
+    },
+    clickCount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

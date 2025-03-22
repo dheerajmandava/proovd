@@ -31,6 +31,8 @@ class SocialProofify {
   private intervalId: number | null = null;
   private apiUrl = 'https://api.socialproofify.com'; // Replace with actual API URL in production
   private currentUrl: string;
+  private sessionId: string;
+  private clientId: string;
 
   constructor(options: SocialProofifyOptions) {
     // Set default options
@@ -45,9 +47,44 @@ class SocialProofify {
 
     // Store current URL
     this.currentUrl = window.location.href;
+    
+    // Generate or retrieve session ID
+    this.sessionId = this.getOrCreateSessionId();
+    
+    // Generate or retrieve client ID (persists across sessions)
+    this.clientId = this.getOrCreateClientId();
 
     // Initialize the widget
     this.init();
+  }
+  
+  // Generate a unique identifier
+  private generateId(): string {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+  
+  // Get existing session ID or create a new one
+  private getOrCreateSessionId(): string {
+    let sessionId = sessionStorage.getItem('socialproofify_session');
+    if (!sessionId) {
+      sessionId = this.generateId();
+      sessionStorage.setItem('socialproofify_session', sessionId);
+    }
+    return sessionId;
+  }
+  
+  // Get existing client ID or create a new one (persists across sessions)
+  private getOrCreateClientId(): string {
+    let clientId = localStorage.getItem('socialproofify_client');
+    if (!clientId) {
+      clientId = this.generateId();
+      localStorage.setItem('socialproofify_client', clientId);
+    }
+    return clientId;
   }
 
   private async init(): Promise<void> {
@@ -288,7 +325,9 @@ class SocialProofify {
           apiKey: this.options.apiKey,
           notificationId: notificationId,
           action: 'impression',
-          url: this.currentUrl
+          url: this.currentUrl,
+          sessionId: this.sessionId,
+          clientId: this.clientId
         }),
       });
     } catch (error) {
@@ -307,7 +346,9 @@ class SocialProofify {
           apiKey: this.options.apiKey,
           notificationId: notificationId,
           action: 'click',
-          url: this.currentUrl
+          url: this.currentUrl,
+          sessionId: this.sessionId,
+          clientId: this.clientId
         }),
       });
     } catch (error) {

@@ -28,6 +28,33 @@ interface WebsiteData {
   totalImpressions: number;
   totalClicks: number;
   conversionRate: number;
+  cachedStats?: {
+    totalImpressions: number;
+    totalUniqueImpressions: number;
+    totalClicks: number;
+    conversionRate: string;
+    metrics: {
+      last24Hours: {
+        impressions: number;
+        uniqueImpressions: number;
+        clicks: number;
+        conversionRate: string;
+      };
+      last7Days: {
+        impressions: number;
+        uniqueImpressions: number;
+        clicks: number;
+        conversionRate: string;
+      };
+      last30Days: {
+        impressions: number;
+        uniqueImpressions: number;
+        clicks: number;
+        conversionRate: string;
+      };
+    };
+    lastUpdated: string;
+  };
 }
 
 export default function OverviewTab({ websiteId }: OverviewTabProps) {
@@ -111,10 +138,23 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://proovd.com';
   const installationCode = `<script src="${baseUrl}/api/embed?domain=${websiteData.domain}"></script>`;
 
-  // Format the conversion rate safely
-  const formattedConversionRate = websiteData.conversionRate !== undefined && websiteData.conversionRate !== null 
-    ? `${websiteData.conversionRate.toFixed(1)}%` 
-    : '0.0%';
+  // Update the conversion rate rendering to safely handle division by zero
+  const renderConversionRate = () => {
+    if (!websiteData) return '0%';
+    
+    // Use cached stats if available
+    if (websiteData.cachedStats?.conversionRate) {
+      return `${websiteData.cachedStats.conversionRate}%`;
+    }
+    
+    // Calculate on the fly with safety check for division by zero
+    const impressions = websiteData.totalImpressions || 0;
+    const clicks = websiteData.totalClicks || 0;
+    
+    if (impressions === 0) return '0.00%';
+    
+    return `${((clicks / impressions) * 100).toFixed(2)}%`;
+  };
 
   return (
     <div>
@@ -134,7 +174,7 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
         
         <div className="stat">
           <div className="stat-title">Conversion Rate</div>
-          <div className="stat-value text-accent">{formattedConversionRate}</div>
+          <div className="stat-value text-accent">{renderConversionRate()}</div>
           <div className="stat-desc">Views that led to clicks</div>
         </div>
       </div>

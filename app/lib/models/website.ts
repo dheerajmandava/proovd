@@ -119,6 +119,33 @@ const websiteSchema = new Schema(
         default: 0,
       },
     },
+    cachedStats: {
+      totalImpressions: Number,
+      totalUniqueImpressions: Number,
+      totalClicks: Number,
+      conversionRate: String,
+      metrics: {
+        last24Hours: {
+          impressions: Number,
+          uniqueImpressions: Number,
+          clicks: Number,
+          conversionRate: String,
+        },
+        last7Days: {
+          impressions: Number,
+          uniqueImpressions: Number,
+          clicks: Number,
+          conversionRate: String,
+        },
+        last30Days: {
+          impressions: Number,
+          uniqueImpressions: Number,
+          clicks: Number,
+          conversionRate: String,
+        },
+      },
+      lastUpdated: Date,
+    },
   },
   {
     timestamps: true,

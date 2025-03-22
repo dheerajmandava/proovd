@@ -37,7 +37,27 @@ const metricSchema = new Schema(
     },
     sessionId: {
       type: String,
+      index: true,
     },
+    clientId: {
+      type: String,
+      index: true,
+    },
+    isBot: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    ipAddress: {
+      type: String,
+    },
+    referrer: {
+      type: String,
+    },
+    isUnique: {
+      type: Boolean,
+      default: true,
+    }
   },
   {
     timestamps: true,
@@ -50,6 +70,10 @@ metricSchema.index({ notificationId: 1, type: 1 });
 metricSchema.index({ timestamp: 1 });
 metricSchema.index({ siteId: 1, timestamp: 1 });
 metricSchema.index({ notificationId: 1, timestamp: 1 });
+metricSchema.index({ sessionId: 1, notificationId: 1, type: 1 });
+metricSchema.index({ clientId: 1, notificationId: 1, type: 1 });
+metricSchema.index({ isBot: 1 });
+metricSchema.index({ isUnique: 1 });
 
 // Method to create a formatted response object
 metricSchema.methods.toResponse = function () {
@@ -62,6 +86,10 @@ metricSchema.methods.toResponse = function () {
     timestamp: this.timestamp,
     deviceInfo: this.deviceInfo,
     sessionId: this.sessionId,
+    clientId: this.clientId,
+    isBot: this.isBot,
+    isUnique: this.isUnique,
+    referrer: this.referrer,
     createdAt: this.createdAt,
   };
 };

@@ -4,6 +4,7 @@ import Notification from '@/app/lib/models/notification';
 import Website from '@/app/lib/models/website';
 import { sanitizeInput } from '@/app/lib/server-utils';
 import Metric from '@/app/lib/models/metric';
+import { isBot } from '@/app/lib/bot-detection';
 
 /**
  * API endpoint for tracking impressions and clicks on notifications
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     // Parse request body
     const body = await request.json();
-    const { apiKey, notificationId, action, url } = body;
+    const { apiKey, notificationId, action, url, sessionId, clientId } = body;
 
     // Validate required fields
     if (!apiKey || !notificationId || !action) {
@@ -70,24 +71,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get request information for bot detection
+    const userAgent = request.headers.get('user-agent');
+    const ip = request.headers.get('x-forwarded-for') || '';
+    const referrer = request.headers.get('referer');
+
+    // Detect if this is a bot
+    const botDetectionData = {
+      userAgent,
+      ip,
+      referrer
+    };
+    const detectedAsBot = isBot(botDetectionData);
+
+    // Determine if this is a unique impression or click
+    let isUnique = true;
+    
+    // For impressions, check if this session has already seen this notification
+    if (action === 'impression' && sessionId) {
+      const existingImpression = await Metric.findOne({
+        notificationId,
+        sessionId,
+        type: 'impression'
+      });
+      
+      isUnique = !existingImpression;
+    }
+
     // Create metric entry
     const metric = await Metric.create({
       siteId: website._id,
       notificationId: notification._id,
       type: action === 'impression' ? 'impression' : 'click',
       url: url ? sanitizeInput(url) : undefined,
-      userAgent: request.headers.get('user-agent') || undefined,
-      referer: request.headers.get('referer') || undefined,
+      userAgent,
+      ipAddress: ip,
+      referrer,
+      sessionId,
+      clientId,
+      isBot: detectedAsBot,
+      isUnique,
       timestamp: new Date()
     });
 
-    // Update notification counts
-    if (action === 'impression') {
-      notification.displayCount = (notification.displayCount || 0) + 1;
-    } else if (action === 'click') {
-      notification.clickCount = (notification.clickCount || 0) + 1;
+    // Only update notification counts for non-bot traffic and unique impressions for impressions
+    if (!detectedAsBot && (action !== 'impression' || isUnique)) {
+      // Update notification counts
+      if (action === 'impression') {
+        notification.displayCount = (notification.displayCount || 0) + 1;
+        // Also track unique impression count
+        if (isUnique) {
+          notification.uniqueImpressionCount = (notification.uniqueImpressionCount || 0) + 1;
+        }
+      } else if (action === 'click') {
+        notification.clickCount = (notification.clickCount || 0) + 1;
+      }
+      await notification.save();
     }
-    await notification.save();
 
     return NextResponse.json(
       { success: true },
