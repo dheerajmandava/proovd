@@ -157,24 +157,7 @@ export default function WebsiteSettingsPage() {
   
   return (
     <div className="container mx-auto p-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
-        <div>
-          <div className="flex items-center mb-2">
-            <Link href={`/dashboard/websites/${params.id}`} className="mr-2">
-              <ArrowLeftIcon className="h-5 w-5 text-gray-500 hover:text-gray-700" />
-            </Link>
-            <h1 className="text-2xl font-bold">Website Settings</h1>
-          </div>
-          <div className="text-sm breadcrumbs">
-            <ul>
-              <li><Link href="/dashboard">Dashboard</Link></li>
-              <li><Link href="/dashboard/websites">Websites</Link></li>
-              <li><Link href={`/dashboard/websites/${params.id}`}>{websiteName}</Link></li>
-              <li>Settings</li>
-            </ul>
-          </div>
-        </div>
-      </div>
+
       
       {message.text && (
         <div className={`alert ${message.type === 'error' ? 'alert-error' : 'alert-success'} mb-6`}>

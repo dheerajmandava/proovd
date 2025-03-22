@@ -19,16 +19,20 @@ import dynamic from 'next/dynamic';
 
 // Dynamically import the WebsiteSettingsPage component
 const WebsiteSettingsPage = dynamic(() => import('./settings/page'), {
-  loading: () => <div className="flex justify-center items-center h-64">
-    <div className="loading loading-spinner loading-lg"></div>
-  </div>
+  loading: () => (
+    <div className="flex justify-center items-center h-64">
+      <span className="loading loading-spinner loading-lg text-primary"></span>
+    </div>
+  )
 });
 
 // Dynamically import the WebsiteSetupPage component
 const WebsiteSetupPage = dynamic(() => import('./setup/page'), {
-  loading: () => <div className="flex justify-center items-center h-64">
-    <div className="loading loading-spinner loading-lg"></div>
-  </div>
+  loading: () => (
+    <div className="flex justify-center items-center h-64">
+      <span className="loading loading-spinner loading-lg text-primary"></span>
+    </div>
+  )
 });
 
 export default function WebsiteDetailsPage({
@@ -78,7 +82,7 @@ export default function WebsiteDetailsPage({
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="loading loading-spinner loading-lg"></div>
+        <span className="loading loading-spinner loading-lg text-primary"></span>
       </div>
     );
   }
@@ -103,7 +107,8 @@ export default function WebsiteDetailsPage({
 
   return (
     <div className="container mx-auto p-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+      {/* Website header with name and domain */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">{website.name}</h1>
           <div className="flex items-center text-gray-500 mt-1">
@@ -150,59 +155,62 @@ export default function WebsiteDetailsPage({
         </div>
       </div>
 
-      {/* Website Navigation Tabs */}
-      <div className="tabs tabs-bordered mb-6">
+      {/* Website Navigation Tabs - Using DaisyUI tab components */}
+      <div role="tablist" className="tabs tabs-bordered mb-6">
         <button 
-          onClick={() => handleTabChange('overview')} 
+          role="tab"
           className={`tab ${activeTab === 'overview' ? 'tab-active' : ''}`}
+          onClick={() => handleTabChange('overview')}
         >
           Overview
         </button>
         <button 
-          onClick={() => handleTabChange('notifications')} 
+          role="tab"
           className={`tab ${activeTab === 'notifications' ? 'tab-active' : ''}`}
+          onClick={() => handleTabChange('notifications')}
         >
           Notifications
         </button>
         <button 
-          onClick={() => handleTabChange('analytics')} 
+          role="tab"
           className={`tab ${activeTab === 'analytics' ? 'tab-active' : ''}`}
+          onClick={() => handleTabChange('analytics')}
         >
           Analytics
         </button>
         <button 
-          onClick={() => handleTabChange('settings')} 
+          role="tab"
           className={`tab ${activeTab === 'settings' ? 'tab-active' : ''}`}
+          onClick={() => handleTabChange('settings')}
         >
           Settings
         </button>
         <button 
-          onClick={() => handleTabChange('setup')} 
+          role="tab"
           className={`tab ${activeTab === 'setup' ? 'tab-active' : ''}`}
+          onClick={() => handleTabChange('setup')}
         >
           Setup
         </button>
       </div>
 
+      {/* Website Verification Warning - Using DaisyUI alert */}
       {website.verification?.status !== 'verified' && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md mb-6">
-          <div className="flex">
-            <ShieldExclamationIcon className="h-6 w-6 text-yellow-400 mr-3" />
-            <div>
-              <h3 className="text-sm font-medium text-yellow-800">Domain Verification Required</h3>
-              <div className="mt-1 text-sm text-yellow-700">
-                <p>
-                  Your website is not yet verified. Verify domain ownership to
-                  start displaying notifications on your website.
-                </p>
-                <Link
-                  href={`/dashboard/websites/${websiteId}/verify`}
-                  className="inline-flex items-center mt-2 text-yellow-800 hover:text-yellow-900 font-medium"
-                >
-                  Complete Verification
-                  <ArrowTopRightOnSquareIcon className="h-4 w-4 ml-1" />
-                </Link>
-              </div>
+        <div className="alert alert-warning mb-6">
+          <ShieldExclamationIcon className="h-6 w-6" />
+          <div>
+            <h3 className="font-bold">Domain Verification Required</h3>
+            <div className="text-sm">
+              Your website is not yet verified. Verify domain ownership to
+              start displaying notifications on your website.
+            </div>
+            <div className="mt-2">
+              <Link
+                href={`/dashboard/websites/${websiteId}/verify`}
+                className="btn btn-sm btn-warning"
+              >
+                Complete Verification
+              </Link>
             </div>
           </div>
         </div>
@@ -211,7 +219,17 @@ export default function WebsiteDetailsPage({
       {/* Tab Content */}
       {activeTab === 'overview' && <OverviewTab websiteId={websiteId} />}
       {activeTab === 'notifications' && <NotificationsTab websiteId={websiteId} />}
-      {activeTab === 'analytics' && <div>Analytics content coming soon</div>}
+      {activeTab === 'analytics' && (
+        <div className="card bg-base-100 shadow-xl">
+          <div className="card-body items-center text-center">
+            <h2 className="card-title">Analytics Coming Soon</h2>
+            <p>We're working on building powerful analytics tools for your website.</p>
+            <div className="card-actions mt-4">
+              <button className="btn btn-primary btn-disabled">Coming Soon</button>
+            </div>
+          </div>
+        </div>
+      )}
       {activeTab === 'settings' && <WebsiteSettingsPage />}
       {activeTab === 'setup' && <WebsiteSetupPage />}
     </div>
