@@ -1,0 +1,41 @@
+version: '3'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb-replica
+    hostname: mongodb-replica
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - mongodb-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: always
+
+  mongo-init:
+    image: mongo:latest
+    container_name: mongodb-init
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./scripts/init-replica.sh:/scripts/init-replica.sh
+    command: ["sh", "-c", "chmod +x /scripts/init-replica.sh && /scripts/init-replica.sh"]
+    networks:
+      - mongodb-network
+    restart: "no"
+
+networks:
+  mongodb-network:
+    driver: bridge
+
+volumes:
+  mongodb_data: 

@@ -1,0 +1,27 @@
+import SignInForm from "@/app/components/auth/SignInForm";
+
+export default function SignInPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold mb-2">Proovd</h1>
+          <p className="text-neutral-content opacity-80">
+            Sign in to your account to access your dashboard
+          </p>
+        </div>
+        
+        <SignInForm />
+        
+        <div className="text-center mt-8">
+          <p className="text-sm text-neutral-content opacity-80">
+            Don't have an account?{" "}
+            <a href="/auth/signup" className="text-primary hover:underline">
+              Create an account
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+} 
