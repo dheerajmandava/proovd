@@ -43,7 +43,6 @@ export default function Sidebar() {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'Websites', href: '/dashboard/websites', icon: GlobeAltIcon },
-    { name: 'Notifications', href: '/dashboard/notifications', icon: BellIcon },
     { 
       name: 'Analytics', 
       href: activeWebsiteId 

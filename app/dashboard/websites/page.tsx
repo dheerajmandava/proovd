@@ -55,18 +55,37 @@ export default async function WebsitesPage() {
         ? ((clicksCount / impressionsCount) * 100).toFixed(2) 
         : '0.00';
 
-      return {
+      // Get the first API key from the apiKeys array if it exists
+      const apiKey = website.apiKeys && website.apiKeys.length > 0 
+        ? website.apiKeys[0].key 
+        : null;
+        
+      // Create a safe copy of apiKeys (if any)
+      const safeApiKeys = Array.isArray(website.apiKeys) 
+        ? website.apiKeys.map(key => ({
+            id: key.id || '',
+            key: key.key || '',
+            name: key.name || '',
+            allowedOrigins: Array.isArray(key.allowedOrigins) ? [...key.allowedOrigins] : [],
+            createdAt: key.createdAt || '',
+            lastUsed: key.lastUsed || ''
+          }))
+        : [];
+
+      // Force safe serialization through JSON to prevent circular references
+      return JSON.parse(JSON.stringify({
         id: website._id.toString(),
-        name: website.name,
-        domain: website.domain,
-        apiKey: website.apiKey,
-        status: website.status,
+        name: website.name || '',
+        domain: website.domain || '',
+        apiKey: apiKey,
+        apiKeys: safeApiKeys,
+        status: website.status || 'pending',
         createdAt: website.createdAt,
-        notificationsCount,
-        impressionsCount,
-        clicksCount,
-        conversionRate
-      };
+        notificationsCount: notificationsCount || 0,
+        impressionsCount: impressionsCount || 0,
+        clicksCount: clicksCount || 0,
+        conversionRate: conversionRate || '0.00'
+      }));
     })
   );
 
@@ -75,7 +94,7 @@ export default async function WebsitesPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Websites</h1>
-          <p className="text-neutral-content">Manage your websites using Proovd</p>
+          <p className="text-gray-700">Manage your websites using Proovd</p>
         </div>
         <Link href="/dashboard/websites/new" className="btn btn-primary">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">

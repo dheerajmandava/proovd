@@ -38,20 +38,33 @@ export default async function DashboardPage() {
   let website = await Website.findOne({ userId: user._id });
     
   if (!website) {
-    // Create a default website for the user
-    website = await Website.create({
-      name: 'Default Website',
-      domain: 'example.com',
-      userId: user._id,
-      status: 'active',
-      verification: {
-        status: 'verified',
-        method: 'DNS',
-        token: crypto.randomBytes(16).toString('hex'),
-        attempts: 0,
-        verifiedAt: new Date().toISOString()
-      }
-    });
+    // Instead of creating a default website, we'll show a message
+    return (
+      <div className="container mx-auto p-6">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <div className="text-sm breadcrumbs">
+            <ul>
+              <li><Link href="/">Home</Link></li>
+              <li>Dashboard</li>
+            </ul>
+          </div>
+        </div>
+        
+        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-lg shadow-md">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+          </svg>
+          <h2 className="text-xl font-bold mb-2">No Websites Added</h2>
+          <p className="text-gray-600 mb-6 text-center max-w-md">
+            You haven't added any websites to your account yet. Add your first website to start creating social proof notifications.
+          </p>
+          <Link href="/dashboard/websites/new" className="btn btn-primary">
+            Add Your First Website
+          </Link>
+        </div>
+      </div>
+    );
   }
   
   // Get notification stats
@@ -106,7 +119,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">Recent Notifications</h2>
           <Link
-            href="/dashboard/notifications"
+            href={`/dashboard/websites/${website._id}/notifications`}
             className="btn btn-sm btn-primary"
           >
             View all
@@ -144,7 +157,7 @@ export default async function DashboardPage() {
                       </td>
                       <td>
                         <div className="flex gap-2">
-                          <Link href={`/dashboard/notifications/${notification._id}`} className="btn btn-xs btn-ghost">
+                          <Link href={`/dashboard/websites/${website._id}/notifications/${notification._id}`} className="btn btn-xs btn-ghost">
                             Edit
                           </Link>
                           <button className="btn btn-xs btn-error btn-ghost">Delete</button>
@@ -158,7 +171,7 @@ export default async function DashboardPage() {
                         <div className="flex flex-col items-center gap-4">
                           <div className="text-lg font-semibold">No notifications yet</div>
                           <p className="text-sm opacity-70">Create your first notification to get started</p>
-                          <Link href="/dashboard/notifications/create" className="btn btn-primary btn-sm">
+                          <Link href={`/dashboard/websites/${website._id}/notifications/new`} className="btn btn-primary btn-sm">
                             Create Notification
                           </Link>
                         </div>

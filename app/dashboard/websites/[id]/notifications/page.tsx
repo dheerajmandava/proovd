@@ -119,21 +119,32 @@ export default function NotificationsPage() {
     <div className="p-4">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold mb-1">Notifications</h1>
-          <p className="text-neutral-content">
-            {website?.name} ({website?.domain})
-          </p>
+          <h1 className="text-2xl font-bold mb-1">{website?.name}</h1>
+          <p className="text-gray-700">{website?.domain}</p>
         </div>
-        <div className="flex gap-2">
-          <Link href={`/dashboard/websites/${websiteId}`} className="btn btn-outline">
-            Back to Website
-          </Link>
-          <Link href={`/dashboard/websites/${websiteId}/notifications/new`} className="btn btn-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
-              <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
-            </svg>
-            Add Notification
-          </Link>
+        <Link href={`/dashboard/websites/${websiteId}/notifications/new`} className="btn btn-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
+            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+          </svg>
+          Add Notification
+        </Link>
+      </div>
+      
+      {/* Website Navigation Tabs */}
+      <div className="tabs tabs-bordered mb-6">
+        <Link href={`/dashboard/websites/${websiteId}`} className="tab">Overview</Link>
+        <Link href={`/dashboard/websites/${websiteId}/notifications`} className="tab tab-active">Notifications</Link>
+        <Link href={`/dashboard/websites/${websiteId}/analytics`} className="tab">Analytics</Link>
+        <Link href={`/dashboard/websites/${websiteId}/settings`} className="tab">Settings</Link>
+        <Link href={`/dashboard/websites/${websiteId}/setup`} className="tab">Setup</Link>
+      </div>
+      
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-xl font-bold">Notifications</h2>
+          <p className="text-gray-700">
+            Manage notifications for {website?.name}
+          </p>
         </div>
       </div>
       
@@ -170,7 +181,7 @@ export default function NotificationsPage() {
                        notification.type === 'signup' ? 'Sign Up' : 'Custom'}
                     </div>
 
-                    <p className="text-sm text-neutral-content mb-2">
+                    <p className="text-gray-700 mb-2">
                       {notification.type === 'purchase' && notification.productName && (
                         <span>Someone purchased {notification.productName}</span>
                       )}
@@ -182,7 +193,7 @@ export default function NotificationsPage() {
                       )}
                     </p>
 
-                    <div className="flex items-center gap-2 text-xs text-neutral-content mb-2">
+                    <div className="flex items-center gap-2 text-xs text-gray-700 mb-2">
                       <span>Created {timeAgo(notification.createdAt)}</span>
                       <span>•</span>
                       <span className="capitalize">
@@ -243,7 +254,7 @@ export default function NotificationsPage() {
                             'Someone signed up' : 
                             notification.message || 'Custom notification'}
                       </div>
-                      <div className="text-xs text-neutral-content">A few moments ago</div>
+                      <div className="text-xs text-gray-700">A few moments ago</div>
                     </div>
                   </div>
                 </div>

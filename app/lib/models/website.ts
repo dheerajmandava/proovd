@@ -275,24 +275,63 @@ websiteSchema.methods.recordClick = async function() {
 
 // Method to create a formatted response object
 websiteSchema.methods.toResponse = function() {
-  return {
+  // First create a clean object with only the data we want
+  const safeApiKeys = Array.isArray(this.apiKeys) ? 
+    this.apiKeys.map(key => ({
+      id: key.id || '',
+      key: key.key || '',
+      name: key.name || '',
+      allowedOrigins: Array.isArray(key.allowedOrigins) ? [...key.allowedOrigins] : [],
+      createdAt: key.createdAt || '',
+      lastUsed: key.lastUsed || ''
+    })) : [];
+    
+  const verification = this.verification ? {
+    status: this.verification.status || 'pending',
+    method: this.verification.method || '',
+    token: this.verification.token || '',
+    verifiedAt: this.verification.verifiedAt || '',
+    attempts: this.verification.attempts || 0
+  } : {};
+  
+  const settings = this.settings ? {
+    position: this.settings.position || 'bottom-left',
+    delay: this.settings.delay || 5,
+    displayDuration: this.settings.displayDuration || 5,
+    maxNotifications: this.settings.maxNotifications || 5,
+    theme: this.settings.theme || 'light'
+  } : {};
+  
+  const dailyStats = Array.isArray(this.analytics?.dailyStats) ? 
+    this.analytics.dailyStats.map(stat => ({
+      date: stat.date || '',
+      impressions: stat.impressions || 0,
+      clicks: stat.clicks || 0,
+      conversionRate: stat.conversionRate || 0
+    })) : [];
+    
+  // Then create the final response object
+  const responseObj = {
     id: this._id.toString(),
-    name: this.name,
-    domain: this.domain,
-    apiKey: this.apiKey,
-    status: this.status,
-    verification: this.verification,
-    settings: this.settings,
-    allowedDomains: this.allowedDomains,
+    name: this.name || '',
+    domain: this.domain || '',
+    apiKeys: safeApiKeys,
+    status: this.status || 'pending',
+    verification: verification,
+    settings: settings,
+    allowedDomains: Array.isArray(this.allowedDomains) ? [...this.allowedDomains] : [],
     analytics: {
-      totalImpressions: this.analytics.totalImpressions,
-      totalClicks: this.analytics.totalClicks,
-      conversionRate: this.analytics.conversionRate,
-      dailyStats: this.analytics.dailyStats
+      totalImpressions: this.analytics?.totalImpressions || 0,
+      totalClicks: this.analytics?.totalClicks || 0,
+      conversionRate: this.analytics?.conversionRate || 0,
+      dailyStats: dailyStats
     },
-    createdAt: this.createdAt,
-    updatedAt: this.updatedAt,
+    createdAt: this.createdAt || new Date(),
+    updatedAt: this.updatedAt || new Date(),
   };
+  
+  // Force clean JSON serialization to remove any potential circular references
+  return JSON.parse(JSON.stringify(responseObj));
 };
 
 // Create or reuse the model

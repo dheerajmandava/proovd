@@ -6,7 +6,7 @@ export default function SignInPage() {
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2">Proovd</h1>
-          <p className="text-neutral-content opacity-80">
+          <p className="text-gray-700 opacity-80">
             Sign in to your account to access your dashboard
           </p>
         </div>
@@ -14,7 +14,7 @@ export default function SignInPage() {
         <SignInForm />
         
         <div className="text-center mt-8">
-          <p className="text-sm text-neutral-content opacity-80">
+          <p className="text-sm text-gray-700 opacity-80">
             Don't have an account?{" "}
             <a href="/auth/signup" className="text-primary hover:underline">
               Create an account

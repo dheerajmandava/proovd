@@ -33,8 +33,16 @@ interface Website {
 export default function ApiKeysPage() {
   const params = useParams();
   const router = useRouter();
+  
+  // Split the complex website state into simpler primitive states
   const [isLoading, setIsLoading] = useState(true);
-  const [website, setWebsite] = useState<Website | null>(null);
+  const [websiteId, setWebsiteId] = useState<string>('');
+  const [websiteName, setWebsiteName] = useState<string>('');
+  const [websiteDomain, setWebsiteDomain] = useState<string>('');
+  const [websiteStatus, setWebsiteStatus] = useState<string>('');
+  const [verificationStatus, setVerificationStatus] = useState<string>('');
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  
   const [isCreating, setIsCreating] = useState(false);
   const [showNewKey, setShowNewKey] = useState(false);
   const [newKeyData, setNewKeyData] = useState<ApiKey | null>(null);
@@ -58,18 +66,43 @@ export default function ApiKeysPage() {
           throw new Error('Failed to fetch website data');
         }
         
-        const data = await response.json();
-        setWebsite(data.website);
+        const websiteData = await response.json();
+        
+        // Validate the response has the required properties
+        if (!websiteData || typeof websiteData !== 'object') {
+          throw new Error('Invalid website data format');
+        }
+        
+        // Update all website-related state with safe defaults
+        setWebsiteId(websiteData.id || '');
+        setWebsiteName(websiteData.name || '');
+        setWebsiteDomain(websiteData.domain || '');
+        setWebsiteStatus(websiteData.status || '');
+        
+        // Safely access nested properties
+        if (websiteData.verification) {
+          setVerificationStatus(websiteData.verification.status || '');
+        }
+        
+        // Ensure apiKeys is an array
+        const safeApiKeys = Array.isArray(websiteData.apiKeys) ? websiteData.apiKeys : [];
+        setApiKeys(safeApiKeys);
         
         // Initialize key visibility
         const visibility: Record<string, boolean> = {};
-        data.website.apiKeys.forEach((key: ApiKey) => {
-          visibility[key.id] = false;
+        safeApiKeys.forEach((key: ApiKey) => {
+          if (key && key.id) {
+            visibility[key.id] = false;
+          }
         });
         setKeyVisibility(visibility);
 
         // Check if website is verified, if not redirect to verification page
-        if (data.website.verification.status !== 'verified' && data.website.status !== 'verified') {
+        const isVerified = 
+          (websiteData.verification?.status === 'verified') || 
+          (websiteData.status === 'verified');
+          
+        if (!isVerified) {
           setError('This website needs to be verified before you can manage API keys.');
           // Redirect to verification page after a short delay
           setTimeout(() => {
@@ -77,7 +110,8 @@ export default function ApiKeysPage() {
           }, 3000);
         }
       } catch (err: any) {
-        setError(err.message || 'An error occurred');
+        console.error('Error fetching website data:', err);
+        setError(err.message || 'Failed to load website data');
       } finally {
         setIsLoading(false);
       }
@@ -112,6 +146,9 @@ export default function ApiKeysPage() {
       setIsCreating(true);
       setError(null);
       
+      // Get domain safely
+      const domain = websiteDomain || '';
+      
       const response = await fetch(`/api/websites/${params.id}/api-keys`, {
         method: 'POST',
         headers: {
@@ -119,7 +156,7 @@ export default function ApiKeysPage() {
         },
         body: JSON.stringify({
           name: newKeyName.trim(),
-          allowedOrigins: newKeyOrigins.length > 0 ? newKeyOrigins : [website?.domain || ''],
+          allowedOrigins: newKeyOrigins.length > 0 ? newKeyOrigins : [domain],
         }),
       });
       
@@ -141,7 +178,18 @@ export default function ApiKeysPage() {
       // Refresh website data to include the new key
       const websiteResponse = await fetch(`/api/websites/${params.id}`);
       const websiteData = await websiteResponse.json();
-      setWebsite(websiteData.website);
+      
+      // Update all website-related state
+      if (websiteData) {
+        setWebsiteId(websiteData.id || '');
+        setWebsiteName(websiteData.name || '');
+        setWebsiteDomain(websiteData.domain || '');
+        setWebsiteStatus(websiteData.status || '');
+        if (websiteData.verification) {
+          setVerificationStatus(websiteData.verification.status || '');
+        }
+        setApiKeys(Array.isArray(websiteData.apiKeys) ? websiteData.apiKeys : []);
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     } finally {
@@ -168,7 +216,18 @@ export default function ApiKeysPage() {
       // Refresh website data to reflect the deleted key
       const websiteResponse = await fetch(`/api/websites/${params.id}`);
       const websiteData = await websiteResponse.json();
-      setWebsite(websiteData.website);
+      
+      // Update all website-related state
+      if (websiteData) {
+        setWebsiteId(websiteData.id || '');
+        setWebsiteName(websiteData.name || '');
+        setWebsiteDomain(websiteData.domain || '');
+        setWebsiteStatus(websiteData.status || '');
+        if (websiteData.verification) {
+          setVerificationStatus(websiteData.verification.status || '');
+        }
+        setApiKeys(Array.isArray(websiteData.apiKeys) ? websiteData.apiKeys : []);
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     }
@@ -208,6 +267,13 @@ export default function ApiKeysPage() {
       });
   }
   
+  // Replace with:
+
+  function maskApiKey(key: string): string {
+    if (key.length <= 8) return key;
+    return key.slice(0, 4) + '...' + key.slice(-4);
+  }
+  
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -224,7 +290,9 @@ export default function ApiKeysPage() {
           <ul>
             <li><Link href="/dashboard">Dashboard</Link></li>
             <li><Link href="/dashboard/websites">Websites</Link></li>
-            <li><Link href={`/dashboard/websites/${params.id}`}>{website?.name}</Link></li>
+            {websiteName && (
+              <li><Link href={`/dashboard/websites/${params.id}`}>{websiteName}</Link></li>
+            )}
             <li>API Keys</li>
           </ul>
         </div>
@@ -352,7 +420,7 @@ export default function ApiKeysPage() {
         </div>
         
         {/* Existing API keys */}
-        {website && website.apiKeys.length > 0 && (
+        {apiKeys && apiKeys.length > 0 && (
           <div className="card bg-base-100 shadow-lg">
             <div className="card-body">
               <h2 className="card-title">Your API Keys</h2>
@@ -370,13 +438,15 @@ export default function ApiKeysPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {website.apiKeys.map(key => (
+                    {apiKeys.map(key => (
                       <tr key={key.id}>
-                        <td className="font-medium">{key.name}</td>
+                        <td className="font-medium">{key.name || 'Unnamed Key'}</td>
                         <td>
                           <div className="flex items-center">
                             <code className="max-w-[150px] truncate">
-                              {keyVisibility[key.id] ? key.key : key.key.replace(/^(spfy_[a-z0-9]{4}).*([a-z0-9]{4})$/, '$1...$2')}
+                              {keyVisibility[key.id] 
+                                ? (key.key || '') 
+                                : maskApiKey(key.key || '')}
                             </code>
                             <button
                               className="btn btn-ghost btn-xs ml-2"
@@ -417,7 +487,7 @@ export default function ApiKeysPage() {
                         <td>{formatDate(key.lastUsed)}</td>
                         <td>
                           {/* Only allow deleting non-primary keys */}
-                          {website.apiKeys.indexOf(key) > 0 && (
+                          {apiKeys && apiKeys.indexOf(key) > 0 && (
                             <button
                               className="btn btn-error btn-xs"
                               onClick={() => handleDeleteKey(key.id)}

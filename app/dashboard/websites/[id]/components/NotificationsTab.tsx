@@ -17,11 +17,6 @@ interface Notification {
   image?: string;
   createdAt: string;
   updatedAt: string;
-  website: {
-    _id: string;
-    name: string;
-    domain: string;
-  };
 }
 
 // Define website interface
@@ -29,32 +24,33 @@ interface Website {
   id: string;
   name: string;
   domain: string;
-  status: string;
-  }
+}
 
-export default function NotificationsPage() {
+interface NotificationsTabProps {
+  websiteId: string;
+}
+
+export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [websites, setWebsites] = useState<Website[]>([]);
-  const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
-  const [selectedWebsite, setSelectedWebsite] = useState<string>('all');
+  const [website, setWebsite] = useState<Website | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // Fetch notifications from all websites
+  // Fetch website and notifications
   useEffect(() => {
     async function fetchData() {
       try {
-        setIsLoading(true);
-        const response = await fetch('/api/notifications');
+        // Fetch website data
+        const websiteResponse = await fetch(`/api/websites/${websiteId}`);
+        if (!websiteResponse.ok) throw new Error('Failed to load website');
+        const websiteData = await websiteResponse.json();
+        setWebsite(websiteData);
         
-        if (!response.ok) {
-          throw new Error('Failed to load notifications');
-        }
-        
-        const data = await response.json();
-        setNotifications(data.notifications || []);
-        setFilteredNotifications(data.notifications || []);
-        setWebsites(data.websites || []);
+        // Fetch notifications
+        const notificationsResponse = await fetch(`/api/websites/${websiteId}/notifications`);
+        if (!notificationsResponse.ok) throw new Error('Failed to load notifications');
+        const notificationsData = await notificationsResponse.json();
+        setNotifications(notificationsData.notifications || []);
       } catch (err: any) {
         setError(err.message || 'An error occurred');
       } finally {
@@ -63,20 +59,32 @@ export default function NotificationsPage() {
     }
     
     fetchData();
-  }, []);
+  }, [websiteId]);
   
-  // Filter notifications when website selection changes
-  useEffect(() => {
-    if (selectedWebsite === 'all') {
-      setFilteredNotifications(notifications);
-    } else {
-      setFilteredNotifications(
-        notifications.filter(notification => 
-          notification.website._id === selectedWebsite
-        )
-      );
+  // Handle notification delete
+  async function handleDelete(notificationId: string) {
+    if (!confirm('Are you sure you want to delete this notification?')) {
+      return;
     }
-  }, [selectedWebsite, notifications]);
+    
+    try {
+      const response = await fetch(
+        `/api/websites/${websiteId}/notifications/${notificationId}`,
+        { method: 'DELETE' }
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete notification');
+      }
+      
+      // Remove deleted notification from state
+      setNotifications(prev => 
+        prev.filter(notification => notification.id !== notificationId)
+      );
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete notification');
+    }
+  }
   
   // Show loading state
   if (isLoading) {
@@ -89,77 +97,39 @@ export default function NotificationsPage() {
   
   // Show error state
   if (error) {
-  return (
-      <div className="p-4">
-        <div className="alert alert-error">
-          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>{error}</span>
-        </div>
+    return (
+      <div className="alert alert-error">
+        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>{error}</span>
       </div>
     );
   }
-      
-  // Render notifications list
+  
   return (
-    <div className="p-4">
+    <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold mb-1">All Notifications</h1>
-          <p className="text-neutral-content">
-            Manage notifications across all your websites
+          <h2 className="text-xl font-bold">Notifications</h2>
+          <p className="text-gray-700">
+            Manage notifications for {website?.name || 'this website'}
           </p>
         </div>
-        {websites.length > 0 && (
-          <Link href={`/dashboard/websites/${websites[0].id}/notifications/new`} className="btn btn-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
-              <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+        <Link href={`/dashboard/websites/${websiteId}/notifications/new`} className="btn btn-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
+            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
           </svg>
-            Add Notification
+          Add Notification
         </Link>
-        )}
       </div>
       
-      {websites.length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Filter by website:</span>
-            <select 
-              className="select select-bordered select-sm"
-              value={selectedWebsite}
-              onChange={(e) => setSelectedWebsite(e.target.value)}
-            >
-              <option value="all">All websites</option>
-              {websites.map((website) => (
-                <option key={website.id} value={website.id}>
-                  {website.name} ({website.domain})
-                </option>
-              ))}
-            </select>
-          </div>
-                        </div>
-      )}
-      
-      {websites.length === 0 ? (
-        <div className="card bg-base-100 shadow-lg">
-          <div className="card-body items-center text-center">
-            <h2 className="card-title mb-2">No websites yet</h2>
-            <p className="mb-4">Add your first website to start showing social proof on your site</p>
-            <Link href="/dashboard/websites/new" className="btn btn-primary">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
-                <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
-              </svg>
-              Add Your First Website
-                        </Link>
-                      </div>
-        </div>
-      ) : filteredNotifications.length === 0 ? (
+      {notifications.length === 0 ? (
         <div className="card bg-base-100 shadow-lg">
           <div className="card-body items-center text-center">
             <h2 className="card-title mb-2">No notifications yet</h2>
             <p className="mb-4">Add your first notification to start showing social proof on your website</p>
-            <Link href={`/dashboard/websites/${websites[0].id}/notifications/new`} className="btn btn-primary">
+            <Link href={`/dashboard/websites/${websiteId}/notifications/new`} className="btn btn-primary">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
                 <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
               </svg>
@@ -169,7 +139,7 @@ export default function NotificationsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
-          {filteredNotifications.map((notification) => (
+          {notifications.map((notification) => (
             <div key={notification.id} className="card bg-base-100 shadow-lg">
               <div className="card-body">
                 <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
@@ -182,17 +152,12 @@ export default function NotificationsPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="badge badge-outline">
-                        {notification.type === 'purchase' ? 'Purchase' : 
-                         notification.type === 'signup' ? 'Sign Up' : 'Custom'}
-                      </div>
-                      <div className="badge badge-primary badge-outline">
-                        {notification.website.name}
-        </div>
-      </div>
-      
-                    <p className="text-sm text-neutral-content mb-2">
+                    <div className="badge badge-outline mb-2">
+                      {notification.type === 'purchase' ? 'Purchase' : 
+                       notification.type === 'signup' ? 'Sign Up' : 'Custom'}
+                    </div>
+
+                    <p className="text-gray-700 mb-2">
                       {notification.type === 'purchase' && notification.productName && (
                         <span>Someone purchased {notification.productName}</span>
                       )}
@@ -204,20 +169,18 @@ export default function NotificationsPage() {
                       )}
                     </p>
 
-                    <div className="flex items-center gap-2 text-xs text-neutral-content mb-2">
-                      <span>Created {timeAgo(notification.createdAt)}</span>
+                    <div className="flex items-center gap-2 text-xs text-gray-700 mb-2">
+                      <span>Created {notification.createdAt ? timeAgo(notification.createdAt) : 'recently'}</span>
                       <span>•</span>
                       <span className="capitalize">
                         {notification.location === 'global' ? 'All pages' : 'Specific pages'}
                       </span>
-                      <span>•</span>
-                      <span>{notification.website.domain}</span>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
                     <Link 
-                      href={`/dashboard/websites/${notification.website._id}/notifications/${notification.id}`} 
+                      href={`/dashboard/websites/${websiteId}/notifications/${notification.id}`} 
                       className="btn btn-sm btn-outline"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-1">
@@ -227,7 +190,7 @@ export default function NotificationsPage() {
                       View
                     </Link>
                     <Link 
-                      href={`/dashboard/websites/${notification.website._id}/notifications/${notification.id}/edit`} 
+                      href={`/dashboard/websites/${websiteId}/notifications/${notification.id}/edit`} 
                       className="btn btn-sm btn-outline"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-1">
@@ -235,18 +198,18 @@ export default function NotificationsPage() {
                       </svg>
                       Edit
                     </Link>
-                    <Link 
-                      href={`/dashboard/websites/${notification.website._id}`} 
-                      className="btn btn-sm btn-outline"
+                    <button 
+                      className="btn btn-sm btn-outline btn-error"
+                      onClick={() => handleDelete(notification.id)}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-1">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
-                  </svg>
-                      Website
-                    </Link>
-              </div>
-            </div>
-            
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                      </svg>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                
                 {/* Preview of the notification */}
                 <div className="mt-4 p-4 bg-base-200 rounded-lg">
                   <div className="flex items-center">
@@ -261,13 +224,17 @@ export default function NotificationsPage() {
                     </div>
                     <div>
                       <div className="font-semibold text-sm">
-                        {notification.type === 'purchase' && notification.productName ? 
-                          `Someone purchased ${notification.productName}` : 
-                          notification.type === 'signup' ? 
-                            'Someone signed up' : 
-                            notification.message || 'Custom notification'}
+                        {notification.type === 'purchase' && notification.productName && (
+                          <span>Someone purchased {notification.productName}</span>
+                        )}
+                        {notification.type === 'signup' && (
+                          <span>Someone signed up</span>
+                        )}
+                        {notification.message && (
+                          <span> {notification.message}</span>
+                        )}
                       </div>
-                      <div className="text-xs text-neutral-content">A few moments ago</div>
+                      <div className="text-xs text-gray-500">just now</div>
                     </div>
                   </div>
                 </div>
