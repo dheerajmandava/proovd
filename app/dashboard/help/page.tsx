@@ -36,8 +36,8 @@ export default function HelpPage() {
       answer: "Each website has an Analytics tab that shows impressions, clicks, and conversion rates. You can view overall statistics or drill down to individual notification performance."
     },
     {
-      question: "What are API keys used for?",
-      answer: "API keys allow your website to securely communicate with Proovd. They're required when implementing the notification widget on your site. You can manage API keys in your website's settings page."
+      question: "What is the website ID used for?",
+      answer: "The website ID is a unique identifier for your website in the Proovd system. It's required when implementing the notification widget on your site and is used to authenticate requests to our API."
     },
     {
       question: "How do I install the notification widget on my website?",

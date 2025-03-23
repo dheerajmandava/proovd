@@ -4,26 +4,20 @@ This document provides a complete reference for the Proovd API, allowing you to 
 
 ## Authentication
 
-All API requests must be authenticated using an API key. You can manage your API keys in the Proovd dashboard under your website's API Keys section.
-
-Add your API key to requests using one of these methods:
-
-- As a query parameter: `?apiKey=YOUR_API_KEY`
-- As a header: `X-API-Key: YOUR_API_KEY`
+All API requests to website resources are made using the website ID which is included in the URL path.
 
 Example:
 
 ```bash
-curl -X GET "https://api.proovd.in/v1/notifications" \
-  -H "X-API-Key: YOUR_API_KEY"
+curl -X GET "https://proovd.in/api/websites/YOUR_WEBSITE_ID/notifications/show"
 ```
 
 ## Rate Limits
 
 To ensure service stability, the API has the following rate limits:
 
-- 100 requests per minute per API key
-- 5,000 requests per day per API key
+- 100 requests per minute per website ID
+- 5,000 requests per day per website ID
 
 Rate limit headers are included in all API responses:
 
@@ -35,201 +29,82 @@ Rate limit headers are included in all API responses:
 
 ### Notifications
 
-#### List Notifications
+#### List Notifications for Website
 
 ```
-GET /v1/notifications
+GET /api/websites/:websiteId/notifications/show
 ```
 
-Returns a list of all notifications for the authenticated website.
+Returns a list of all active notifications for the specified website.
 
 Query parameters:
 
 | Parameter | Type   | Description                          |
 |-----------|--------|--------------------------------------|
-| status    | string | Filter by status (active, draft, inactive) |
-| page      | number | Page number for pagination           |
+| url       | string | Current page URL to filter relevant notifications |
 | limit     | number | Number of results per page (max 100) |
 
 Response:
 
 ```json
 {
-  "data": [
+  "notifications": [
     {
       "id": "not_123456789",
       "name": "Recent Purchase",
-      "type": "activity",
-      "status": "active",
-      "message": "{name} from {location} just purchased {product}",
-      "link": "https://example.com/product",
-      "createdAt": "2023-06-15T10:30:00Z",
-      "updatedAt": "2023-06-15T10:30:00Z"
+      "type": "purchase",
+      "message": "Just purchased",
+      "productName": "Premium Package",
+      "location": "New York",
+      "image": "https://ui-avatars.com/api/?name=John+D&background=random",
+      "timestamp": "2023-06-15T10:30:00Z"
     },
     {
       "id": "not_987654321",
-      "name": "Visitor Count",
-      "type": "visitor_count",
-      "status": "active",
-      "message": "{count} people viewing this page",
-      "link": null,
-      "createdAt": "2023-06-10T14:20:00Z",
-      "updatedAt": "2023-06-10T14:20:00Z"
+      "name": "Sarah M.",
+      "type": "signup",
+      "message": "Just signed up",
+      "location": "London",
+      "image": "https://ui-avatars.com/api/?name=Sarah+M&background=random",
+      "timestamp": "2023-06-10T14:20:00Z"
     }
   ],
-  "pagination": {
-    "total": 10,
-    "pages": 1,
-    "page": 1,
-    "limit": 25
+  "settings": {
+    "position": "bottom-left",
+    "theme": "light",
+    "displayDuration": 5,
+    "delay": 5,
+    "maxNotifications": 5
   }
 }
 ```
 
-#### Get a Notification
+#### Track Notification Events
 
 ```
-GET /v1/notifications/:id
+POST /api/websites/:websiteId/notifications/:notificationId/track
 ```
 
-Returns a specific notification by ID.
-
-Response:
-
-```json
-{
-  "id": "not_123456789",
-  "name": "Recent Purchase",
-  "type": "activity",
-  "status": "active",
-  "message": "{name} from {location} just purchased {product}",
-  "link": "https://example.com/product",
-  "image": "https://cdn.proovd.in/images/product.webp",
-  "displayRules": {
-    "pages": ["*"],
-    "frequency": "once_per_session",
-    "delay": 5
-  },
-  "stats": {
-    "impressions": 1250,
-    "clicks": 75,
-    "conversionRate": 6.0
-  },
-  "createdAt": "2023-06-15T10:30:00Z",
-  "updatedAt": "2023-06-15T10:30:00Z"
-}
-```
-
-#### Create a Notification
-
-```
-POST /v1/notifications
-```
-
-Creates a new notification.
+Tracks an impression or click event for a notification.
 
 Request body:
 
 ```json
 {
-  "name": "Flash Sale Alert",
-  "type": "custom",
-  "message": "Flash sale! 25% off all products for the next hour!",
-  "link": "https://example.com/sale",
-  "image": "https://example.com/images/sale.jpg",
-  "status": "draft",
-  "displayRules": {
-    "pages": ["/products/*", "/categories/*"],
-    "frequency": "once_per_session",
-    "delay": 10
-  }
+  "type": "impression",
+  "url": "https://example.com/products/item"
 }
 ```
 
 Required fields:
-- `name` - Internal name for the notification
-- `type` - One of: "activity", "visitor_count", "social_proof", "custom"
-- `message` - The notification content
-
-Optional fields:
-- `link` - URL to redirect when clicked
-- `image` - URL of an image to display
-- `status` - One of: "active", "draft", "inactive" (default: "draft")
-- `displayRules` - Object containing display configuration
+- `type` - One of: "impression", "click"
+- `url` - Current page URL
 
 Response:
 
 ```json
 {
-  "id": "not_abcdef1234",
-  "name": "Flash Sale Alert",
-  "type": "custom",
-  "message": "Flash sale! 25% off all products for the next hour!",
-  "link": "https://example.com/sale",
-  "image": "https://example.com/images/sale.jpg",
-  "status": "draft",
-  "displayRules": {
-    "pages": ["/products/*", "/categories/*"],
-    "frequency": "once_per_session",
-    "delay": 10
-  },
-  "createdAt": "2023-06-20T09:15:00Z",
-  "updatedAt": "2023-06-20T09:15:00Z"
-}
-```
-
-#### Update a Notification
-
-```
-PATCH /v1/notifications/:id
-```
-
-Updates an existing notification. Include only the fields you want to update.
-
-Request body:
-
-```json
-{
-  "status": "active",
-  "message": "Updated message content"
-}
-```
-
-Response:
-
-```json
-{
-  "id": "not_abcdef1234",
-  "name": "Flash Sale Alert",
-  "type": "custom",
-  "message": "Updated message content",
-  "link": "https://example.com/sale",
-  "image": "https://example.com/images/sale.jpg",
-  "status": "active",
-  "displayRules": {
-    "pages": ["/products/*", "/categories/*"],
-    "frequency": "once_per_session",
-    "delay": 10
-  },
-  "createdAt": "2023-06-20T09:15:00Z",
-  "updatedAt": "2023-06-20T10:30:00Z"
-}
-```
-
-#### Delete a Notification
-
-```
-DELETE /v1/notifications/:id
-```
-
-Deletes a notification.
-
-Response:
-
-```json
-{
-  "success": true,
-  "message": "Notification deleted successfully"
+  "success": true
 }
 ```
 
@@ -238,7 +113,7 @@ Response:
 #### Get Website Statistics
 
 ```
-GET /v1/analytics
+GET /api/websites/:websiteId/analytics
 ```
 
 Returns analytics data for the website.
@@ -248,103 +123,162 @@ Query parameters:
 | Parameter | Type   | Description                                  |
 |-----------|--------|----------------------------------------------|
 | period    | string | Time period: "today", "yesterday", "7d", "30d", "all" (default) |
-| start     | string | Start date (YYYY-MM-DD) for custom range     |
-| end       | string | End date (YYYY-MM-DD) for custom range       |
 
 Response:
 
 ```json
 {
-  "impressions": 5280,
-  "uniqueImpressions": 4150,
-  "clicks": 342,
-  "conversionRate": 6.48,
-  "timeline": [
-    {
-      "date": "2023-06-01",
+  "overview": {
+    "impressions": 1250,
+    "clicks": 75,
+    "conversionRate": 6.0
+  },
+  "periods": {
+    "today": {
       "impressions": 120,
-      "clicks": 8
+      "clicks": 8,
+      "conversionRate": 6.7
+    },
+    "yesterday": {
+      "impressions": 135,
+      "clicks": 12,
+      "conversionRate": 8.9
+    },
+    "last7Days": {
+      "impressions": 850,
+      "clicks": 65,
+      "conversionRate": 7.6
+    },
+    "last30Days": {
+      "impressions": 3200,
+      "clicks": 210,
+      "conversionRate": 6.6
+    }
+  },
+  "daily": [
+    {
+      "date": "2023-06-25",
+      "impressions": 120,
+      "clicks": 8,
+      "conversionRate": 6.7
     },
     {
-      "date": "2023-06-02",
-      "impressions": 145,
-      "clicks": 10
+      "date": "2023-06-24",
+      "impressions": 135,
+      "clicks": 12,
+      "conversionRate": 8.9
     }
-    // ...more timeline entries
+    // Additional days...
   ]
 }
 ```
 
-#### Get Notification Statistics
+### Website Verification
+
+#### Get Verification Instructions
 
 ```
-GET /v1/analytics/notifications/:id
+GET /api/websites/:websiteId/verify
 ```
 
-Returns analytics data for a specific notification.
-
-Query parameters:
-
-| Parameter | Type   | Description                                  |
-|-----------|--------|----------------------------------------------|
-| period    | string | Time period: "today", "yesterday", "7d", "30d", "all" (default) |
+Returns the current verification status and instructions for verifying domain ownership.
 
 Response:
 
 ```json
 {
-  "impressions": 1250,
-  "uniqueImpressions": 980,
-  "clicks": 75,
-  "conversionRate": 6.0,
-  "timeline": [
-    {
-      "date": "2023-06-01",
-      "impressions": 30,
-      "clicks": 2
-    },
-    {
-      "date": "2023-06-02",
-      "impressions": 42,
-      "clicks": 3
-    }
-    // ...more timeline entries
-  ]
+  "verification": {
+    "status": "pending",
+    "method": "DNS",
+    "token": "abc123def456",
+    "attempts": 0
+  },
+  "instructions": "Add a TXT record to your domain's DNS with the following values:\nHost: @\nValue: abc123def456\n\nNote: This can take up to 24 hours to propagate."
 }
 ```
 
-### Events
-
-#### Track Event
+#### Update Verification Method
 
 ```
-POST /v1/track
+POST /api/websites/:websiteId/verify
 ```
 
-Track custom events (impressions or clicks). 
-
-Note: This endpoint is primarily used by the Proovd widget. For most use cases, you should use the widget rather than calling this endpoint directly.
+Updates the verification method for a website.
 
 Request body:
 
 ```json
 {
-  "notificationId": "not_123456789",
-  "action": "impression",
-  "url": "https://example.com/product",
-  "sessionId": "sess_abcdef1234",
-  "clientId": "client_5678abcd"
+  "method": "FILE"
 }
 ```
 
 Required fields:
-- `notificationId` - The notification ID
-- `action` - Type of event: "impression" or "click"
+- `method` - One of: "DNS", "FILE", "META"
+
+Response:
+
+```json
+{
+  "success": true,
+  "method": "FILE",
+  "token": "abc123def456",
+  "status": "pending"
+}
+```
+
+#### Verify Domain
+
+```
+POST /api/websites/:websiteId/verify
+```
+
+Attempts to verify the domain using the current verification method.
+
+Response (success):
+
+```json
+{
+  "success": true,
+  "message": "Domain verified successfully!"
+}
+```
+
+Response (failure):
+
+```json
+{
+  "success": false,
+  "message": "Verification failed: DNS record not found. Please check your DNS settings and try again."
+}
+```
+
+### Pageview Tracking
+
+```
+POST /api/pageview
+```
+
+Records a page view for analytics.
+
+Request body:
+
+```json
+{
+  "websiteId": "website_12345",
+  "url": "https://example.com/products/item",
+  "referrer": "https://google.com",
+  "title": "Product - Example Site"
+}
+```
+
+Required fields:
+- `websiteId` - Website ID
+- `url` - Current page URL
 
 Optional fields:
-- `url` - URL where the event occurred
-- `sessionId` - Unique session identifier
-- `clientId` - Persistent client identifier
+- `referrer` - Referring URL
+- `title` - Page title
 
 Response:
 

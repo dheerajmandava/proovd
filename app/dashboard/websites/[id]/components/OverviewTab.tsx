@@ -24,7 +24,6 @@ interface WebsiteData {
   id: string;
   name: string;
   domain: string;
-  apiKey: string;
   totalImpressions: number;
   totalClicks: number;
   conversionRate: number;
@@ -182,16 +181,6 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
       <div className="card bg-base-100 shadow-xl mb-8">
         <div className="card-body">
           <h2 className="card-title">Integration Details</h2>
-          
-          <div className="form-control w-full mb-4">
-            <label className="label">
-              <span className="label-text">API Key</span>
-            </label>
-            <div className="input-group">
-              <input type="text" readOnly value={websiteData.apiKey} className="input input-bordered font-mono w-full" />
-              <CopyButton textToCopy={websiteData.apiKey} />
-            </div>
-          </div>
           
           <div className="form-control w-full">
             <label className="label">

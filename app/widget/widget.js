@@ -15,7 +15,7 @@ class proovd {
 
     // Set default options
     this.options = {
-      apiKey: options.apiKey,
+      websiteId: options.websiteId,
       position: options.position || 'bottom-left',
       delay: options.delay || 5000, // Default 5 seconds
       displayDuration: options.displayDuration || 5000, // Default 5 seconds
@@ -175,7 +175,7 @@ class proovd {
   async fetchNotifications() {
     try {
       console.log('proovd: Fetching notifications...');
-      const url = `${this.apiUrl}/api/notifications?apiKey=${this.options.apiKey}&url=${encodeURIComponent(this.currentUrl)}`;
+      const url = `${this.apiUrl}/api/websites/${this.options.websiteId}/notifications/show?url=${encodeURIComponent(this.currentUrl)}`;
       console.log('proovd: Fetching from URL:', url);
       
       const response = await fetch(url);
@@ -355,39 +355,35 @@ class proovd {
 
   async trackImpression(notificationId) {
     try {
-      await fetch(`${this.apiUrl}/api/track`, {
+      await fetch(`${this.apiUrl}/api/websites/${this.options.websiteId}/notifications/${notificationId}/track`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          apiKey: this.options.apiKey,
-          notificationId,
-          action: 'impression',
-          url: this.currentUrl
+          type: 'impression',
+          url: window.location.href
         }),
       });
     } catch (error) {
-      console.error('Error tracking notification display:', error);
+      console.error('Error tracking impression:', error);
     }
   }
 
   async trackClick(notificationId) {
     try {
-      await fetch(`${this.apiUrl}/api/track`, {
+      await fetch(`${this.apiUrl}/api/websites/${this.options.websiteId}/notifications/${notificationId}/track`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          apiKey: this.options.apiKey,
-          notificationId,
-          action: 'click',
-          url: this.currentUrl
+          type: 'click',
+          url: window.location.href
         }),
       });
     } catch (error) {
-      console.error('Error tracking notification click:', error);
+      console.error('Error tracking click:', error);
     }
   }
 

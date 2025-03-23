@@ -1,15 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { VerificationMethod, VerificationStatus } from '@/app/lib/domain-verification';
-import { generateApiKey } from '@/app/lib/api-key';
-
-export interface ApiKey {
-  id: string;
-  key: string;
-  name: string;
-  allowedOrigins: string[];
-  createdAt: string;
-  lastUsed?: string;
-}
 
 export interface Verification {
   status: VerificationStatus;
@@ -25,7 +15,6 @@ export interface IWebsite extends Document {
   domain: string;
   status: string;
   verification: Verification;
-  apiKeys: ApiKey[];
   notifications: mongoose.Types.ObjectId[];
   settings: {
     displayOrder: string;
@@ -89,19 +78,6 @@ const WebsiteSchema = new Schema<IWebsite>(
       verifiedAt: {
         type: Date,
       },
-    },
-    apiKeys: {
-      type: [
-        {
-          id: String,
-          key: String,
-          name: String,
-          allowedOrigins: [String],
-          createdAt: String,
-          lastUsed: String,
-        },
-      ],
-      default: [], // Start with empty array - no API keys until verified
     },
     notifications: [
       {

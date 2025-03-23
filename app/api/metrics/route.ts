@@ -3,7 +3,7 @@ import { connectToDatabase } from '@/app/lib/db';
 import Website from '@/app/lib/models/website';
 import Notification from '@/app/lib/models/notification';
 import Metric from '@/app/lib/models/metric';
-import { isValidApiKey } from '@/app/lib/server-utils';
+import { isValidObjectId } from '@/app/lib/server-utils';
 
 /**
  * POST /api/metrics
@@ -14,20 +14,20 @@ export async function POST(req: NextRequest) {
   try {
     // Get the request body
     const body = await req.json();
-    const { apiKey, type, notificationId, url } = body;
+    const { websiteId, type, notificationId, url } = body;
 
     // Validate required fields
-    if (!apiKey || !type || !notificationId) {
+    if (!websiteId || !type || !notificationId) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Validate API key format
-    if (!isValidApiKey(apiKey)) {
+    // Validate website ID format
+    if (!isValidObjectId(websiteId)) {
       return NextResponse.json(
-        { error: 'Invalid API key format' },
+        { error: 'Invalid website ID format' },
         { status: 400 }
       );
     }
@@ -43,8 +43,8 @@ export async function POST(req: NextRequest) {
     // Connect to database
     await connectToDatabase();
 
-    // Find website by API key
-    const website = await Website.findOne({ apiKey, status: 'active' });
+    // Find website by ID
+    const website = await Website.findOne({ _id: websiteId, status: { $in: ['active', 'verified'] } });
     if (!website) {
       return NextResponse.json(
         { error: 'Website not found or inactive' },

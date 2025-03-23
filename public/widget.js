@@ -8,10 +8,15 @@
 (function() {
   'use strict';
 
+  // Extract website ID from the script URL
+  const scriptSrc = document.currentScript.src;
+  const websiteIdMatch = scriptSrc.match(/\/w\/([^.]+)\.js/);
+  const websiteId = websiteIdMatch ? websiteIdMatch[1] : null;
+
   // Configuration defaults
   const config = {
-    apiKey: window._proovd?.apiKey || document.querySelector('script[data-spfy-key]')?.dataset.spfyKey,
-    baseUrl: window._proovd?.baseUrl || 'https://api.proovd.com',
+    websiteId: websiteId,
+    baseUrl: window._proovd?.baseUrl || 'https://proovd.in',
     position: window._proovd?.position || 'bottom-left',
     delay: window._proovd?.delay || 5,
     displayTime: window._proovd?.displayTime || 5,
@@ -19,9 +24,9 @@
     maxNotifications: window._proovd?.maxNotifications || 10
   };
 
-  // Only initialize if API key is present
-  if (!config.apiKey) {
-    console.warn('Proovd: API key is missing. Widget will not be initialized.');
+  // Only initialize if website ID is present
+  if (!config.websiteId) {
+    console.warn('Proovd: Website ID is missing. Widget will not be initialized.');
     return;
   }
 
@@ -30,7 +35,7 @@
 
   // Create container with shadow DOM for style isolation
   const container = document.createElement('div');
-  container.id = 'spfy-container';
+  container.id = 'proovd-container';
   container.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;';
   document.body.appendChild(container);
   
@@ -52,8 +57,7 @@
    * Fetch notifications from the server
    */
   function fetchNotifications() {
-    const url = new URL(`${config.baseUrl}/api/notifications`);
-    url.searchParams.append('apiKey', config.apiKey);
+    const url = new URL(`${config.baseUrl}/api/websites/${config.websiteId}/notifications/show`);
     url.searchParams.append('url', window.location.href);
     
     fetch(url.toString())
@@ -332,31 +336,22 @@
   }
   
   /**
-   * Record metrics for impressions and clicks
+   * Record a metric (impression or click)
    */
   function recordMetric(type, notificationId) {
-    if (!notificationId) return;
-    
-    const url = `${config.baseUrl}/api/metrics`;
-    const data = {
-      apiKey: config.apiKey,
-      type,
-      notificationId,
-      url: window.location.href,
-      timestamp: new Date().toISOString()
-    };
-    
-    // Use sendBeacon if available for reliability during page unload
-    if (navigator.sendBeacon) {
-      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-      navigator.sendBeacon(url, blob);
-    } else {
-      fetch(url, {
+    try {
+      fetch(`${config.baseUrl}/api/websites/${config.websiteId}/notifications/${notificationId}/track`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        keepalive: true
-      }).catch(e => console.error('Proovd metric error:', e));
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type,
+          url: window.location.href
+        })
+      });
+    } catch (error) {
+      console.error(`Proovd: Error recording ${type}`, error);
     }
   }
   
@@ -364,26 +359,21 @@
    * Track page view for analytics
    */
   function trackPageView() {
-    const url = `${config.baseUrl}/api/pageview`;
-    const data = {
-      apiKey: config.apiKey,
-      url: window.location.href,
-      referrer: document.referrer,
-      title: document.title,
-      timestamp: new Date().toISOString()
-    };
-    
-    // Use sendBeacon for reliability
-    if (navigator.sendBeacon) {
-      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-      navigator.sendBeacon(url, blob);
-    } else {
-      fetch(url, {
+    try {
+      fetch(`${config.baseUrl}/api/pageview`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        keepalive: true
-      }).catch(e => console.error('Proovd pageview error:', e));
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          websiteId: config.websiteId,
+          url: window.location.href,
+          referrer: document.referrer,
+          title: document.title
+        })
+      });
+    } catch (error) {
+      console.error('Proovd: Error tracking page view', error);
     }
   }
 })(); 

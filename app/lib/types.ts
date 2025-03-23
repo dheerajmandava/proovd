@@ -4,37 +4,96 @@ export interface Website {
   id: string;
   name: string;
   domain: string;
-  status: 'pending' | 'verified' | 'failed';
-  verification: {
-    status: string;
+  status: string;
+  userId: string;
+  verification?: {
+    status: 'pending' | 'verified' | 'failed';
     method: string;
     token: string;
-    attempts: number;
     verifiedAt?: string;
   };
-  createdAt: string;
-  updatedAt?: string;
-  apiKeys?: Array<{
-    id: string;
-    key: string;
-    name: string;
-    allowedOrigins: string[];
-    createdAt: string;
-    lastUsed?: string;
-  }>;
-  analytics?: {
-    totalImpressions?: number;
-    totalClicks?: number;
-    conversionRate?: number;
-    views?: number;
-    conversions?: number;
-    lastUpdated?: string;
-  };
   settings?: {
-    displayOrder?: string;
-    displayLimit?: number;
-    displayTimeout?: number;
-    position?: string;
-    theme?: string;
+    position: string;
+    delay: number;
+    displayDuration: number;
+    maxNotifications: number;
+    theme: string;
   };
+  allowedDomains?: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Notification {
+  id: string;
+  siteId: string;
+  name: string;
+  type: string;
+  message: string;
+  url?: string;
+  imagePath?: string;
+  imageUrl?: string;
+  status: 'active' | 'inactive' | 'draft';
+  displayCount: number;
+  clickCount: number;
+  conversionRate: number;
+  frequency?: {
+    type: string;
+    value: number;
+  };
+  location?: string;
+  language?: string;
+  targeting?: {
+    pageUrls?: string[];
+    devices?: string[];
+    browsers?: string[];
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  image?: string;
+  plan: string;
+  role: string;
+  createdAt: Date;
+  lastLogin?: Date;
+}
+
+export type VerificationStatus = 'pending' | 'verified' | 'failed';
+
+export type VerificationMethod = 'DNS' | 'FILE' | 'META';
+
+export interface VerificationDetails {
+  status: VerificationStatus;
+  method: VerificationMethod;
+  token: string;
+  verifiedAt?: string;
+  attempts: number;
+}
+
+export interface WebsiteStats {
+  totalImpressions: number;
+  totalUniqueImpressions: number;
+  totalClicks: number;
+  conversionRate: string;
+  metrics: {
+    last24Hours: MetricsData;
+    last7Days: MetricsData;
+    last30Days: MetricsData;
+  };
+}
+
+export interface MetricsData {
+  impressions: number;
+  uniqueImpressions: number;
+  clicks: number;
+  conversionRate: string;
+}
+
+export interface FormErrors {
+  [key: string]: string;
 } 

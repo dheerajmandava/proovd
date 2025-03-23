@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/app/lib/db';
 import Website from '@/app/lib/models/website';
-import { isValidApiKey } from '@/app/lib/server-utils';
+import { isValidObjectId } from '@/app/lib/server-utils';
 
 /**
  * POST /api/pageview
@@ -12,20 +12,20 @@ export async function POST(req: NextRequest) {
   try {
     // Get the request body
     const body = await req.json();
-    const { apiKey, url, referrer, title } = body;
+    const { websiteId, url, referrer, title } = body;
 
-    // Validate API key
-    if (!apiKey) {
+    // Validate website ID
+    if (!websiteId) {
       return NextResponse.json(
-        { error: 'API key is required' },
+        { error: 'Website ID is required' },
         { status: 400 }
       );
     }
 
-    // Validate API key format
-    if (!isValidApiKey(apiKey)) {
+    // Validate website ID format
+    if (!isValidObjectId(websiteId)) {
       return NextResponse.json(
-        { error: 'Invalid API key format' },
+        { error: 'Invalid website ID format' },
         { status: 400 }
       );
     }
@@ -33,8 +33,8 @@ export async function POST(req: NextRequest) {
     // Connect to database
     await connectToDatabase();
 
-    // Find website by API key
-    const website = await Website.findOne({ apiKey, status: 'active' });
+    // Find website by ID
+    const website = await Website.findOne({ _id: websiteId, status: { $in: ['active', 'verified'] } });
     if (!website) {
       return NextResponse.json(
         { error: 'Website not found or inactive' },

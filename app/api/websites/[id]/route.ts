@@ -1,22 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/app/lib/db';
 import Website from '@/app/lib/models/website';
-import Notification from '@/app/lib/models/notification';
-import Metric from '@/app/lib/models/metric';
-import { sanitizeInput, isValidObjectId, generateApiKey } from '@/app/lib/server-utils';
 import { auth } from '@/auth';
+import { isValidObjectId } from 'mongoose';
+import Notification from '@/app/lib/models/notification';
+import { VerificationMethod } from '@/app/lib/domain-verification';
+import { verifyDomainWithDetails } from '@/app/lib/server-domain-verification';
 
 /**
  * GET /api/websites/[id]
  * 
- * Fetch a single website by ID
+ * Fetches a specific website by ID
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    // Get the current user
+    // Authentication
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -24,55 +25,63 @@ export async function GET(
         { status: 401 }
       );
     }
-
-    const { id } = await params;
-
-    // Validate ObjectId
+    
+    // Validate ID
+    const { id } = params;
     if (!isValidObjectId(id)) {
       return NextResponse.json(
         { error: 'Invalid website ID' },
         { status: 400 }
       );
     }
-
-    // Connect to the database
+    
+    // Connect to database
     await connectToDatabase();
-
-    // Get the website
+    
+    // Find website, ensure it belongs to current user
     const website = await Website.findOne({
       _id: id,
       userId: session.user.id
     });
-
+    
     if (!website) {
       return NextResponse.json(
         { error: 'Website not found' },
         { status: 404 }
       );
     }
-
-    // Return the website
-    return NextResponse.json(website.toResponse());
-  } catch (error) {
+    
+    // Count notifications for this website
+    const notificationsCount = await Notification.countDocuments({ siteId: id });
+    
+    // Return website data
+    const response = {
+      ...website.toResponse(),
+      notificationsCount
+    };
+    
+    return NextResponse.json(response);
+    
+  } catch (error: any) {
     console.error('Error fetching website:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch website' },
+      { error: 'Error fetching website', details: error.message },
       { status: 500 }
     );
   }
 }
 
 /**
- * PATCH /api/websites/[id]
+ * PUT /api/websites/[id]
  * 
- * Update a website
+ * Updates a website
  */
-export async function PATCH(
+export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    // Get the current user
+    // Authentication
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -80,66 +89,66 @@ export async function PATCH(
         { status: 401 }
       );
     }
-
+    
+    // Validate ID
     const { id } = params;
-
-    // Validate ObjectId
     if (!isValidObjectId(id)) {
       return NextResponse.json(
         { error: 'Invalid website ID' },
         { status: 400 }
       );
     }
-
-    // Parse request body
-    const body = await request.json();
-
-    // Connect to the database
+    
+    // Connect to database
     await connectToDatabase();
-
-    // Get the website
+    
+    // Check if website exists and belongs to user
     const website = await Website.findOne({
       _id: id,
       userId: session.user.id
     });
-
+    
     if (!website) {
       return NextResponse.json(
         { error: 'Website not found' },
         { status: 404 }
       );
     }
-
-    // Update fields that are allowed to be updated
-    const updatableFields = [
-      'name',
-      'domain',
-      'status',
-      'settings',
-      'allowedDomains'
-    ];
-
-    // Apply updates to allowed fields
-    updatableFields.forEach(field => {
-      if (body[field] !== undefined) {
-        if (field === 'name' || field === 'domain') {
-          // Sanitize string inputs
-          website[field] = sanitizeInput(body[field]);
-        } else {
-          website[field] = body[field];
-        }
-      }
-    });
-
-    // Save the updated website
+    
+    // Parse request body
+    const data = await request.json();
+    
+    // Update allowed fields
+    if (data.name) website.name = data.name;
+    
+    // Update settings if provided
+    if (data.settings) {
+      // Update specific settings fields
+      if (data.settings.position) website.settings.position = data.settings.position;
+      if (data.settings.delay) website.settings.delay = parseInt(data.settings.delay, 10);
+      if (data.settings.displayDuration) website.settings.displayDuration = parseInt(data.settings.displayDuration, 10);
+      if (data.settings.maxNotifications) website.settings.maxNotifications = parseInt(data.settings.maxNotifications, 10);
+      if (data.settings.theme) website.settings.theme = data.settings.theme;
+    }
+    
+    // Update allowed domains if provided
+    if (data.allowedDomains && Array.isArray(data.allowedDomains)) {
+      website.allowedDomains = data.allowedDomains;
+    }
+    
+    // Save changes
     await website.save();
-
-    // Return the updated website
-    return NextResponse.json(website.toResponse());
-  } catch (error) {
+    
+    // Return updated website
+    return NextResponse.json({
+      success: true,
+      website: website.toResponse()
+    });
+    
+  } catch (error: any) {
     console.error('Error updating website:', error);
     return NextResponse.json(
-      { error: 'Failed to update website' },
+      { error: 'Error updating website', details: error.message },
       { status: 500 }
     );
   }
@@ -148,14 +157,14 @@ export async function PATCH(
 /**
  * DELETE /api/websites/[id]
  * 
- * Delete a website and all its associated data
+ * Deletes a website
  */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    // Get the current user
+    // Authentication
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -163,140 +172,128 @@ export async function DELETE(
         { status: 401 }
       );
     }
-
+    
+    // Validate ID
     const { id } = params;
-
-    // Validate ObjectId
     if (!isValidObjectId(id)) {
       return NextResponse.json(
         { error: 'Invalid website ID' },
         { status: 400 }
       );
     }
-
-    // Connect to the database
+    
+    // Connect to database
     await connectToDatabase();
-
-    // Get the website
+    
+    // Check if website exists and belongs to user
     const website = await Website.findOne({
       _id: id,
       userId: session.user.id
     });
-
+    
     if (!website) {
       return NextResponse.json(
         { error: 'Website not found' },
         { status: 404 }
       );
     }
-
-    // Delete all associated notifications
-    await Notification.deleteMany({ siteId: id });
-
-    // Delete all associated metrics
-    await Metric.deleteMany({ siteId: id });
-
-    // Delete the website
+    
+    // Delete website
     await Website.deleteOne({ _id: id });
-
-    // Return success response
-    return NextResponse.json({ success: true });
-  } catch (error) {
+    
+    // Also delete all notifications for this website
+    await Notification.deleteMany({ siteId: id });
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Website and all related notifications deleted'
+    });
+    
+  } catch (error: any) {
     console.error('Error deleting website:', error);
     return NextResponse.json(
-      { error: 'Failed to delete website' },
+      { error: 'Error deleting website', details: error.message },
       { status: 500 }
     );
   }
 }
 
 /**
- * POST /api/websites/[id]/regenerate-api-key
+ * PATCH /api/websites/[id]
  * 
- * Regenerate API key for a website
+ * Updates specific website fields
  */
-export async function POST(
+export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  // Check if this is a regenerate API key request
-  const { searchParams } = new URL(request.url);
-  const action = searchParams.get('action');
-
-  if (action === 'regenerate-api-key') {
-    try {
-      // Get the current user
-      const session = await auth();
-      if (!session?.user?.id) {
-        return NextResponse.json(
-          { error: 'Authentication required' },
-          { status: 401 }
-        );
-      }
-
-      const { id } = params;
-
-      // Validate ObjectId
-      if (!isValidObjectId(id)) {
-        return NextResponse.json(
-          { error: 'Invalid website ID' },
-          { status: 400 }
-        );
-      }
-
-      // Connect to the database
-      await connectToDatabase();
-
-      // Get the website
-      const website = await Website.findOne({
-        _id: id,
-        userId: session.user.id
-      });
-
-      if (!website) {
-        return NextResponse.json(
-          { error: 'Website not found' },
-          { status: 404 }
-        );
-      }
-
-      // Generate a new API key and update the first key in the array
-      const newApiKey = generateApiKey();
-      
-      if (!website.apiKeys || website.apiKeys.length === 0) {
-        // If no API keys exist, create a new one
-        website.apiKeys = [{
-          id: Date.now().toString(),
-          key: newApiKey,
-          name: 'Default',
-          allowedOrigins: [website.domain],
-          createdAt: new Date().toISOString()
-        }];
-      } else {
-        // Update the first API key
-        website.apiKeys[0].key = newApiKey;
-      }
-      
-      // Save the updated website
-      await website.save();
-
-      // Return the updated API key
-      return NextResponse.json({
-        id: website._id,
-        apiKey: website.apiKeys[0].key
-      });
-    } catch (error) {
-      console.error('Error regenerating API key:', error);
+  try {
+    // Authentication
+    const session = await auth();
+    if (!session?.user?.id) {
       return NextResponse.json(
-        { error: 'Failed to regenerate API key' },
-        { status: 500 }
+        { error: 'Authentication required' },
+        { status: 401 }
       );
     }
+    
+    // Validate ID
+    const { id } = params;
+    if (!isValidObjectId(id)) {
+      return NextResponse.json(
+        { error: 'Invalid website ID' },
+        { status: 400 }
+      );
+    }
+    
+    // Connect to database
+    await connectToDatabase();
+    
+    // Check if website exists and belongs to user
+    const website = await Website.findOne({
+      _id: id,
+      userId: session.user.id
+    });
+    
+    if (!website) {
+      return NextResponse.json(
+        { error: 'Website not found' },
+        { status: 404 }
+      );
+    }
+    
+    // Parse request body
+    const data = await request.json();
+    
+    // Update provided fields
+    const updatedFields: any = {};
+    
+    // Handle status change if provided
+    if (data.status) {
+      website.status = data.status;
+      updatedFields.status = data.status;
+    }
+    
+    // Handle name update if provided
+    if (data.name) {
+      website.name = data.name;
+      updatedFields.name = data.name;
+    }
+    
+    // Save changes
+    await website.save();
+    
+    // Return success with updated fields
+    return NextResponse.json({
+      success: true,
+      updatedFields
+    });
+    
+  } catch (error: any) {
+    console.error('Error patching website:', error);
+    return NextResponse.json(
+      { error: 'Error updating website', details: error.message },
+      { status: 500 }
+    );
   }
-
-  // If it's not a recognized action, return 404
-  return NextResponse.json(
-    { error: 'Endpoint not found' },
-    { status: 404 }
-  );
 } 

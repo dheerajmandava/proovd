@@ -6,12 +6,12 @@ async function createTestNotifications() {
   try {
     await connectToDatabase();
     
-    // Find website by API key
-    const apiKey = '72ea2d02-2174-40d4-bd45-8db754952570';
-    const website = await Website.findOne({ apiKey });
+    // Find website by ID
+    const websiteId = '65f9e99aa915ae7be4c87eaa'; // Replace with an actual website ID
+    const website = await Website.findById(websiteId);
     
     if (!website) {
-      console.error('Website not found with API key:', apiKey);
+      console.error('Website not found with ID:', websiteId);
       process.exit(1);
     }
 

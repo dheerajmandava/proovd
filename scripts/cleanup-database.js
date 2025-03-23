@@ -5,9 +5,8 @@
  * 
  * This script cleans up the MongoDB database:
  * 1. Removes any test websites (example.com)
- * 2. Removes invalid API keys
- * 3. Ensures no duplicate API keys exist
- * 4. Makes API keys website-specific
+ * 2. Updates website schema to remove API key fields
+ * 3. Ensures proper verification tokens exist
  */
 
 const mongoose = require('mongoose');
@@ -38,7 +37,6 @@ const websiteSchema = new mongoose.Schema({
   name: String,
   domain: String,
   userId: mongoose.Schema.Types.ObjectId,
-  apiKey: String,
   status: String,
   verification: {
     status: String,
@@ -46,15 +44,7 @@ const websiteSchema = new mongoose.Schema({
     token: String,
     verifiedAt: String,
     attempts: Number,
-  },
-  apiKeys: [{
-    id: String,
-    key: String,
-    name: String,
-    allowedOrigins: [String],
-    createdAt: String,
-    lastUsed: String,
-  }],
+  }
 });
 
 const Website = mongoose.models.Website || mongoose.model('Website', websiteSchema);
@@ -77,49 +67,46 @@ const cleanupDatabase = async () => {
     console.log('Removed test websites');
   }
 
-  // 2. Fix the API key schema issue - remove the old apiKey field and drop the index
-  console.log('Updating schema to use website-specific API keys...');
+  // 2. Remove old API key fields from all websites
+  console.log('Removing API key fields from websites...');
   
-  // Drop the problematic apiKey_1 index
   try {
-    await mongoose.connection.db.collection('websites').dropIndex('apiKey_1');
-    console.log('Successfully dropped the apiKey_1 index');
-  } catch (error) {
-    console.log('No apiKey_1 index found or error dropping index:', error.message);
-  }
-  
-  const websitesWithOldApiKey = await Website.find({
-    apiKey: { $exists: true }
-  });
-  
-  console.log(`Found ${websitesWithOldApiKey.length} websites with old API key structure`);
-  
-  // Update each website to use the new model and remove the old apiKey field
-  for (const website of websitesWithOldApiKey) {
-    // We'll remove the apiKey field completely
-    await Website.updateOne(
-      { _id: website._id },
+    // Remove the apiKey field if it exists
+    const removeApiKeyField = await Website.updateMany(
+      { apiKey: { $exists: true } },
       { $unset: { apiKey: "" } }
     );
-  }
-  
-  // 3. Fix any websites with null apiKeys by converting to empty array
-  const fixNull = await Website.updateMany(
-    { apiKeys: null },
-    { $set: { apiKeys: [] } }
-  );
-  
-  console.log(`Fixed ${fixNull.modifiedCount} websites with null apiKeys`);
-
-  // 4. Update any existing schema/documents to the new structure
-  try {
-    // Add indexes for validation
-    await mongoose.connection.db.collection('websites').createIndex(
-      { 'apiKeys.key': 1 },
-      { unique: true, sparse: true } // sparse ensures uniqueness only applies to documents that have the field
-    );
-    console.log('Added sparse unique index for apiKeys.key');
     
+    console.log(`Removed apiKey field from ${removeApiKeyField.modifiedCount} websites`);
+    
+    // Remove the apiKeys array if it exists
+    const removeApiKeysArray = await Website.updateMany(
+      { apiKeys: { $exists: true } },
+      { $unset: { apiKeys: "" } }
+    );
+    
+    console.log(`Removed apiKeys array from ${removeApiKeysArray.modifiedCount} websites`);
+    
+    // Try to drop any API key related indexes
+    try {
+      await mongoose.connection.db.collection('websites').dropIndex('apiKey_1');
+      console.log('Successfully dropped the apiKey_1 index');
+    } catch (error) {
+      console.log('No apiKey_1 index found or error dropping index:', error.message);
+    }
+    
+    try {
+      await mongoose.connection.db.collection('websites').dropIndex('apiKeys.key_1');
+      console.log('Successfully dropped the apiKeys.key_1 index');
+    } catch (error) {
+      console.log('No apiKeys.key_1 index found or error dropping index:', error.message);
+    }
+  } catch (error) {
+    console.error('Error removing API key fields:', error);
+  }
+
+  // 3. Update existing schema/documents to the proper structure
+  try {
     // Create indexes for domain uniqueness per user
     await mongoose.connection.db.collection('websites').createIndex(
       { userId: 1, domain: 1 },
@@ -127,7 +114,7 @@ const cleanupDatabase = async () => {
     );
     console.log('Added compound index for userId and domain');
 
-    // 5. Fix websites missing verification tokens
+    // 4. Fix websites missing verification tokens
     const websitesWithoutToken = await Website.find({
       $or: [
         { 'verification.token': { $exists: false } },
@@ -161,7 +148,7 @@ const cleanupDatabase = async () => {
     
     console.log(`Fixed ${websitesWithoutToken.length} websites with missing verification tokens`);
   } catch (error) {
-    console.error('Error updating database indexes:', error);
+    console.error('Error updating database structure:', error);
   }
 
   console.log('Database cleanup completed successfully!');

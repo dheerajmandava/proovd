@@ -1,176 +1,96 @@
 // Instead of directly importing auth from auth.ts (which uses Mongoose)
 // Define a lightweight middleware that only handles session validation
 
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 import { join } from 'path'
 
+const AUTH_PAGES = ['/login', '/register', '/auth']
+const PUBLIC_PAGES = ['/', '/auth/signin', '/auth/signup', '/pricing', '/docs', '/help', '/contact', '/blog', '/_next', '/images', '/fonts', '/api/auth', '/favicon.ico']
+const API_PUBLIC_ENDPOINTS = [
+  '/api/auth',
+  '/api/websites/*/widget.js',
+  '/api/notifications/*/impression',
+  '/api/notifications/*/click',
+  '/cdn/w/[id].js',
+  '/api/cdn/w'
+]
+
+/**
+ * Middleware function that runs on every request
+ */
 export async function middleware(request: NextRequest) {
-  // Public API endpoints that need CORS but not auth
-  const publicApiPaths = [
-    '/api/notifications',
-    '/api/track',
-    '/api/widget',
-    '/api/websites/*/widget.js',
-    '/api/domains/validate',
-    '/api/dev/create-test-notifications',
-    '/api/dev/create-test-website'
-  ]
+  const { nextUrl, headers } = request
+  const pathname = nextUrl.pathname
 
-  // Check if the current path is a public API endpoint
-  const isPublicApiPath = publicApiPaths.some(path => {
-    if (path.includes('*')) {
-      const pattern = new RegExp(path.replace('*', '.*'));
-      return pattern.test(request.nextUrl.pathname);
-    }
-    return request.nextUrl.pathname.startsWith(path);
-  })
-
-  // Handle CORS for API routes
-  if (request.nextUrl.pathname.startsWith('/api')) {
-    // Handle preflight requests
-    if (request.method === 'OPTIONS') {
-      return new NextResponse(null, {
-        status: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Max-Age': '86400',
-        },
-      });
-    }
-
-    // For public API endpoints, just add CORS headers
-    if (isPublicApiPath) {
-      const response = NextResponse.next();
-      response.headers.set('Access-Control-Allow-Origin', '*');
-      response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      return response;
-    }
+  // Function to check if a path matches a pattern
+  function matchesPattern(path: string, pattern: string): boolean {
+    // Convert pattern to regex
+    const regexPattern = pattern
+      .replace(/\//g, '\\/') // Escape forward slashes
+      .replace(/\*/g, '[^\\/]+') // * matches any segment
+      .replace(/\[([^\]]+)\]/g, '([^\\/]+)') // [xxx] matches a dynamic segment
+    const regex = new RegExp(`^${regexPattern}$`)
+    return regex.test(path)
   }
 
-  // Get token for protected routes
-  const token = await getToken({ 
-    req: request,
-    secret: process.env.NEXTAUTH_SECRET,
-  })
+  // Check if the path is a public API endpoint
+  function isPublicApiEndpoint(path: string): boolean {
+    return API_PUBLIC_ENDPOINTS.some(pattern => matchesPattern(path, pattern))
+  }
+
+  // Handle public CDN endpoints (for widget scripts)
+  if (pathname.startsWith('/cdn/')) {
+    // Extract the part after /cdn/
+    const cdnPath = pathname.substring('/cdn/'.length)
+    
+    // Redirect /cdn/w/ID.js to /api/cdn/w/ID.js
+    if (cdnPath.startsWith('w/') && cdnPath.endsWith('.js')) {
+      const id = cdnPath.substring(2, cdnPath.length - 3) // Remove 'w/' prefix and '.js' suffix
+      return NextResponse.rewrite(new URL(`/api/cdn/w/${id}.js`, request.url))
+    }
+  }
   
-  // Public paths that don't require authentication
-  const publicPaths = [
-    '/',
-    '/auth/signin',
-    '/auth/signup',
-    '/auth/register',
-    '/auth/error',
-    '/auth/forgot-password',
-    '/auth/reset-password',
-    '/api/auth/signin',
-    '/api/auth/signout',
-    '/api/auth/session',
-    '/api/auth/csrf',
-    '/api/auth/providers',
-    '/api/auth/callback',
-    '/api/auth/register',
-    '/api/auth/signup',
-    '/api/auth',
-    '/favicon.ico',
-    '/widget.js'
-  ]
-  
-  // Check if the path is a public path or starts with one
-  const isPublicPath = publicPaths.some(path => 
-    request.nextUrl.pathname === path || 
-    request.nextUrl.pathname.startsWith(`${path}/`)
-  ) || 
-  isPublicApiPath ||
-  request.nextUrl.pathname.startsWith('/_next/') ||
-  request.nextUrl.pathname.startsWith('/static/')
-  
-  // Protected routes that require authentication
-  const protectedPaths = [
-    '/dashboard',
-    '/api/websites',
-    '/api/notifications',
-    '/api/users'
-  ]
-  
-  const isProtectedPath = protectedPaths.some(path =>
-    request.nextUrl.pathname === path ||
-    request.nextUrl.pathname.startsWith(`${path}/`)
-  )
-  
-  // If not authenticated and trying to access a protected path, redirect to sign in
-  if (!token && isProtectedPath) {
+  // Allow public pages and API endpoints
+  if (PUBLIC_PAGES.some(page => pathname.startsWith(page)) || isPublicApiEndpoint(pathname)) {
+    return NextResponse.next()
+  }
+
+  // Check for authentication token
+  const token = await getToken({ req: request })
+
+  // If not logged in and trying to access protected pages, redirect to login
+  if (!token && !AUTH_PAGES.some(page => pathname.startsWith(page))) {
+    // Create a new URL for redirection
     const url = new URL('/auth/signin', request.url)
-    url.searchParams.set('callbackUrl', request.nextUrl.pathname)
-    console.log(`Redirecting unauthenticated user from ${request.nextUrl.pathname} to signin`)
+    // Add the current URL as a callback parameter
+    if (pathname !== '/dashboard') {
+      url.searchParams.set('callbackUrl', pathname)
+    }
+    // Redirect to login
     return NextResponse.redirect(url)
   }
 
-  // For protected API routes, add CORS headers and check auth
-  if (request.nextUrl.pathname.startsWith('/api') && !isPublicApiPath && !isPublicPath) {
-    if (!token) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Authentication required' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-    
-    const response = NextResponse.next();
-    response.headers.set('Access-Control-Allow-Origin', '*');
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    return response;
+  // If logged in and accessing auth pages, redirect to dashboard
+  if (token && AUTH_PAGES.some(page => pathname.startsWith(page))) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
-  
-  // Handle cdn subdomain requests
-  const hostname = request.headers.get('host') || '';
-  
-  if (hostname.startsWith('cdn.')) {
-    // Get path from URL
-    const pathname = request.nextUrl.pathname;
-    
-    // For cdn.proovd.in, serve from public/cdn directory
-    if (hostname === 'cdn.proovd.in') {
-      // Create a new URL for the rewritten destination
-      const url = request.nextUrl.clone();
-      
-      // Strip any query parameters for static files
-      url.search = '';
-      
-      // Check if it's a dynamic website ID script
-      const websiteScript = pathname.match(/^\/w\/([^.]+)\.js$/);
-      if (websiteScript && websiteScript[1]) {
-        // If it's a WebsiteID.js request, serve the template
-        url.pathname = `/cdn/w/WEBSITE_ID.js`;
-      } else {
-        // Otherwise serve the file directly from /public/cdn
-        url.pathname = `/cdn${pathname}`;
-      }
-      
-      return NextResponse.rewrite(url);
-    }
-  }
-  
+
+  // Default: continue with the request
   return NextResponse.next()
 }
 
-// Update matcher to include all paths except static assets
+/**
+ * Configure paths that the middleware will run on
+ */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
-    // Match all paths under cdn.proovd.in
-    {
-      source: '/(.*)',
-      has: [
-        {
-          type: 'host',
-          value: 'cdn.proovd.in',
-        },
-      ],
-    },
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!_next/static|_next/image).*)',
   ],
 } 

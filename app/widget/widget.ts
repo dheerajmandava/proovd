@@ -4,87 +4,135 @@
  */
 
 interface ProovdOptions {
-  apiKey: string;
-  position?: 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right';
+  websiteId: string;
+  position?: string;
   delay?: number;
   displayDuration?: number;
   maxNotifications?: number;
-  theme?: 'light' | 'dark';
+  theme?: string;
 }
 
 interface Notification {
   id: string;
   name: string;
-  type: string;
   message: string;
-  productName?: string;
-  url?: string;
   image?: string;
+  type: string;
+  productName?: string;
+  location?: string;
+  url?: string;
   timestamp: string;
+  timeAgo?: string;
 }
 
 class Proovd {
-  private options: Required<ProovdOptions>;
   private container: HTMLElement | null = null;
   private notifications: Notification[] = [];
   private currentNotificationIndex = 0;
   private intervalId: number | null = null;
-  private apiUrl = 'https://api.proovd.com'; // Replace with actual API URL in production
-  private currentUrl: string;
-  private sessionId: string;
-  private clientId: string;
+  private apiUrl = 'http://localhost:3000';
+  private currentUrl = window.location.href;
+  private options: ProovdOptions;
 
   constructor(options: ProovdOptions) {
     // Set default options
     this.options = {
-      apiKey: options.apiKey,
+      websiteId: options.websiteId,
       position: options.position || 'bottom-left',
-      delay: options.delay || 5,
-      displayDuration: options.displayDuration || 5,
+      delay: options.delay || 5000, // Default 5 seconds
+      displayDuration: options.displayDuration || 5000, // Default 5 seconds
       maxNotifications: options.maxNotifications || 5,
       theme: options.theme || 'light',
     };
 
-    // Store current URL
-    this.currentUrl = window.location.href;
-    
-    // Generate or retrieve session ID
-    this.sessionId = this.getOrCreateSessionId();
-    
-    // Generate or retrieve client ID (persists across sessions)
-    this.clientId = this.getOrCreateClientId();
+    console.log('Proovd: Initialized with options:', this.options);
+
+    // Add CSS animations
+    this.addStyles();
 
     // Initialize the widget
     this.init();
   }
-  
-  // Generate a unique identifier
-  private generateId(): string {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
+
+  private dispatchEvent(name: string, detail: any = {}): void {
+    const event = new CustomEvent(name, { detail });
+    window.dispatchEvent(event);
   }
-  
-  // Get existing session ID or create a new one
-  private getOrCreateSessionId(): string {
-    let sessionId = sessionStorage.getItem('proovd_session');
-    if (!sessionId) {
-      sessionId = this.generateId();
-      sessionStorage.setItem('proovd_session', sessionId);
-    }
-    return sessionId;
-  }
-  
-  // Get existing client ID or create a new one (persists across sessions)
-  private getOrCreateClientId(): string {
-    let clientId = localStorage.getItem('proovd_client');
-    if (!clientId) {
-      clientId = this.generateId();
-      localStorage.setItem('proovd_client', clientId);
-    }
-    return clientId;
+
+  private addStyles(): void {
+    const styleSheet = document.createElement('style');
+    styleSheet.textContent = `
+      @keyframes proovd-fade-in {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes proovd-fade-out {
+        from {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+      }
+
+      .proovd-container {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .proovd-notification {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: all 0.3s ease;
+      }
+
+      .proovd-notification:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      .proovd-image {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        object-fit: cover;
+      }
+
+      .proovd-content {
+        flex: 1;
+      }
+
+      .proovd-name {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .proovd-message {
+        margin-bottom: 4px;
+      }
+
+      .proovd-product {
+        font-weight: 500;
+        color: #2563eb;
+      }
+
+      .proovd-time {
+        font-size: 12px;
+        color: #6b7280;
+      }
+    `;
+    document.head.appendChild(styleSheet);
   }
 
   private async init(): Promise<void> {
@@ -100,14 +148,17 @@ class Proovd {
       // Start displaying notifications if we have any
       if (this.notifications.length > 0) {
         console.log(`Proovd: Found ${this.notifications.length} notifications`);
+        this.dispatchEvent('proovdLoaded', { count: this.notifications.length });
         setTimeout(() => {
           this.startNotifications();
-        }, this.options.delay * 1000);
+        }, this.options.delay as number);
       } else {
         console.log('Proovd: No notifications found');
+        this.dispatchEvent('proovdError', { message: 'No notifications found' });
       }
     } catch (error) {
       console.error('Proovd initialization error:', error);
+      this.dispatchEvent('proovdError', { message: (error as Error).message });
     }
   }
 
@@ -146,22 +197,25 @@ class Proovd {
   private async fetchNotifications(): Promise<void> {
     try {
       console.log('Proovd: Fetching notifications...');
-      const response = await fetch(
-        `${this.apiUrl}/api/notifications?apiKey=${this.options.apiKey}&url=${encodeURIComponent(this.currentUrl)}`
-      );
+      const url = `${this.apiUrl}/api/websites/${this.options.websiteId}/notifications/show?url=${encodeURIComponent(this.currentUrl)}`;
+      console.log('Proovd: Fetching from URL:', url);
+      
+      const response = await fetch(url);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch notifications: ${response.status}`);
       }
       
       const data = await response.json();
+      console.log('Proovd: Received data:', data);
       
       // Apply settings from server if available
       if (data.settings) {
+        console.log('Proovd: Applying server settings:', data.settings);
         this.options.position = data.settings.position || this.options.position;
         this.options.theme = data.settings.theme || this.options.theme;
-        this.options.displayDuration = data.settings.displayDuration || this.options.displayDuration;
-        this.options.delay = data.settings.delay || this.options.delay;
+        this.options.displayDuration = (data.settings.displayDuration || 5) * 1000; // Convert to ms
+        this.options.delay = (data.settings.delay || 5) * 1000; // Convert to ms
         this.options.maxNotifications = data.settings.maxNotifications || this.options.maxNotifications;
         
         // Update container position if needed
@@ -195,8 +249,10 @@ class Proovd {
       }
       
       this.notifications = data.notifications || [];
+      console.log('Proovd: Loaded notifications:', this.notifications);
     } catch (error) {
       console.error('Error fetching notifications:', error);
+      throw error;
     }
   }
 
@@ -316,43 +372,35 @@ class Proovd {
 
   private async trackImpression(notificationId: string): Promise<void> {
     try {
-      await fetch(`${this.apiUrl}/api/track`, {
+      await fetch(`${this.apiUrl}/api/websites/${this.options.websiteId}/notifications/${notificationId}/track`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          apiKey: this.options.apiKey,
-          notificationId: notificationId,
-          action: 'impression',
-          url: this.currentUrl,
-          sessionId: this.sessionId,
-          clientId: this.clientId
+          type: 'impression',
+          url: window.location.href
         }),
       });
     } catch (error) {
-      console.error('Error tracking notification display:', error);
+      console.error('Error tracking impression:', error);
     }
   }
 
   private async trackClick(notificationId: string): Promise<void> {
     try {
-      await fetch(`${this.apiUrl}/api/track`, {
+      await fetch(`${this.apiUrl}/api/websites/${this.options.websiteId}/notifications/${notificationId}/track`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          apiKey: this.options.apiKey,
-          notificationId: notificationId,
-          action: 'click',
-          url: this.currentUrl,
-          sessionId: this.sessionId,
-          clientId: this.clientId
+          type: 'click',
+          url: window.location.href
         }),
       });
     } catch (error) {
-      console.error('Error tracking notification click:', error);
+      console.error('Error tracking click:', error);
     }
   }
 

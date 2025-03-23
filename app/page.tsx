@@ -188,7 +188,7 @@ export default function Home() {
                   <pre data-prefix=""><code></code></pre>
                   <pre data-prefix="$"><code>// Configure your instance</code></pre>
                   <pre data-prefix=">" className="text-success"><code>const socialProof = new Proovd({'{'}</code></pre>
-                  <pre data-prefix=""><code>  apiKey: 'your_api_key',</code></pre>
+                  <pre data-prefix=""><code>  websiteId: 'your_website_id',</code></pre>
                   <pre data-prefix=""><code>  position: 'bottom-left',</code></pre>
                   <pre data-prefix=""><code>  theme: 'light',</code></pre>
                   <pre data-prefix=">" className="text-success"><code>{'}'});</code></pre>

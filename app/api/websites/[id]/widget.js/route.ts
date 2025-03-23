@@ -1,109 +1,125 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/app/lib/db';
 import Website from '@/app/lib/models/website';
-import { cors, addCorsHeaders } from '@/app/lib/cors';
+import { isValidObjectId } from 'mongoose';
+import { sanitizeInput } from '@/app/lib/server-utils';
 
 /**
  * GET /api/websites/[id]/widget.js
  * 
- * Generates and serves the JavaScript widget file for embedding on customer websites
- * Now uses domain verification instead of API key for authentication
+ * Returns the widget script for a website.
+ * This is a public endpoint that returns JavaScript to be embedded in customer websites.
+ * 
+ * Authentication is based on the website ID and domain verification.
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  // Apply CORS headers for cross-origin requests
-  const corsResponse = cors(request);
-  if (corsResponse instanceof NextResponse) return corsResponse;
-
   try {
+    // Get the website ID from the params
     const { id } = params;
     
-    // Get the referer header (the domain that loaded the script)
-    const referer = request.headers.get('referer');
-    const refererDomain = referer ? new URL(referer).hostname : null;
-    
+    // Validate ObjectId
+    if (!isValidObjectId(id)) {
+      return new NextResponse(`console.error("Invalid website ID");`, {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/javascript',
+        },
+      });
+    }
+
     // Connect to the database
     await connectToDatabase();
 
-    // Get the website by ID
+    // Get the website
     const website = await Website.findOne({ _id: id });
 
     if (!website) {
-      const jsError = `console.error('Proovd: Invalid website ID');`;
-      return new NextResponse(jsError, {
-        status: 200,
+      return new NextResponse(`console.error("Website not found");`, {
+        status: 404,
         headers: {
           'Content-Type': 'application/javascript',
-        }
-      });
-    }
-
-    // Check if the domain is verified
-    const websiteDomain = website.domain;
-    const isVerified = website.verification?.status === 'verified';
-    
-    // If the domain is not verified or the referer doesn't match the verified domain
-    if (!isVerified) {
-      const jsError = `console.error('Proovd: Website domain is not verified');`;
-      return new NextResponse(jsError, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/javascript',
-        }
+        },
       });
     }
     
-    // Check if the referer matches the verified domain
-    // Skip this check in development or if no referer
-    if (process.env.NODE_ENV === 'production' && refererDomain) {
-      // Extract the base domain for comparison, accounting for subdomains
-      const refererBaseDomain = refererDomain.split('.').slice(-2).join('.');
-      const websiteBaseDomain = websiteDomain.split('.').slice(-2).join('.');
-      
-      if (refererBaseDomain !== websiteBaseDomain && !refererDomain.endsWith(websiteDomain)) {
-        const jsError = `console.error('Proovd: Domain mismatch - widget is only authorized for ${websiteDomain}');`;
-        return new NextResponse(jsError, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/javascript',
+    // Check if the website is active
+    if (website.status !== 'active' && website.status !== 'verified') {
+      return new NextResponse(`console.error("Website is not active");`, {
+        status: 403,
+        headers: {
+          'Content-Type': 'application/javascript',
+        },
+      });
+    }
+    
+    // Get the referer domain
+    const referer = request.headers.get('referer');
+    
+    // Domain validation: Check if the referer matches the website domain or allowed domains
+    if (referer) {
+      try {
+        const refererUrl = new URL(referer);
+        const refererDomain = refererUrl.hostname.toLowerCase();
+        
+        // Check if domain matches or is in allowed domains
+        const domainMatches = 
+          website.domain === refererDomain || 
+          (website.allowedDomains && website.allowedDomains.includes(refererDomain));
+        
+        if (!domainMatches) {
+          // Log the mismatch but don't block in development
+          console.warn(`Domain mismatch: ${refererDomain} vs ${website.domain} or ${website.allowedDomains}`);
+          
+          // In production, block mismatched domains
+          if (process.env.NODE_ENV === 'production') {
+            return new NextResponse(`console.error("Domain not authorized");`, {
+              status: 403,
+              headers: {
+                'Content-Type': 'application/javascript',
+              },
+            });
           }
-        });
+        }
+      } catch (error) {
+        console.error('Error parsing referer:', error);
       }
     }
-
-    // Build the widget JavaScript
-    const widgetJs = `
-    (function() {
-      // Proovd Widget v1.0
-      // Website ID: ${id}
-      
-      const ENDPOINT = "${process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin}/api/websites/${id}/widget";
-      const SITE_ID = "${id}";
-      const DEFAULT_SETTINGS = ${JSON.stringify(website.settings || {
-        position: "bottom-left",
-        theme: "light",
+    
+    // Get the website settings
+    const settings = website.settings || {
+      position: 'bottom-left',
+      delay: 5,
         displayDuration: 5,
-        delay: 5,
         maxNotifications: 5,
-      })};
-      
-      // Create widget container
+      theme: 'light',
+    };
+    
+    // Build the widget script
+    const widgetScript = `
+      // Proovd Social Proof Widget
+      (function() {
+        const websiteId = "${id}";
+        const widgetSettings = ${JSON.stringify(settings)};
+        
+        // Create container element
       const container = document.createElement('div');
-      container.id = 'proovd-container';
-      container.style.cssText = \`
-        position: fixed;
-        z-index: 9999;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        max-width: 350px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      \`;
-      
-      // Set container position based on settings
-      switch (DEFAULT_SETTINGS.position) {
+        container.id = 'proovd-notifications';
+        container.style.position = 'fixed';
+        container.style.zIndex = '9999';
+        
+        // Set position based on settings
+        switch(widgetSettings.position) {
+          case 'bottom-left':
+            container.style.bottom = '20px';
+            container.style.left = '20px';
+            break;
+          case 'bottom-right':
+            container.style.bottom = '20px';
+            container.style.right = '20px';
+            break;
         case 'top-left':
           container.style.top = '20px';
           container.style.left = '20px';
@@ -112,233 +128,293 @@ export async function GET(
           container.style.top = '20px';
           container.style.right = '20px';
           break;
-        case 'bottom-right':
-          container.style.bottom = '20px';
-          container.style.right = '20px';
-          break;
-        case 'bottom-left':
         default:
           container.style.bottom = '20px';
           container.style.left = '20px';
-          break;
-      }
-      
-      document.body.appendChild(container);
-      
-      // CSS for notifications
-      const style = document.createElement('style');
-      style.textContent = \`
-        .proovd-notification {
-          background-color: \${DEFAULT_SETTINGS.theme === 'dark' ? '#1f2937' : '#ffffff'};
-          color: \${DEFAULT_SETTINGS.theme === 'dark' ? '#e5e7eb' : '#1f2937'};
-          border-radius: 8px;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
-          padding: 12px;
-          animation: proovd-slide-in 0.3s ease-out;
-          transition: opacity 0.3s, transform 0.3s;
-          cursor: pointer;
-          max-width: 100%;
         }
         
-        .proovd-notification:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+        // Append to body
+        document.body.appendChild(container);
+        
+        // Load the notifications
+        const api = '${process.env.NEXT_PUBLIC_API_URL || process.env.VERCEL_URL || 'http://localhost:3000'}';
+        
+        // Track seen notifications
+        const seenNotifications = new Set();
+        
+        // Function to fetch notifications
+        async function fetchNotifications() {
+          try {
+            const response = await fetch(\`\${api}/api/websites/\${websiteId}/notifications/show\`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            if (!response.ok) {
+              throw new Error('Failed to fetch notifications');
+            }
+            
+            const data = await response.json();
+            return data.notifications || [];
+          } catch (error) {
+            console.error('Error fetching notifications:', error);
+            return [];
+          }
         }
         
-        .proovd-notification .header {
-          display: flex;
-          align-items: center;
-          margin-bottom: 8px;
-        }
-        
-        .proovd-notification .product-image {
-          width: 50px;
-          height: 50px;
-          border-radius: 4px;
-          object-fit: cover;
-          margin-right: 10px;
-        }
-        
-        .proovd-notification .message {
-          font-size: 14px;
-          line-height: 1.4;
-        }
-        
-        .proovd-notification .time {
-          font-size: 12px;
-          color: \${DEFAULT_SETTINGS.theme === 'dark' ? '#9ca3af' : '#6b7280'};
-          margin-top: 6px;
-        }
-        
-        @keyframes proovd-slide-in {
-          from { transform: translateY(20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        
-        @keyframes proovd-slide-out {
-          from { transform: translateY(0); opacity: 1; }
-          to { transform: translateY(20px); opacity: 0; }
-        }
-      \`;
-      
-      document.head.appendChild(style);
-      
-      // Time ago function
-      function timeAgo(dateString) {
-        const date = new Date(dateString);
-        const seconds = Math.floor((new Date() - date) / 1000);
-        
-        let interval = Math.floor(seconds / 31536000);
-        if (interval >= 1) return interval + " year" + (interval === 1 ? "" : "s") + " ago";
-        
-        interval = Math.floor(seconds / 2592000);
-        if (interval >= 1) return interval + " month" + (interval === 1 ? "" : "s") + " ago";
-        
-        interval = Math.floor(seconds / 86400);
-        if (interval >= 1) return interval + " day" + (interval === 1 ? "" : "s") + " ago";
-        
-        interval = Math.floor(seconds / 3600);
-        if (interval >= 1) return interval + " hour" + (interval === 1 ? "" : "s") + " ago";
-        
-        interval = Math.floor(seconds / 60);
-        if (interval >= 1) return interval + " minute" + (interval === 1 ? "" : "s") + " ago";
-        
-        return "just now";
-      }
-      
-      // Create notification element
-      function createNotification(notification) {
-        const elem = document.createElement('div');
-        elem.className = 'proovd-notification';
-        elem.dataset.id = notification.id;
-        
-        let content = '';
-        
-        // Product image if available
-        if (notification.productImage) {
-          content += \`<div class="header">
-            <img src="\${notification.productImage}" alt="\${notification.productName || 'Product'}" class="product-image">
-          </div>\`;
-        }
-        
-        // Message
-        content += \`<div class="message">\${notification.message}</div>\`;
-        
-        // Time
-        if (notification.createdAt) {
-          content += \`<div class="time">\${timeAgo(notification.createdAt)}</div>\`;
-        }
-        
-        elem.innerHTML = content;
-        
-        // Add click handler
-        elem.addEventListener('click', () => {
-          // Record click
-          fetch(\`\${ENDPOINT}/click\`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          }).catch(err => console.error('Failed to track click:', err));
-          
-          // Redirect if product URL is available
-          if (notification.productUrl) {
-            window.open(notification.productUrl, '_blank');
+        // Function to show a notification
+        function showNotification(notification) {
+          // Skip if already seen
+          if (seenNotifications.has(notification.id)) {
+            return;
           }
           
-          // Remove notification
-          removeNotification(elem);
-        });
-        
-        return elem;
-      }
-      
-      // Remove notification with animation
-      function removeNotification(element) {
-        element.style.animation = 'proovd-slide-out 0.3s forwards';
-        setTimeout(() => {
-          if (element.parentNode === container) {
-            container.removeChild(element);
-          }
-        }, 300);
-      }
-      
-      // Display notification queue
-      let queue = [];
-      let isDisplaying = false;
-      
-      function displayNextNotification() {
-        if (queue.length === 0 || isDisplaying) return;
-        
-        isDisplaying = true;
-        const notification = queue.shift();
-        const element = createNotification(notification);
-        container.appendChild(element);
-        
-        // Remove after display duration
-        setTimeout(() => {
-          removeNotification(element);
-          isDisplaying = false;
+          // Mark as seen
+          seenNotifications.add(notification.id);
           
-          // Display next notification after a delay
-          setTimeout(displayNextNotification, DEFAULT_SETTINGS.delay * 1000);
-        }, DEFAULT_SETTINGS.displayDuration * 1000);
-      }
-      
-      // Fetch notifications from API
-      async function fetchNotifications() {
-        try {
-          const response = await fetch(\`\${ENDPOINT}\`, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
+          // Create notification element
+          const notificationEl = document.createElement('div');
+          notificationEl.className = 'proovd-notification';
+          notificationEl.style.backgroundColor = widgetSettings.theme === 'dark' ? '#333' : '#fff';
+          notificationEl.style.color = widgetSettings.theme === 'dark' ? '#fff' : '#333';
+          notificationEl.style.borderRadius = '8px';
+          notificationEl.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+          notificationEl.style.padding = '12px';
+          notificationEl.style.marginTop = '10px';
+          notificationEl.style.width = '300px';
+          notificationEl.style.maxWidth = '90vw';
+          notificationEl.style.opacity = '0';
+          notificationEl.style.transform = 'translateY(20px)';
+          notificationEl.style.transition = 'opacity 0.3s, transform 0.3s';
+          
+          // Create content based on notification type
+          let content = '';
+          
+          switch(notification.type) {
+            case 'conversion':
+              content = \`
+                <div style="display: flex; align-items: center;">
+                  <div style="margin-right: 10px;">
+                    <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Someone').charAt(0) + '</div>'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Someone')}</div>
+                    <div>\${sanitizeText(notification.message || 'purchased recently')}</div>
+                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp)}</div>
+                  </div>
+                </div>
+              \`;
+              break;
+              
+            case 'signup':
+              content = \`
+                <div style="display: flex; align-items: center;">
+                  <div style="margin-right: 10px;">
+                    <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Someone').charAt(0) + '</div>'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Someone')}</div>
+                    <div>\${sanitizeText(notification.message || 'signed up recently')}</div>
+                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp)}</div>
+                  </div>
+                </div>
+              \`;
+              break;
+              
+            case 'custom':
+            default:
+              content = \`
+                <div style="display: flex; align-items: center;">
+                  <div style="margin-right: 10px;">
+                    <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Activity').charAt(0) + '</div>'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Recent Activity')}</div>
+                    <div>\${sanitizeText(notification.message || 'Something happened')}</div>
+                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp)}</div>
+                  </div>
+                </div>
+              \`;
+          }
+          
+          // Set the content
+          notificationEl.innerHTML = content;
+          
+          // Add click handler
+          notificationEl.addEventListener('click', function() {
+            if (notification.url) {
+              recordClick(notification.id);
+              window.open(notification.url, '_blank');
+            }
           });
           
-          const data = await response.json();
+          // Append to container
+          container.appendChild(notificationEl);
           
-          if (!data.notifications) return;
+          // Record impression
+          recordImpression(notification.id);
           
-          // Add new notifications to queue
-          queue = data.notifications;
+          // Animate in
+          setTimeout(() => {
+            notificationEl.style.opacity = '1';
+            notificationEl.style.transform = 'translateY(0)';
+          }, 10);
           
-          // Start displaying notifications
-          if (!isDisplaying) {
-            displayNextNotification();
-          }
-        } catch (err) {
-          console.error('Failed to fetch notifications:', err);
+          // Remove after display duration
+          setTimeout(() => {
+            notificationEl.style.opacity = '0';
+            notificationEl.style.transform = 'translateY(20px)';
+            
+            // Remove from DOM after animation
+            setTimeout(() => {
+              container.removeChild(notificationEl);
+            }, 300);
+          }, widgetSettings.displayDuration * 1000);
         }
-      }
-      
-      // Init
-      setTimeout(() => {
-        fetchNotifications();
-        // Refresh every 5 minutes
-        setInterval(fetchNotifications, 5 * 60 * 1000);
-      }, 1000); // Delay initial load by 1 second
+        
+        // Function to sanitize text
+        function sanitizeText(text) {
+          if (!text) return '';
+          const div = document.createElement('div');
+          div.textContent = text;
+          return div.innerHTML;
+        }
+        
+        // Function to format time ago
+        function formatTimeAgo(timestamp) {
+          if (!timestamp) return 'recently';
+          
+          const now = new Date();
+          const past = new Date(timestamp);
+          const diffMs = now - past;
+          
+          // Convert to seconds
+          const diffSec = Math.floor(diffMs / 1000);
+          
+          if (diffSec < 60) return 'just now';
+          if (diffSec < 3600) return \`\${Math.floor(diffSec / 60)} minutes ago\`;
+          if (diffSec < 86400) return \`\${Math.floor(diffSec / 3600)} hours ago\`;
+          if (diffSec < 2592000) return \`\${Math.floor(diffSec / 86400)} days ago\`;
+          
+          // Fallback to date
+          return past.toLocaleDateString();
+        }
+        
+        // Function to record impression
+        async function recordImpression(notificationId) {
+          try {
+            await fetch(\`\${api}/api/notifications/\${notificationId}/impression\`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ websiteId }),
+            });
+          } catch (error) {
+            console.error('Error recording impression:', error);
+          }
+        }
+        
+        // Function to record click
+        async function recordClick(notificationId) {
+          try {
+            await fetch(\`\${api}/api/notifications/\${notificationId}/click\`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ websiteId }),
+            });
+          } catch (error) {
+            console.error('Error recording click:', error);
+          }
+        }
+        
+        // Function to start showing notifications
+        async function startNotifications() {
+          const notifications = await fetchNotifications();
+          
+          // Queue notifications
+          let index = 0;
+          let activeCount = 0;
+          const maxActive = widgetSettings.maxNotifications || 5;
+          
+          function showNext() {
+            if (index >= notifications.length) {
+              // Restart from beginning if we've shown all
+              setTimeout(() => {
+                index = 0;
+                showNext();
+              }, 30000); // Wait 30 seconds before restarting
+              return;
+            }
+            
+            if (activeCount >= maxActive) {
+              // Wait until a notification is removed
+              setTimeout(showNext, 1000);
+              return;
+            }
+            
+            // Show next notification
+            const notification = notifications[index++];
+            showNotification(notification);
+            activeCount++;
+            
+            // Decrease active count after notification is removed
+            setTimeout(() => {
+              activeCount--;
+            }, widgetSettings.displayDuration * 1000 + 300);
+            
+            // Schedule next notification
+            setTimeout(showNext, widgetSettings.delay * 1000);
+          }
+          
+          // Start showing notifications after initial delay
+          setTimeout(showNext, widgetSettings.delay * 1000);
+        }
+        
+        // Start after DOM is fully loaded
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', startNotifications);
+        } else {
+          startNotifications();
+        }
     })();
     `;
 
-    // Create JavaScript response
-    const response = new NextResponse(widgetJs, {
-      status: 200,
+    // Return the widget script with appropriate headers
+    return new NextResponse(widgetScript, {
       headers: {
         'Content-Type': 'application/javascript',
-        'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
-      }
+        'Cache-Control': 'public, max-age=3600',
+      },
     });
 
-    // Add CORS headers to response
-    return addCorsHeaders(response, '*');
   } catch (error) {
     console.error('Error generating widget script:', error);
-    const jsError = `console.error('Proovd: Failed to load widget');`;
     
-    const response = new NextResponse(jsError, {
-      status: 200,
+    // Return an error script
+    return new NextResponse(`console.error("Error loading Proovd widget");`, {
+      status: 500,
       headers: {
-        'Content-Type': 'application/javascript'
-      }
+        'Content-Type': 'application/javascript',
+      },
     });
-    
-    // Add CORS headers to response
-    return addCorsHeaders(response, '*');
   }
+}
+
+// Helper function to sanitize text for inclusion in JavaScript
+function sanitizeText(text: string): string {
+  if (!text) return '';
+  return sanitizeInput(text)
+    .replace(/"/g, '\\"')  // Escape double quotes
+    .replace(/\n/g, ' ');  // Replace newlines with spaces
 } 

@@ -4,7 +4,7 @@ import Notification from '@/app/lib/models/notification';
 import User from '@/app/lib/models/user';
 import Website from '@/app/lib/models/website';
 import { auth } from '@/auth';
-import { isValidApiKey, extractDomain, sanitizeInput, getPlanLimits, generateApiKey } from '@/app/lib/server-utils';
+import { extractDomain, sanitizeInput, getPlanLimits } from '@/app/lib/server-utils';
 import { FilterQuery } from 'mongoose';
 
 /**
@@ -63,7 +63,6 @@ export async function POST(request: NextRequest) {
         name: 'Default Website',
         domain: 'example.com',
         userId: user._id,
-        apiKey: generateApiKey(),
         status: 'active'
       });
     }
@@ -94,131 +93,75 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * API endpoint for fetching website notifications to display on client sites
- * OR fetching dashboard notifications for the authenticated user
+ * API endpoint for fetching dashboard notifications for the authenticated user
  * 
  * This endpoint accepts the following query parameters:
- * For public access:
- * - apiKey: The website's API key
- * - url: Current URL where notifications will be displayed
- * 
- * For dashboard access:
  * - websiteId: (optional) Filter by specific website
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const apiKey = searchParams.get('apiKey');
-    const url = searchParams.get('url');
     const websiteId = searchParams.get('websiteId');
 
-    // Check if this is a public API request (using apiKey)
-    if (apiKey) {
-      // Connect to database
-      await connectToDatabase();
+    // Check authentication
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
 
-      // Find website by API key
-      const website = await Website.findOne({ apiKey });
-      if (!website) {
-        return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
-      }
+    // Connect to database
+    await connectToDatabase();
 
-      // Get notifications for this website
-      const query: FilterQuery<typeof Notification> = {
-        siteId: website._id,
-        status: 'active'
-      };
-      
-      // If URL is provided, filter by URL or global notifications
-      if (url) {
-        const normalizedUrl = url.replace(/\/$/, ''); // Remove trailing slash
-        query.$or = [
-          { location: 'global' },
-          { url: { $in: [url, normalizedUrl, url + '/', normalizedUrl + '/'] } }
-        ];
-      }
+    // Get all websites for this user
+    const websites = await Website.find({ userId: session.user.id });
+    const websiteIds = websites.map(site => site._id);
 
-      const notifications = await Notification.find(query)
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .lean();
-
-      // Get website settings
-      const settings = {
-        position: website.settings?.position || 'bottom-left',
-        theme: website.settings?.theme || 'light',
-        displayDuration: website.settings?.displayDuration || 5,
-        delay: website.settings?.delay || 5,
-        maxNotifications: website.settings?.maxNotifications || 5,
-      };
-
-      return NextResponse.json({
-        notifications,
-        settings,
-      });
-    } 
-    // This is a dashboard request (authenticated user)
-    else {
-      // Check authentication
-      const session = await auth();
-      if (!session?.user?.id) {
-        return NextResponse.json(
-          { error: 'Authentication required' },
-          { status: 401 }
-        );
-      }
-
-      // Connect to database
-      await connectToDatabase();
-
-      // Get all websites for this user
-      const websites = await Website.find({ userId: session.user.id });
-      const websiteIds = websites.map(site => site._id);
-
-      if (websiteIds.length === 0) {
-        return NextResponse.json({ 
-          notifications: [],
-          websites: []
-        });
-      }
-
-      // Build query - either all websites or a specific one
-      const query: FilterQuery<typeof Notification> = {
-        siteId: websiteId ? websiteId : { $in: websiteIds }
-      };
-
-      // Get notifications
-      const notifications = await Notification.find(query)
-        .sort({ createdAt: -1 })
-        .populate('siteId', 'name domain') // Include website details
-        .lean();
-
-      // Format notifications
-      const formattedNotifications = notifications.map(notification => ({
-        id: notification._id.toString(),
-        name: notification.name,
-        type: notification.type,
-        status: notification.status,
-        location: notification.location,
-        productName: notification.productName,
-        message: notification.message,
-        url: notification.url,
-        image: notification.image,
-        createdAt: notification.createdAt,
-        updatedAt: notification.updatedAt,
-        website: notification.siteId
-      }));
-
-      return NextResponse.json({
-        notifications: formattedNotifications,
-        websites: websites.map(site => ({
-          id: site._id.toString(),
-          name: site.name,
-          domain: site.domain,
-          status: site.status
-        }))
+    if (websiteIds.length === 0) {
+      return NextResponse.json({ 
+        notifications: [],
+        websites: []
       });
     }
+
+    // Build query - either all websites or a specific one
+    const query: FilterQuery<typeof Notification> = {
+      siteId: websiteId ? websiteId : { $in: websiteIds }
+    };
+
+    // Get notifications
+    const notifications = await Notification.find(query)
+      .sort({ createdAt: -1 })
+      .populate('siteId', 'name domain') // Include website details
+      .lean();
+
+    // Format notifications
+    const formattedNotifications = notifications.map(notification => ({
+      id: notification._id.toString(),
+      name: notification.name,
+      type: notification.type,
+      status: notification.status,
+      location: notification.location,
+      productName: notification.productName,
+      message: notification.message,
+      url: notification.url,
+      image: notification.image,
+      createdAt: notification.createdAt,
+      updatedAt: notification.updatedAt,
+      website: notification.siteId
+    }));
+
+    return NextResponse.json({
+      notifications: formattedNotifications,
+      websites: websites.map(site => ({
+        id: site._id.toString(),
+        name: site.name,
+        domain: site.domain,
+        status: site.status
+      }))
+    });
   } catch (error) {
     console.error('Error fetching notifications:', error);
     return NextResponse.json(

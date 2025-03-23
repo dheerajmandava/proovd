@@ -1,27 +1,66 @@
 import crypto from 'crypto';
-import { generateApiKey, isValidApiKey, rateLimit } from './server-api-key';
 
-// Re-export these functions
-export { generateApiKey, isValidApiKey, rateLimit };
-
-/**
- * Sanitizes user input to prevent XSS attacks
- * @param {string} input - The input to sanitize
- * @returns {string} The sanitized input
- */
+// Utility function to sanitize input
 export function sanitizeInput(input: string): string {
   if (!input) return '';
   
-  // Convert to string if not already
-  const str = String(input);
-  
-  // Replace potentially dangerous characters
-  return str
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;');
+  // Remove potentially dangerous characters
+  return input
+    .replace(/<(?:.|\n)*?>/gm, '') // Remove HTML tags
+    .replace(/[^\w\s.,\-_@]/gi, ''); // Remove special chars except safe ones
+}
+
+// Generate a random string with specified length
+export function generateRandomString(length: number = 32): string {
+  return crypto.randomBytes(Math.ceil(length / 2))
+    .toString('hex')
+    .slice(0, length);
+}
+
+// Extract domain from URL
+export function extractDomain(url: string): string {
+  try {
+    // Check if URL has protocol, if not add it
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    
+    const parsedUrl = new URL(url);
+    return parsedUrl.hostname.toLowerCase();
+  } catch (e) {
+    // If URL parsing fails, return the input as is
+    return url.toLowerCase();
+  }
+}
+
+// Generate a unique ID for a website
+export function generateWebsiteId(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+// Hash a value using SHA-256
+export function hashValue(value: string): string {
+  return crypto
+    .createHash('sha256')
+    .update(value)
+    .digest('hex');
+}
+
+// Format a date to YYYY-MM-DD format
+export function formatDate(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+// Get yesterday's date in YYYY-MM-DD format
+export function getYesterday(): string {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return formatDate(yesterday);
+}
+
+// Format number with commas
+export function formatNumberWithCommas(num: number): string {
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 /**
@@ -35,25 +74,6 @@ export function isValidUrl(url: string): boolean {
     return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
   } catch (e) {
     return false;
-  }
-}
-
-/**
- * Extracts domain from a URL
- * @param {string} url - The URL to extract domain from
- * @returns {string} The domain
- */
-export function extractDomain(url: string): string {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.hostname;
-  } catch (e) {
-    // If it's not a valid URL, try to extract domain from string
-    // Remove protocol if present
-    let domain = url.replace(/^(https?:\/\/)?(www\.)?/, '');
-    // Get everything before first slash
-    domain = domain.split('/')[0];
-    return domain || '';
   }
 }
 
@@ -123,14 +143,6 @@ export function getPlanLimits(plan: 'free' | 'starter' | 'growth' | 'business'):
         historyDays: 7,
       };
   }
-}
-
-/**
- * Generate a unique ID for a website
- * @returns {string} A unique ID
- */
-export function generateWebsiteId(): string {
-  return crypto.randomUUID();
 }
 
 /**
