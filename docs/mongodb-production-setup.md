@@ -1,6 +1,6 @@
 # MongoDB Production Setup Guide
 
-This guide explains how to properly set up MongoDB for production use with SocialProofify, ensuring transaction support and high availability.
+This guide explains how to properly set up MongoDB for production use with Proovd, ensuring transaction support and high availability.
 
 ## Why MongoDB Transactions Require a Replica Set
 
@@ -27,7 +27,7 @@ The easiest way to set up a production-ready MongoDB deployment is to use MongoD
    - Copy the connection string with your credentials
 6. **Update your application's .env file**:
    ```
-   MONGODB_URI=mongodb+srv://username:password@cluster0.mongodb.net/socialproofify?retryWrites=true&w=majority
+   MONGODB_URI=mongodb+srv://username:password@cluster0.mongodb.net/proovd?retryWrites=true&w=majority
    ```
 
 ## Option 2: Self-Hosted Replica Set
@@ -77,7 +77,7 @@ If you prefer to host MongoDB yourself, you need to set up a replica set.
 
 6. **Update your application's .env file**:
    ```
-   MONGODB_URI=mongodb://username:password@mongodb-server-1:27017,mongodb-server-2:27017,mongodb-server-3:27017/socialproofify?replicaSet=rs0
+   MONGODB_URI=mongodb://username:password@mongodb-server-1:27017,mongodb-server-2:27017,mongodb-server-3:27017/proovd?replicaSet=rs0
    ```
 
 ## Option 3: Docker Compose for Development
@@ -169,7 +169,7 @@ docker-compose up -d
 
 5. **Update your `.env.local` file**:
 ```
-MONGODB_URI=mongodb://localhost:27018/socialproofify?directConnection=true
+MONGODB_URI=mongodb://localhost:27018/proovd?directConnection=true
 ```
 
 6. **Test transaction support**:

@@ -1,9 +1,9 @@
 /**
- * SocialProofify Widget
+ * Proovd Widget
  * This script creates and manages the social proof notifications on client websites.
  */
 
-interface SocialProofifyOptions {
+interface ProovdOptions {
   apiKey: string;
   position?: 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right';
   delay?: number;
@@ -23,18 +23,18 @@ interface Notification {
   timestamp: string;
 }
 
-class SocialProofify {
-  private options: Required<SocialProofifyOptions>;
+class Proovd {
+  private options: Required<ProovdOptions>;
   private container: HTMLElement | null = null;
   private notifications: Notification[] = [];
   private currentNotificationIndex = 0;
   private intervalId: number | null = null;
-  private apiUrl = 'https://api.socialproofify.com'; // Replace with actual API URL in production
+  private apiUrl = 'https://api.proovd.com'; // Replace with actual API URL in production
   private currentUrl: string;
   private sessionId: string;
   private clientId: string;
 
-  constructor(options: SocialProofifyOptions) {
+  constructor(options: ProovdOptions) {
     // Set default options
     this.options = {
       apiKey: options.apiKey,
@@ -69,27 +69,27 @@ class SocialProofify {
   
   // Get existing session ID or create a new one
   private getOrCreateSessionId(): string {
-    let sessionId = sessionStorage.getItem('socialproofify_session');
+    let sessionId = sessionStorage.getItem('proovd_session');
     if (!sessionId) {
       sessionId = this.generateId();
-      sessionStorage.setItem('socialproofify_session', sessionId);
+      sessionStorage.setItem('proovd_session', sessionId);
     }
     return sessionId;
   }
   
   // Get existing client ID or create a new one (persists across sessions)
   private getOrCreateClientId(): string {
-    let clientId = localStorage.getItem('socialproofify_client');
+    let clientId = localStorage.getItem('proovd_client');
     if (!clientId) {
       clientId = this.generateId();
-      localStorage.setItem('socialproofify_client', clientId);
+      localStorage.setItem('proovd_client', clientId);
     }
     return clientId;
   }
 
   private async init(): Promise<void> {
     try {
-      console.log('SocialProofify: Initializing widget...');
+      console.log('Proovd: Initializing widget...');
       
       // Create container
       this.createContainer();
@@ -99,22 +99,22 @@ class SocialProofify {
       
       // Start displaying notifications if we have any
       if (this.notifications.length > 0) {
-        console.log(`SocialProofify: Found ${this.notifications.length} notifications`);
+        console.log(`Proovd: Found ${this.notifications.length} notifications`);
         setTimeout(() => {
           this.startNotifications();
         }, this.options.delay * 1000);
       } else {
-        console.log('SocialProofify: No notifications found');
+        console.log('Proovd: No notifications found');
       }
     } catch (error) {
-      console.error('SocialProofify initialization error:', error);
+      console.error('Proovd initialization error:', error);
     }
   }
 
   private createContainer(): void {
     // Create container element
     this.container = document.createElement('div');
-    this.container.className = 'socialproofify-container';
+    this.container.className = 'proovd-container';
     this.container.style.position = 'fixed';
     this.container.style.zIndex = '9999';
     this.container.style.maxWidth = '300px';
@@ -145,7 +145,7 @@ class SocialProofify {
 
   private async fetchNotifications(): Promise<void> {
     try {
-      console.log('SocialProofify: Fetching notifications...');
+      console.log('Proovd: Fetching notifications...');
       const response = await fetch(
         `${this.apiUrl}/api/notifications?apiKey=${this.options.apiKey}&url=${encodeURIComponent(this.currentUrl)}`
       );
@@ -219,14 +219,14 @@ class SocialProofify {
     
     // Create notification element
     const notificationElement = document.createElement('div');
-    notificationElement.className = `socialproofify-notification socialproofify-${this.options.theme}`;
+    notificationElement.className = `proovd-notification proovd-${this.options.theme}`;
     notificationElement.style.backgroundColor = this.options.theme === 'light' ? '#ffffff' : '#333333';
     notificationElement.style.color = this.options.theme === 'light' ? '#333333' : '#ffffff';
     notificationElement.style.padding = '15px';
     notificationElement.style.borderRadius = '8px';
     notificationElement.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
     notificationElement.style.marginBottom = '10px';
-    notificationElement.style.animation = 'socialproofify-fade-in 0.5s ease-in-out';
+    notificationElement.style.animation = 'proovd-fade-in 0.5s ease-in-out';
     notificationElement.style.position = 'relative';
     notificationElement.style.cursor = notification.url ? 'pointer' : 'default';
     
@@ -234,7 +234,7 @@ class SocialProofify {
     if (notification.url) {
       notificationElement.onclick = (e) => {
         // Don't trigger if clicking the close button
-        if ((e.target as HTMLElement).classList.contains('socialproofify-close')) {
+        if ((e.target as HTMLElement).classList.contains('proovd-close')) {
           return;
         }
         this.trackClick(notification.id);
@@ -289,7 +289,7 @@ class SocialProofify {
     // Add close button
     const closeButton = document.createElement('button');
     closeButton.innerHTML = '&times;';
-    closeButton.className = 'socialproofify-close';
+    closeButton.className = 'proovd-close';
     closeButton.style.position = 'absolute';
     closeButton.style.top = '5px';
     closeButton.style.right = '5px';
@@ -369,12 +369,12 @@ class SocialProofify {
 }
 
 // Add to window object
-(window as any).SocialProofify = SocialProofify;
+(window as any).Proovd = Proovd;
 
 // Add CSS to document
 const style = document.createElement('style');
 style.textContent = `
-  @keyframes socialproofify-fade-in {
+  @keyframes proovd-fade-in {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
   }
@@ -382,4 +382,4 @@ style.textContent = `
 document.head.appendChild(style);
 
 // Export for module usage
-export default SocialProofify; 
+export default Proovd; 

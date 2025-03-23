@@ -40,7 +40,7 @@ export default function WebsiteCard({ website }: WebsiteCardProps) {
   }
   
   const copyApiKey = () => {
-    const keyToCopy = website.apiKey || (website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : '');
+    const keyToCopy = website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : '';
     navigator.clipboard.writeText(keyToCopy || '');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -51,10 +51,10 @@ export default function WebsiteCard({ website }: WebsiteCardProps) {
     if (typeof window !== 'undefined') {
       return window.location.origin;
     }
-    return process.env.NEXT_PUBLIC_BASE_URL || 'https://proovd.com';
+    return process.env.NEXT_PUBLIC_BASE_URL || 'https://proovd.in';
   };
 
-  const scriptTag = `<script src="${getBaseUrl()}/api/websites/${website.id}/widget.js?key=${website.apiKey}"></script>`;
+  const scriptTag = `<script src="https://cdn.proovd.in/w/${website.id}.js"></script>`;
 
   const copySetupCode = () => {
     navigator.clipboard.writeText(scriptTag);
@@ -118,10 +118,10 @@ export default function WebsiteCard({ website }: WebsiteCardProps) {
               <div className="p-3 bg-base-200 rounded-lg flex items-center justify-between">
                 <div className="text-sm text-gray-700 overflow-hidden">
                   <span className="font-semibold">API Key:</span> <span className="font-mono">
-                    {maskApiKey(website.apiKey || (website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : 'No API key found'))}
+                    {maskApiKey(website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : 'No API key found')}
                   </span>
                 </div>
-                {(website.apiKey || (website.apiKeys && website.apiKeys.length > 0)) && (
+                {(website.apiKeys && website.apiKeys.length > 0) && (
                   <button
                     onClick={(e) => {
                       e.preventDefault();

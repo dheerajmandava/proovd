@@ -217,7 +217,7 @@ export async function POST(req: NextRequest) {
       name: website.name,
       domain: website.domain,
       status: website.status,
-      apiKey: website.apiKeys[0].key
+      apiKey: website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : ''
     }, { status: 201 });
     
   } catch (error: any) {
@@ -236,7 +236,7 @@ function generateVerificationInstructions(domain: string, method: string, token:
   if (method === 'DNS') {
     instructions = `
 Create a DNS TXT record with the following values:
-Host/Name: _socialproofify.${domain}
+Host/Name: _proovd.${domain}
 Value/Content: ${token}
 
 This may take up to 24 hours to propagate, though it often happens within minutes.
@@ -244,7 +244,7 @@ This may take up to 24 hours to propagate, though it often happens within minute
   } else if (method === 'FILE') {
     instructions = `
 Create a file at the following URL:
-https://${domain}/.well-known/socialproofify-verification.txt
+https://${domain}/.well-known/proovd-verification.txt
 
 The file should contain the following text (and nothing else):
 ${token}
@@ -252,7 +252,7 @@ ${token}
   } else if (method === 'META') {
     instructions = `
 Add the following meta tag to the <head> section of your website's homepage:
-<meta name="socialproofify-verification" content="${token}">
+<meta name="proovd-verification" content="${token}">
 `;
   }
   
@@ -288,7 +288,7 @@ export async function GET(request: NextRequest) {
       id: website._id.toString(),
       name: website.name,
       domain: website.domain,
-      apiKey: website.apiKey,
+      apiKey: website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : '',
       status: website.status,
       verification: website.verification,
       createdAt: website.createdAt,

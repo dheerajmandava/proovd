@@ -107,7 +107,7 @@ export function getVerificationInstructions(
     case VerificationMethod.DNS:
       return `
 Create a TXT record with the following details:
-- Host/Name: _socialproofify
+- Host/Name: _proovd
 - Value/Content: ${token}
 - TTL: 3600 (or default)
 
@@ -117,8 +117,8 @@ After adding this TXT record to your DNS settings, it may take up to 24-48 hours
     case VerificationMethod.FILE:
       return `
 Create a new file with exactly this name and upload it to your website's root directory:
-- File name: socialproofify-${token}.html
-- File location: https://${normalizedDomain}/socialproofify-${token}.html
+- File name: proovd-${token}.html
+- File location: https://${normalizedDomain}/proovd-${token}.html
 - File content: ${token}
 
 Make sure the file is accessible by visiting the URL above.
@@ -127,7 +127,7 @@ Make sure the file is accessible by visiting the URL above.
     case VerificationMethod.META:
       return `
 Add the following meta tag to the <head> section of your website's home page:
-<meta name="socialproofify-verification" content="${token}">
+<meta name="proovd-verification" content="${token}">
 
 Make sure the meta tag is present when visiting https://${normalizedDomain}
       `.trim();

@@ -1,9 +1,9 @@
 /**
- * SocialProofify Widget
+ * proovd Widget
  * This script creates and manages the social proof notifications on client websites.
  */
 
-class SocialProofify {
+class proovd {
   constructor(options) {
     // Initialize class properties
     this.container = null;
@@ -23,7 +23,7 @@ class SocialProofify {
       theme: options.theme || 'light',
     };
 
-    console.log('SocialProofify: Initialized with options:', this.options);
+    console.log('proovd: Initialized with options:', this.options);
 
     // Add CSS animations
     this.addStyles();
@@ -40,7 +40,7 @@ class SocialProofify {
   addStyles() {
     const styleSheet = document.createElement('style');
     styleSheet.textContent = `
-      @keyframes socialproofify-fade-in {
+      @keyframes proovd-fade-in {
         from {
           opacity: 0;
           transform: translateY(20px);
@@ -51,7 +51,7 @@ class SocialProofify {
         }
       }
 
-      @keyframes socialproofify-fade-out {
+      @keyframes proovd-fade-out {
         from {
           opacity: 1;
           transform: translateY(0);
@@ -62,50 +62,50 @@ class SocialProofify {
         }
       }
 
-      .socialproofify-container {
+      .proovd-container {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
         font-size: 14px;
         line-height: 1.5;
       }
 
-      .socialproofify-notification {
+      .proovd-notification {
         display: flex;
         align-items: center;
         gap: 12px;
         transition: all 0.3s ease;
       }
 
-      .socialproofify-notification:hover {
+      .proovd-notification:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
       }
 
-      .socialproofify-image {
+      .proovd-image {
         width: 48px;
         height: 48px;
         border-radius: 50%;
         object-fit: cover;
       }
 
-      .socialproofify-content {
+      .proovd-content {
         flex: 1;
       }
 
-      .socialproofify-name {
+      .proovd-name {
         font-weight: 600;
         margin-bottom: 4px;
       }
 
-      .socialproofify-message {
+      .proovd-message {
         margin-bottom: 4px;
       }
 
-      .socialproofify-product {
+      .proovd-product {
         font-weight: 500;
         color: #2563eb;
       }
 
-      .socialproofify-time {
+      .proovd-time {
         font-size: 12px;
         color: #6b7280;
       }
@@ -115,7 +115,7 @@ class SocialProofify {
 
   async init() {
     try {
-      console.log('SocialProofify: Initializing widget...');
+      console.log('proovd: Initializing widget...');
       
       // Create container
       this.createContainer();
@@ -125,25 +125,25 @@ class SocialProofify {
       
       // Start displaying notifications if we have any
       if (this.notifications.length > 0) {
-        console.log(`SocialProofify: Found ${this.notifications.length} notifications`);
-        this.dispatchEvent('SocialProofifyLoaded', { count: this.notifications.length });
+        console.log(`proovd: Found ${this.notifications.length} notifications`);
+        this.dispatchEvent('proovdLoaded', { count: this.notifications.length });
         setTimeout(() => {
           this.startNotifications();
         }, this.options.delay * 1000);
       } else {
-        console.log('SocialProofify: No notifications found');
-        this.dispatchEvent('SocialProofifyError', { message: 'No notifications found' });
+        console.log('proovd: No notifications found');
+        this.dispatchEvent('proovdError', { message: 'No notifications found' });
       }
     } catch (error) {
-      console.error('SocialProofify initialization error:', error);
-      this.dispatchEvent('SocialProofifyError', { message: error.message });
+      console.error('proovd initialization error:', error);
+      this.dispatchEvent('proovdError', { message: error.message });
     }
   }
 
   createContainer() {
     // Create container element
     this.container = document.createElement('div');
-    this.container.className = 'socialproofify-container';
+    this.container.className = 'proovd-container';
     this.container.style.position = 'fixed';
     this.container.style.zIndex = '9999';
     this.container.style.maxWidth = '300px';
@@ -174,9 +174,9 @@ class SocialProofify {
 
   async fetchNotifications() {
     try {
-      console.log('SocialProofify: Fetching notifications...');
+      console.log('proovd: Fetching notifications...');
       const url = `${this.apiUrl}/api/notifications?apiKey=${this.options.apiKey}&url=${encodeURIComponent(this.currentUrl)}`;
-      console.log('SocialProofify: Fetching from URL:', url);
+      console.log('proovd: Fetching from URL:', url);
       
       const response = await fetch(url);
       
@@ -185,11 +185,11 @@ class SocialProofify {
       }
       
       const data = await response.json();
-      console.log('SocialProofify: Received data:', data);
+      console.log('proovd: Received data:', data);
       
       // Apply settings from server if available
       if (data.settings) {
-        console.log('SocialProofify: Applying server settings:', data.settings);
+        console.log('proovd: Applying server settings:', data.settings);
         this.options.position = data.settings.position || this.options.position;
         this.options.theme = data.settings.theme || this.options.theme;
         this.options.displayDuration = (data.settings.displayDuration || 5) * 1000; // Convert to ms
@@ -227,7 +227,7 @@ class SocialProofify {
       }
       
       this.notifications = data.notifications || [];
-      console.log('SocialProofify: Loaded notifications:', this.notifications);
+      console.log('proovd: Loaded notifications:', this.notifications);
     } catch (error) {
       console.error('Error fetching notifications:', error);
       throw error;
@@ -235,9 +235,9 @@ class SocialProofify {
   }
 
   startNotifications() {
-    console.log('SocialProofify: Starting notifications display');
+    console.log('proovd: Starting notifications display');
     if (this.notifications.length === 0) {
-      console.log('SocialProofify: No notifications to display');
+      console.log('proovd: No notifications to display');
       return;
     }
 
@@ -246,10 +246,10 @@ class SocialProofify {
     
     // Set interval for subsequent notifications
     if (this.notifications.length > 1) {
-      console.log(`SocialProofify: Setting up rotation interval for ${this.options.displayDuration}ms`);
+      console.log(`proovd: Setting up rotation interval for ${this.options.displayDuration}ms`);
       this.intervalId = window.setInterval(() => {
         this.currentNotificationIndex = (this.currentNotificationIndex + 1) % this.notifications.length;
-        console.log(`SocialProofify: Showing notification ${this.currentNotificationIndex + 1} of ${this.notifications.length}`);
+        console.log(`proovd: Showing notification ${this.currentNotificationIndex + 1} of ${this.notifications.length}`);
         this.displayNotification(this.notifications[this.currentNotificationIndex]);
       }, this.options.displayDuration);
     }
@@ -257,16 +257,16 @@ class SocialProofify {
 
   displayNotification(notification) {
     if (!this.container) {
-      console.error('SocialProofify: Container not found');
+      console.error('proovd: Container not found');
       return;
     }
     
-    console.log('SocialProofify: Displaying notification:', notification);
+    console.log('proovd: Displaying notification:', notification);
     
     // Clear previous notifications
-    const oldNotification = this.container.querySelector('.socialproofify-notification');
+    const oldNotification = this.container.querySelector('.proovd-notification');
     if (oldNotification) {
-      oldNotification.style.animation = 'socialproofify-fade-out 0.3s ease-out forwards';
+      oldNotification.style.animation = 'proovd-fade-out 0.3s ease-out forwards';
       setTimeout(() => {
         this.container.innerHTML = '';
         this.showNewNotification(notification);
@@ -279,51 +279,51 @@ class SocialProofify {
   showNewNotification(notification) {
     // Create notification element
     const notificationElement = document.createElement('div');
-    notificationElement.className = `socialproofify-notification socialproofify-${this.options.theme}`;
+    notificationElement.className = `proovd-notification proovd-${this.options.theme}`;
     notificationElement.style.backgroundColor = this.options.theme === 'light' ? '#ffffff' : '#333333';
     notificationElement.style.color = this.options.theme === 'light' ? '#333333' : '#ffffff';
     notificationElement.style.padding = '15px';
     notificationElement.style.borderRadius = '8px';
     notificationElement.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
     notificationElement.style.marginBottom = '10px';
-    notificationElement.style.animation = 'socialproofify-fade-in 0.5s ease-in-out';
+    notificationElement.style.animation = 'proovd-fade-in 0.5s ease-in-out';
     notificationElement.style.cursor = notification.url ? 'pointer' : 'default';
 
     // Create image if available
     if (notification.image) {
       const image = document.createElement('img');
       image.src = notification.image;
-      image.className = 'socialproofify-image';
+      image.className = 'proovd-image';
       notificationElement.appendChild(image);
     }
 
     // Create content container
     const content = document.createElement('div');
-    content.className = 'socialproofify-content';
+    content.className = 'proovd-content';
 
     // Add name
     const nameElement = document.createElement('div');
-    nameElement.className = 'socialproofify-name';
+    nameElement.className = 'proovd-name';
     nameElement.textContent = notification.name;
     content.appendChild(nameElement);
 
     // Add message
     const messageElement = document.createElement('div');
-    messageElement.className = 'socialproofify-message';
+    messageElement.className = 'proovd-message';
     messageElement.textContent = notification.message;
     content.appendChild(messageElement);
 
     // Add product name if available
     if (notification.productName) {
       const productElement = document.createElement('div');
-      productElement.className = 'socialproofify-product';
+      productElement.className = 'proovd-product';
       productElement.textContent = notification.productName;
       content.appendChild(productElement);
     }
 
     // Add timestamp
     const timeElement = document.createElement('div');
-    timeElement.className = 'socialproofify-time';
+    timeElement.className = 'proovd-time';
     timeElement.textContent = 'Just now';
     content.appendChild(timeElement);
 
@@ -344,7 +344,7 @@ class SocialProofify {
     this.container.appendChild(notificationElement);
 
     // Dispatch event
-    this.dispatchEvent('SocialProofifyNotification', { 
+    this.dispatchEvent('proovdNotification', { 
       id: notification._id,
       name: notification.name,
       message: notification.message,
@@ -404,12 +404,12 @@ class SocialProofify {
 }
 
 // Add to window object
-window.SocialProofify = SocialProofify;
+window.proovd = proovd;
 
 // Add CSS to document
 const style = document.createElement('style');
 style.textContent = `
-  @keyframes socialproofify-fade-in {
+  @keyframes proovd-fade-in {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
   }
@@ -418,22 +418,22 @@ document.head.appendChild(style);
 
 // Initialize from global configuration if available
 document.addEventListener('DOMContentLoaded', () => {
-  if (window.SocialProofifyOptions) {
-    console.log('SocialProofify: Found global configuration:', window.SocialProofifyOptions);
+  if (window.proovdOptions) {
+    console.log('proovd: Found global configuration:', window.proovdOptions);
     try {
-      window.socialproofifyWidget = new SocialProofify(window.SocialProofifyOptions);
+      window.proovdWidget = new proovd(window.proovdOptions);
       // Dispatch event when widget is loaded
-      window.dispatchEvent(new Event('SocialProofifyLoaded'));
+      window.dispatchEvent(new Event('proovdLoaded'));
     } catch (error) {
-      console.error('Failed to initialize SocialProofify:', error);
-      window.dispatchEvent(new CustomEvent('SocialProofifyError', { 
+      console.error('Failed to initialize proovd:', error);
+      window.dispatchEvent(new CustomEvent('proovdError', { 
         detail: { message: error.message } 
       }));
     }
   } else {
-    const error = 'SocialProofify configuration not found. Please set window.SocialProofifyOptions before loading the script.';
+    const error = 'proovd configuration not found. Please set window.proovdOptions before loading the script.';
     console.error(error);
-    window.dispatchEvent(new CustomEvent('SocialProofifyError', { 
+    window.dispatchEvent(new CustomEvent('proovdError', { 
       detail: { message: error } 
     }));
   }

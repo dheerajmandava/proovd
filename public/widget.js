@@ -1,5 +1,5 @@
 /**
- * SocialProofify Widget
+ * Proovd Widget
  * Version: 1.0.0
  * 
  * This is the main widget script that gets embedded on websites
@@ -10,18 +10,18 @@
 
   // Configuration defaults
   const config = {
-    apiKey: window._socialProofify?.apiKey || document.querySelector('script[data-spfy-key]')?.dataset.spfyKey,
-    baseUrl: window._socialProofify?.baseUrl || 'https://api.socialproofify.com',
-    position: window._socialProofify?.position || 'bottom-left',
-    delay: window._socialProofify?.delay || 5,
-    displayTime: window._socialProofify?.displayTime || 5,
-    theme: window._socialProofify?.theme || 'light',
-    maxNotifications: window._socialProofify?.maxNotifications || 10
+    apiKey: window._proovd?.apiKey || document.querySelector('script[data-spfy-key]')?.dataset.spfyKey,
+    baseUrl: window._proovd?.baseUrl || 'https://api.proovd.com',
+    position: window._proovd?.position || 'bottom-left',
+    delay: window._proovd?.delay || 5,
+    displayTime: window._proovd?.displayTime || 5,
+    theme: window._proovd?.theme || 'light',
+    maxNotifications: window._proovd?.maxNotifications || 10
   };
 
   // Only initialize if API key is present
   if (!config.apiKey) {
-    console.warn('SocialProofify: API key is missing. Widget will not be initialized.');
+    console.warn('Proovd: API key is missing. Widget will not be initialized.');
     return;
   }
 
@@ -59,7 +59,7 @@
     fetch(url.toString())
       .then(response => {
         if (!response.ok) {
-          throw new Error(`SocialProofify: HTTP error ${response.status}`);
+          throw new Error(`Proovd: HTTP error ${response.status}`);
         }
         return response.json();
       })
@@ -69,7 +69,7 @@
         }
       })
       .catch(error => {
-        console.error('SocialProofify error:', error);
+        console.error('Proovd error:', error);
       });
   }
   
@@ -356,7 +356,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
         keepalive: true
-      }).catch(e => console.error('SocialProofify metric error:', e));
+      }).catch(e => console.error('Proovd metric error:', e));
     }
   }
   
@@ -383,7 +383,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
         keepalive: true
-      }).catch(e => console.error('SocialProofify pageview error:', e));
+      }).catch(e => console.error('Proovd pageview error:', e));
     }
   }
 })(); 

@@ -25,6 +25,7 @@ export default function WebsiteSetupPage() {
   const [verificationTab, setVerificationTab] = useState<string>(VerificationMethod.DNS);
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
 
   useEffect(() => {
     async function fetchWebsite() {
@@ -66,7 +67,7 @@ export default function WebsiteSetupPage() {
         const data = await response.json();
         
         // Update website with the latest verification data
-        setWebsite(prev => ({
+        setWebsite((prev: any) => ({
           ...prev,
           verification: data.verification,
           verificationInstructions: data.instructions
@@ -108,7 +109,7 @@ export default function WebsiteSetupPage() {
       const data = await response.json();
       
       // Update website with the new verification method
-      setWebsite(prev => ({
+      setWebsite((prev: any) => ({
         ...prev,
         verification: {
           ...prev.verification,
@@ -145,7 +146,7 @@ export default function WebsiteSetupPage() {
       
       // Update website verification status
       if (data.success) {
-        setWebsite(prev => ({
+        setWebsite((prev: any) => ({
           ...prev,
           verification: {
             ...prev.verification,
@@ -164,6 +165,13 @@ export default function WebsiteSetupPage() {
       setVerifying(false);
     }
   };
+
+  useEffect(() => {
+    if (apiKeyCopied) {
+      const timer = setTimeout(() => setApiKeyCopied((prev: boolean) => false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [apiKeyCopied]);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -188,11 +196,11 @@ export default function WebsiteSetupPage() {
   }
 
   const isVerified = website.verification?.status === 'verified';
-  const apiKey = website.apiKey;
+  const apiKey = website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : '';
   const domain = website.domain;
 
   // Widget installation code snippets
-  const scriptTag = `<script src="${process.env.NEXT_PUBLIC_BASE_URL || window.location.origin}/api/websites/${params.id}/widget.js?key=${apiKey}"></script>`;
+  const scriptTag = `<script src="https://cdn.proovd.in/w/${params.id}.js"></script>`;
   
   return (
     <div className="container mx-auto py-6 space-y-8">
@@ -276,7 +284,7 @@ export default function WebsiteSetupPage() {
                         <div className="grid grid-cols-3 gap-2">
                           <div className="font-medium">File Path:</div>
                           <div className="col-span-2 font-mono bg-background p-1 rounded">
-                            /.well-known/socialproofify-verification.txt
+                            /.well-known/proovd-verification.txt
                           </div>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
@@ -288,7 +296,7 @@ export default function WebsiteSetupPage() {
                         <div className="grid grid-cols-3 gap-2">
                           <div className="font-medium">URL:</div>
                           <div className="col-span-2 font-mono bg-background p-1 rounded overflow-x-auto">
-                            https://{domain}/.well-known/socialproofify-verification.txt
+                            https://{domain}/.well-known/proovd-verification.txt
                           </div>
                         </div>
                       </div>
@@ -306,7 +314,7 @@ export default function WebsiteSetupPage() {
                       </Alert>
                       
                       <CodeSection 
-                        code={`<meta name="socialproofify-verification" content="${website.verification?.token}" />`}
+                        code={`<meta name="proovd-verification" content="${website.verification?.token}" />`}
                         language="html"
                       />
                     </div>

@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
+import { join } from 'path'
 
 export async function middleware(request: NextRequest) {
   // Public API endpoints that need CORS but not auth
@@ -125,6 +126,35 @@ export async function middleware(request: NextRequest) {
     return response;
   }
   
+  // Handle cdn subdomain requests
+  const hostname = request.headers.get('host') || '';
+  
+  if (hostname.startsWith('cdn.')) {
+    // Get path from URL
+    const pathname = request.nextUrl.pathname;
+    
+    // For cdn.proovd.in, serve from public/cdn directory
+    if (hostname === 'cdn.proovd.in') {
+      // Create a new URL for the rewritten destination
+      const url = request.nextUrl.clone();
+      
+      // Strip any query parameters for static files
+      url.search = '';
+      
+      // Check if it's a dynamic website ID script
+      const websiteScript = pathname.match(/^\/w\/([^.]+)\.js$/);
+      if (websiteScript && websiteScript[1]) {
+        // If it's a WebsiteID.js request, serve the template
+        url.pathname = `/cdn/w/WEBSITE_ID.js`;
+      } else {
+        // Otherwise serve the file directly from /public/cdn
+        url.pathname = `/cdn${pathname}`;
+      }
+      
+      return NextResponse.rewrite(url);
+    }
+  }
+  
   return NextResponse.next()
 }
 
@@ -132,5 +162,15 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico).*)",
+    // Match all paths under cdn.proovd.in
+    {
+      source: '/(.*)',
+      has: [
+        {
+          type: 'host',
+          value: 'cdn.proovd.in',
+        },
+      ],
+    },
   ],
 } 

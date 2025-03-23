@@ -8,7 +8,7 @@ import { cors } from '@/app/lib/cors';
  * GET /api/websites/[id]/widget
  * 
  * Serve the widget JS file for a specific website
- * This is a public API endpoint that's loaded on customer websites
+ * Now uses domain-based verification instead of API key
  */
 export async function GET(
   request: NextRequest,
@@ -20,37 +20,47 @@ export async function GET(
 
   try {
     const { id } = params;
-    const apiKey = request.nextUrl.searchParams.get('key');
     
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key is required' },
-        { status: 401 }
-      );
-    }
+    // Get the referer header (the domain that loaded the script)
+    const referer = request.headers.get('referer');
+    const refererDomain = referer ? new URL(referer).hostname : null;
 
     // Connect to the database
     await connectToDatabase();
 
     // Get the website by ID
-    const website = await Website.findOne({
-      _id: id,
-      apiKey: apiKey
-    });
+    const website = await Website.findOne({ _id: id });
 
     if (!website) {
       return NextResponse.json(
-        { error: 'Website not found or invalid API key' },
+        { error: 'Website not found' },
         { status: 404 }
       );
     }
 
     // Check if the domain is verified
-    if (website.verification.status !== 'verified' && website.status !== 'verified') {
+    const websiteDomain = website.domain;
+    const isVerified = website.verification?.status === 'verified' || website.status === 'verified';
+    
+    if (!isVerified) {
       return NextResponse.json(
         { error: 'Domain not verified', verificationStatus: website.verification.status },
         { status: 403 }
       );
+    }
+    
+    // Check if the referer matches the verified domain in production
+    if (process.env.NODE_ENV === 'production' && refererDomain) {
+      // Extract the base domain for comparison, accounting for subdomains
+      const refererBaseDomain = refererDomain.split('.').slice(-2).join('.');
+      const websiteBaseDomain = websiteDomain.split('.').slice(-2).join('.');
+      
+      if (refererBaseDomain !== websiteBaseDomain && !refererDomain.endsWith(websiteDomain)) {
+        return NextResponse.json(
+          { error: 'Domain mismatch' },
+          { status: 403 }
+        );
+      }
     }
 
     // Track an impression
@@ -99,6 +109,7 @@ export async function GET(
  * POST /api/websites/[id]/widget/click
  * 
  * Track clicks on notifications in the widget
+ * Now uses domain-based verification instead of API key
  */
 export async function POST(
   request: NextRequest,
@@ -111,40 +122,37 @@ export async function POST(
   try {
     const { id } = params;
     
-    // Get API key from query params or request body
-    let apiKey = request.nextUrl.searchParams.get('key');
-    
-    if (!apiKey) {
-      // Try to get from body
-      try {
-        const body = await request.json();
-        apiKey = body.apiKey;
-      } catch (e) {
-        // No body or no apiKey in body
-      }
-    }
-    
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key is required' },
-        { status: 401 }
-      );
-    }
+    // Get the referer header (the domain that loaded the script)
+    const referer = request.headers.get('referer');
+    const refererDomain = referer ? new URL(referer).hostname : null;
 
     // Connect to the database
     await connectToDatabase();
 
     // Get the website
-    const website = await Website.findOne({
-      _id: id,
-      apiKey: apiKey
-    });
+    const website = await Website.findOne({ _id: id });
 
     if (!website) {
       return NextResponse.json(
-        { error: 'Website not found or invalid API key' },
+        { error: 'Website not found' },
         { status: 404 }
       );
+    }
+
+    // Check if the domain is verified in production
+    if (process.env.NODE_ENV === 'production' && refererDomain) {
+      const websiteDomain = website.domain;
+      
+      // Extract the base domain for comparison, accounting for subdomains
+      const refererBaseDomain = refererDomain.split('.').slice(-2).join('.');
+      const websiteBaseDomain = websiteDomain.split('.').slice(-2).join('.');
+      
+      if (refererBaseDomain !== websiteBaseDomain && !refererDomain.endsWith(websiteDomain)) {
+        return NextResponse.json(
+          { error: 'Domain mismatch' },
+          { status: 403 }
+        );
+      }
     }
 
     // Record click

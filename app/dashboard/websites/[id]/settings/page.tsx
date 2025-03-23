@@ -12,6 +12,9 @@ interface WebsiteSettings {
   maxNotifications: number;
   theme: string;
   allowedDomains: string[];
+  email: string;
+  emailNotifications: boolean;
+  notificationDigest: string;
 }
 
 export default function WebsiteSettingsPage() {
@@ -27,7 +30,10 @@ export default function WebsiteSettingsPage() {
     displayDuration: 5,
     maxNotifications: 5,
     theme: 'light',
-    allowedDomains: []
+    allowedDomains: [],
+    email: '',
+    emailNotifications: true,
+    notificationDigest: 'daily'
   });
   const [websiteName, setWebsiteName] = useState('');
   const [websiteDomain, setWebsiteDomain] = useState('');
@@ -55,7 +61,10 @@ export default function WebsiteSettingsPage() {
         displayDuration: data.settings?.displayDuration || 5,
         maxNotifications: data.settings?.maxNotifications || 5,
         theme: data.settings?.theme || 'light',
-        allowedDomains: data.allowedDomains || []
+        allowedDomains: data.allowedDomains || [],
+        email: data.user?.email || '',
+        emailNotifications: data.user?.emailNotifications !== undefined ? data.user.emailNotifications : true,
+        notificationDigest: data.user?.notificationDigest || 'daily'
       });
       
       setIsLoading(false);
@@ -95,7 +104,12 @@ export default function WebsiteSettingsPage() {
             maxNotifications: settings.maxNotifications,
             theme: settings.theme
           },
-          allowedDomains: settings.allowedDomains
+          allowedDomains: settings.allowedDomains,
+          user: {
+            email: settings.email,
+            emailNotifications: settings.emailNotifications,
+            notificationDigest: settings.notificationDigest
+          }
         }),
       });
       
@@ -350,6 +364,93 @@ export default function WebsiteSettingsPage() {
                   )}
                 </div>
                 
+                <div className="divider my-6"></div>
+                
+                <div className="card-title mb-6">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                  </svg>
+                  Account Settings
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="form-control w-full">
+                    <label className="label">
+                      <span className="label-text font-medium">Email</span>
+                    </label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={settings.email}
+                      onChange={handleChange}
+                      className="input input-bordered w-full"
+                    />
+                    <label className="label">
+                      <span className="label-text-alt">Used for notifications and account updates</span>
+                    </label>
+                  </div>
+                  
+                  <div className="form-control w-full">
+                    <label className="label">
+                      <span className="label-text font-medium">Email Notifications</span>
+                    </label>
+                    <div className="flex items-center h-12">
+                      <label className="label cursor-pointer justify-start gap-2">
+                        <input
+                          type="checkbox"
+                          name="emailNotifications"
+                          checked={settings.emailNotifications}
+                          onChange={(e) => setSettings({...settings, emailNotifications: e.target.checked})}
+                          className="checkbox checkbox-primary"
+                        />
+                        <span className="label-text">Receive email notifications</span>
+                      </label>
+                    </div>
+                    <label className="label">
+                      <span className="label-text-alt">Get notified about important updates</span>
+                    </label>
+                  </div>
+                  
+                  <div className="form-control w-full">
+                    <label className="label">
+                      <span className="label-text font-medium">Notification Digest</span>
+                    </label>
+                    <select
+                      name="notificationDigest"
+                      value={settings.notificationDigest}
+                      onChange={handleChange}
+                      className="select select-bordered w-full"
+                      disabled={!settings.emailNotifications}
+                    >
+                      <option value="realtime">Real-time</option>
+                      <option value="daily">Daily Digest</option>
+                      <option value="weekly">Weekly Digest</option>
+                    </select>
+                    <label className="label">
+                      <span className="label-text-alt">How often you receive email summaries</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div className="form-control w-full mt-6">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <label className="label mb-0 pb-0">
+                        <span className="label-text font-medium">API Keys</span>
+                      </label>
+                      <label className="label mt-0 pt-0">
+                        <span className="label-text-alt">Manage API keys for this website</span>
+                      </label>
+                    </div>
+                    <Link 
+                      href={`/dashboard/websites/${params.id}/api-keys`} 
+                      className="btn btn-sm btn-primary"
+                    >
+                      Manage API Keys
+                    </Link>
+                  </div>
+                </div>
+                
                 <div className="card-actions justify-end mt-6">
                   <button
                     type="submit"
@@ -402,9 +503,6 @@ export default function WebsiteSettingsPage() {
               <div className="divider"></div>
               
               <div className="flex justify-between items-center">
-                <Link href={`/dashboard/websites/${params.id}/api-keys`} className="btn btn-sm btn-outline">
-                  Manage API Keys
-                </Link>
                 <Link href={`/dashboard/websites/${params.id}/notifications`} className="btn btn-sm btn-outline">
                   Manage Notifications
                 </Link>

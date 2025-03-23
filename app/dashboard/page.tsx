@@ -100,7 +100,7 @@ export default async function DashboardPage() {
     { name: 'Total Notifications', value: totalNotifications, iconName: 'bell', color: 'primary' },
     { name: 'Total Displays', value: displayCount, iconName: 'chart-bar', color: 'secondary' },
     { name: 'Click Rate', value: `${clickRate}%`, iconName: 'arrow-up', color: 'accent' },
-    { name: 'API Key', value: website.apiKey, iconName: 'code-bracket', color: 'info' },
+    { name: 'API Key', value: website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : '-', iconName: 'code-bracket', color: 'info' },
   ];
 
   // Determine base URL for the widget
@@ -220,7 +220,7 @@ export default async function DashboardPage() {
           <h2 className="card-title">Website Integration</h2>
           <p className="text-base-content/70 mb-4">Add this script to your website to enable notifications:</p>
           <CodeSection 
-            code={`<script src="https://${baseUrl}/api/embed?domain=${website.domain}"></script>`} 
+            code={`<script src="https://cdn.proovd.in/w/${website.id}.js"></script>`} 
             language="html" 
           />
         </div>

@@ -209,7 +209,12 @@ websiteSchema.pre('save', function(next) {
 
 // Static method to find website by API key
 websiteSchema.statics.findByApiKey = async function(apiKey) {
-  return this.findOne({ apiKey });
+  // Try to find by the apiKeys array first
+  const website = await this.findOne({ 
+    'apiKeys.key': apiKey 
+  });
+  
+  return website;
 };
 
 // Instance method to record an impression
@@ -330,7 +335,12 @@ websiteSchema.methods.toResponse = function() {
   } : {};
   
   const dailyStats = Array.isArray(this.analytics?.dailyStats) ? 
-    this.analytics.dailyStats.map(stat => ({
+    this.analytics.dailyStats.map((stat: { 
+      date: string; 
+      impressions: number; 
+      clicks: number; 
+      conversionRate: number;
+    }) => ({
       date: stat.date || '',
       impressions: stat.impressions || 0,
       clicks: stat.clicks || 0,

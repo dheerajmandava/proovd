@@ -2,7 +2,7 @@
 
 # Script to run the stale website cleanup
 
-echo "Starting SocialProofify stale website cleanup..."
+echo "Starting Proovd stale website cleanup..."
 
 # Set environment if not set
 if [ -z "$NODE_ENV" ]; then

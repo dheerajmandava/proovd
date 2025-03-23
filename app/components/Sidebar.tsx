@@ -50,7 +50,6 @@ export default function Sidebar() {
         : '/dashboard/analytics', 
       icon: ChartBarIcon 
     },
-    { name: 'Settings', href: '/dashboard/settings', icon: CogIcon },
     { name: 'Billing', href: '/dashboard/billing', icon: CreditCardIcon },
     { name: 'Help', href: '/dashboard/help', icon: QuestionMarkCircleIcon },
   ];

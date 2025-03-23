@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 // MongoDB connection string from environment variable
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/socialproofify';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/proovd';
 
 /**
  * Global is used here to maintain a cached connection across hot reloads

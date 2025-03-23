@@ -7,7 +7,7 @@ import { cors, addCorsHeaders } from '@/app/lib/cors';
  * GET /api/websites/[id]/widget.js
  * 
  * Generates and serves the JavaScript widget file for embedding on customer websites
- * This is the actual script that gets embedded via <script> tag
+ * Now uses domain verification instead of API key for authentication
  */
 export async function GET(
   request: NextRequest,
@@ -19,10 +19,19 @@ export async function GET(
 
   try {
     const { id } = params;
-    const apiKey = request.nextUrl.searchParams.get('key');
     
-    if (!apiKey) {
-      const jsError = `console.error('Proovd: API key is required');`;
+    // Get the referer header (the domain that loaded the script)
+    const referer = request.headers.get('referer');
+    const refererDomain = referer ? new URL(referer).hostname : null;
+    
+    // Connect to the database
+    await connectToDatabase();
+
+    // Get the website by ID
+    const website = await Website.findOne({ _id: id });
+
+    if (!website) {
+      const jsError = `console.error('Proovd: Invalid website ID');`;
       return new NextResponse(jsError, {
         status: 200,
         headers: {
@@ -31,23 +40,37 @@ export async function GET(
       });
     }
 
-    // Connect to the database
-    await connectToDatabase();
-
-    // Get the website by ID
-    const website = await Website.findOne({
-      _id: id,
-      apiKey: apiKey
-    });
-
-    if (!website) {
-      const jsError = `console.error('Proovd: Invalid API key or website ID');`;
+    // Check if the domain is verified
+    const websiteDomain = website.domain;
+    const isVerified = website.verification?.status === 'verified';
+    
+    // If the domain is not verified or the referer doesn't match the verified domain
+    if (!isVerified) {
+      const jsError = `console.error('Proovd: Website domain is not verified');`;
       return new NextResponse(jsError, {
         status: 200,
         headers: {
           'Content-Type': 'application/javascript',
         }
       });
+    }
+    
+    // Check if the referer matches the verified domain
+    // Skip this check in development or if no referer
+    if (process.env.NODE_ENV === 'production' && refererDomain) {
+      // Extract the base domain for comparison, accounting for subdomains
+      const refererBaseDomain = refererDomain.split('.').slice(-2).join('.');
+      const websiteBaseDomain = websiteDomain.split('.').slice(-2).join('.');
+      
+      if (refererBaseDomain !== websiteBaseDomain && !refererDomain.endsWith(websiteDomain)) {
+        const jsError = `console.error('Proovd: Domain mismatch - widget is only authorized for ${websiteDomain}');`;
+        return new NextResponse(jsError, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/javascript',
+          }
+        });
+      }
     }
 
     // Build the widget JavaScript
@@ -57,7 +80,6 @@ export async function GET(
       // Website ID: ${id}
       
       const ENDPOINT = "${process.env.NEXT_PUBLIC_BASE_URL || request.nextUrl.origin}/api/websites/${id}/widget";
-      const API_KEY = "${apiKey}";
       const SITE_ID = "${id}";
       const DEFAULT_SETTINGS = ${JSON.stringify(website.settings || {
         position: "bottom-left",
@@ -212,7 +234,7 @@ export async function GET(
         // Add click handler
         elem.addEventListener('click', () => {
           // Record click
-          fetch(\`\${ENDPOINT}/click?key=\${API_KEY}\`, {
+          fetch(\`\${ENDPOINT}/click\`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           }).catch(err => console.error('Failed to track click:', err));
@@ -264,7 +286,7 @@ export async function GET(
       // Fetch notifications from API
       async function fetchNotifications() {
         try {
-          const response = await fetch(\`\${ENDPOINT}?key=\${API_KEY}\`, {
+          const response = await fetch(\`\${ENDPOINT}\`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' }
           });

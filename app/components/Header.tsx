@@ -52,7 +52,7 @@ export default function Header() {
                   <span className="badge badge-primary">New</span>
                 </Link>
               </li>
-              <li><Link href="/dashboard/settings">Settings</Link></li>
+              
               <li><button onClick={() => signOut({ callbackUrl: '/' })}>Logout</button></li>
             </ul>
           </div>

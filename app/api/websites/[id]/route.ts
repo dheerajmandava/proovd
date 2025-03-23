@@ -260,15 +260,30 @@ export async function POST(
         );
       }
 
-      // Generate new API key
-      website.apiKey = generateApiKey();
-
+      // Generate a new API key and update the first key in the array
+      const newApiKey = generateApiKey();
+      
+      if (!website.apiKeys || website.apiKeys.length === 0) {
+        // If no API keys exist, create a new one
+        website.apiKeys = [{
+          id: Date.now().toString(),
+          key: newApiKey,
+          name: 'Default',
+          allowedOrigins: [website.domain],
+          createdAt: new Date().toISOString()
+        }];
+      } else {
+        // Update the first API key
+        website.apiKeys[0].key = newApiKey;
+      }
+      
       // Save the updated website
       await website.save();
 
-      // Return the updated website
+      // Return the updated API key
       return NextResponse.json({
-        apiKey: website.apiKey
+        id: website._id,
+        apiKey: website.apiKeys[0].key
       });
     } catch (error) {
       console.error('Error regenerating API key:', error);

@@ -135,8 +135,7 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
   }
 
   // Generate the installation code snippet
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://proovd.com';
-  const installationCode = `<script src="${baseUrl}/api/embed?domain=${websiteData.domain}"></script>`;
+  const installationCode = `<script src="https://cdn.proovd.in/w/${websiteData.id}.js"></script>`;
 
   // Update the conversion rate rendering to safely handle division by zero
   const renderConversionRate = () => {

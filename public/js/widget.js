@@ -1,8 +1,8 @@
 /**
- * SocialProofify Widget
+ * Proovd Widget
  * 
  * This script creates and manages social proof notifications on your website.
- * It fetches notification data from the SocialProofify API and displays them
+ * It fetches notification data from the Proovd API and displays them
  * according to your configuration.
  * 
  * @version 1.0.0
@@ -31,12 +31,12 @@
   let notificationsShown = 0;
   let isActive = false;
   let timer = null;
-  let baseUrl = 'https://socialproofify.vercel.app'; // Replace with your actual API base URL
+  let baseUrl = 'https://proovd.vercel.app'; // Replace with your actual API base URL
   
   // DOM Helpers
   function createStyle() {
     const styleEl = document.createElement('style');
-    styleEl.id = 'socialproofify-style';
+    styleEl.id = 'proovd-style';
     styleEl.textContent = `
       .sp-notification-container {
         position: fixed;
@@ -173,7 +173,7 @@
   function createContainer() {
     containerEl = document.createElement('div');
     containerEl.className = `sp-notification-container ${config.position}`;
-    containerEl.id = 'socialproofify-container';
+    containerEl.id = 'proovd-container';
     document.body.appendChild(containerEl);
   }
 
@@ -320,13 +320,13 @@
         url: window.location.href,
         timestamp: new Date().toISOString()
       }),
-    }).catch(err => console.error('SocialProofify tracking error:', err));
+    }).catch(err => console.error('Proovd tracking error:', err));
   }
 
   // API functions
   async function fetchNotifications() {
     if (!apiKey) {
-      console.error('SocialProofify: API key is required');
+      console.error('Proovd: API key is required');
       return;
     }
     
@@ -334,7 +334,7 @@
       const response = await fetch(`${baseUrl}/api/notifications?apiKey=${apiKey}&url=${encodeURIComponent(window.location.href)}`);
       
       if (!response.ok) {
-        throw new Error(`SocialProofify API error: ${response.status}`);
+        throw new Error(`Proovd API error: ${response.status}`);
       }
       
       const data = await response.json();
@@ -359,26 +359,26 @@
         }
       }
     } catch (err) {
-      console.error('SocialProofify: Failed to fetch notifications', err);
+      console.error('Proovd: Failed to fetch notifications', err);
     }
   }
 
   // Public API
-  window.SocialProofify = {
+  window.Proovd = {
     /**
-     * Initialize the SocialProofify widget
-     * @param {string} key - Your SocialProofify API key
+     * Initialize the Proovd widget
+     * @param {string} key - Your Proovd API key
      * @param {Object} options - Configuration options
      */
     init: function(key, options = {}) {
       if (!key) {
-        console.error('SocialProofify: API key is required');
+        console.error('Proovd: API key is required');
         return;
       }
       
       // Already initialized
       if (apiKey) {
-        console.warn('SocialProofify: Widget already initialized');
+        console.warn('Proovd: Widget already initialized');
         return;
       }
       
@@ -398,7 +398,7 @@
       // Start showing notifications
       isActive = true;
       
-      console.log('SocialProofify: Widget initialized');
+      console.log('Proovd: Widget initialized');
     },
     
     /**
@@ -406,7 +406,7 @@
      */
     start: function() {
       if (!apiKey) {
-        console.error('SocialProofify: Widget not initialized');
+        console.error('Proovd: Widget not initialized');
         return;
       }
       
@@ -442,7 +442,7 @@
      */
     updateConfig: function(options) {
       if (!apiKey) {
-        console.error('SocialProofify: Widget not initialized');
+        console.error('Proovd: Widget not initialized');
         return;
       }
       
@@ -459,7 +459,7 @@
      */
     refresh: function() {
       if (!apiKey) {
-        console.error('SocialProofify: Widget not initialized');
+        console.error('Proovd: Widget not initialized');
         return;
       }
       

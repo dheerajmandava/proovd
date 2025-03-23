@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const website = new Website({
       name: 'Test Website',
       domain: 'localhost:8081',
-      apiKey: '72ea2d02-2174-40d4-bd45-8db754952570',
+      apiKeys: ['72ea2d02-2174-40d4-bd45-8db754952570'],
       userId: '000000000000000000000000', // Dummy user ID
       status: 'active',
       settings: {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         id: website._id,
         name: website.name,
         domain: website.domain,
-        apiKey: website.apiKey
+        apiKey: website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : ''
       }
     });
   } catch (error) {
