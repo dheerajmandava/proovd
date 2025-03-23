@@ -1,11 +1,13 @@
 import mongoose from 'mongoose';
 
+
 // Helper to debug MongoDB connections
 const debugMongo = (message: string, ...args: any[]) => {
   if (process.env.MONGODB_DEBUG === 'true') {
     console.log(`[MongoDB Debug] ${message}`, ...args);
   }
 };
+
 
 // Set strictQuery to false to suppress deprecation warnings
 mongoose.set('strictQuery', false);
@@ -38,10 +40,9 @@ export async function connectToDatabase() {
 
   try {
     // Get MongoDB URI from environment with fallback
-    const MONGODB_URI = process.env.MONGODB_URI ||
-      'mongodb://localhost:27017/test';
+    const MONGODB_URI = "mongodb+srv://dheeru:dheeru@cluster0.zqzqy.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
     
-    const dbName = process.env.MONGODB_DB || 'test';
+    const dbName = "proovd"
     
     debugMongo('Connecting to MongoDB...', {
       uri: MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'), // Hide credentials in logs
