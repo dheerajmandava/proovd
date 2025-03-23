@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
+import { defineAuth, secret } from '@aws-amplify/backend'
 
 // MongoDB connection string from environment variable
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/proovd';
+const MONGODB_URI = secret('MONGODB_URI')
 
 /**
  * Global is used here to maintain a cached connection across hot reloads
