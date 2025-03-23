@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { defineAuth, secret } from '@aws-amplify/backend'
 
 // MongoDB connection string from environment variable
-const MONGODB_URI = secret('MONGODB_URI')
+const MONGODB_URI = secret('MONGODB_URI').toString()
 
 /**
  * Global is used here to maintain a cached connection across hot reloads

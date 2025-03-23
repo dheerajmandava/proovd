@@ -160,7 +160,7 @@ export const authOptions: AuthOptions = {
   },
   
   // Secret for encrypting cookies
-  secret: secret('NEXTAUTH_SECRET'),
+  secret: secret('NEXTAUTH_SECRET').toString(),  
   
   // Configure debug mode
   debug: process.env.NODE_ENV === "development",
