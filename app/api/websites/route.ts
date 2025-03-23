@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/app/lib/db';
 import Website from '@/app/lib/models/website';
-import { sanitizeInput, extractDomain, generateApiKey } from '@/app/lib/server-utils';
+import { sanitizeInput, extractDomain } from '@/app/lib/server-utils';
 import { auth } from '@/auth';
 import { VerificationMethod } from '@/app/lib/domain-verification';
 import { initializeDomainVerification, verifyDomainWithDetails } from '@/app/lib/server-domain-verification';
@@ -12,7 +12,6 @@ import { getServerSession } from '@/auth';
 import { authOptions } from '@/auth';
 import { UserModel } from '@/app/lib/models/user';
 import { WebsiteModel } from '@/app/lib/models/website';
-import { createApiKey } from '@/app/lib/server-utils';
 import { Types } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 import { getUserWebsiteLimit, handleApiError } from '@/app/lib/api-helpers';
@@ -36,14 +35,6 @@ interface WebsiteDocument extends mongoose.Document {
   domain: string;
   status: string;
   verification: any;
-  apiKeys?: {
-    id: string;
-    key: string;
-    name: string;
-    allowedOrigins: string[];
-    createdAt: string;
-    lastUsed?: string;
-  }[];
   createdAt: Date;
   save: Function;
 }
@@ -197,13 +188,6 @@ export async function POST(req: NextRequest) {
         verifiedAt: new Date().toISOString()
       },
       createdAt: new Date(),
-      apiKeys: [{
-        id: new Date().getTime().toString(),
-        key: generateApiKey(),
-        name: 'Default',
-        allowedOrigins: [normalizedDomain],
-        createdAt: new Date().toISOString(),
-      }],
       notifications: []
     };
     
@@ -216,8 +200,7 @@ export async function POST(req: NextRequest) {
       id: website._id,
       name: website.name,
       domain: website.domain,
-      status: website.status,
-      apiKey: website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : ''
+      status: website.status
     }, { status: 201 });
     
   } catch (error: any) {
@@ -288,7 +271,6 @@ export async function GET(request: NextRequest) {
       id: website._id.toString(),
       name: website.name,
       domain: website.domain,
-      apiKey: website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : '',
       status: website.status,
       verification: website.verification,
       createdAt: website.createdAt,

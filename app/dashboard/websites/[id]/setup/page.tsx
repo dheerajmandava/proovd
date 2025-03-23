@@ -25,7 +25,6 @@ export default function WebsiteSetupPage() {
   const [verificationTab, setVerificationTab] = useState<string>(VerificationMethod.DNS);
   const [verifying, setVerifying] = useState(false);
   const [verificationResult, setVerificationResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [apiKeyCopied, setApiKeyCopied] = useState(false);
 
   useEffect(() => {
     async function fetchWebsite() {
@@ -166,13 +165,6 @@ export default function WebsiteSetupPage() {
     }
   };
 
-  useEffect(() => {
-    if (apiKeyCopied) {
-      const timer = setTimeout(() => setApiKeyCopied((prev: boolean) => false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [apiKeyCopied]);
-
   if (isLoading) {
     return <LoadingScreen />;
   }
@@ -196,7 +188,6 @@ export default function WebsiteSetupPage() {
   }
 
   const isVerified = website.verification?.status === 'verified';
-  const apiKey = website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : '';
   const domain = website.domain;
 
   // Widget installation code snippets

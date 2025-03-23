@@ -76,17 +76,6 @@ const websiteSchema = new Schema(
         default: 0,
       },
     },
-    apiKeys: {
-      type: [{
-        id: String,
-        key: String, 
-        name: String,
-        allowedOrigins: [String],
-        createdAt: String,
-        lastUsed: String
-      }],
-      default: []
-    },
     analytics: {
       totalImpressions: {
         type: Number,
@@ -207,16 +196,6 @@ websiteSchema.pre('save', function(next) {
   next();
 });
 
-// Static method to find website by API key
-websiteSchema.statics.findByApiKey = async function(apiKey) {
-  // Try to find by the apiKeys array first
-  const website = await this.findOne({ 
-    'apiKeys.key': apiKey 
-  });
-  
-  return website;
-};
-
 // Instance method to record an impression
 websiteSchema.methods.recordImpression = async function() {
   try {
@@ -308,16 +287,6 @@ websiteSchema.methods.recordClick = async function() {
 // Method to create a formatted response object
 websiteSchema.methods.toResponse = function() {
   // First create a clean object with only the data we want
-  const safeApiKeys = Array.isArray(this.apiKeys) ? 
-    this.apiKeys.map(key => ({
-      id: key.id || '',
-      key: key.key || '',
-      name: key.name || '',
-      allowedOrigins: Array.isArray(key.allowedOrigins) ? [...key.allowedOrigins] : [],
-      createdAt: key.createdAt || '',
-      lastUsed: key.lastUsed || ''
-    })) : [];
-    
   const verification = this.verification ? {
     status: this.verification.status || 'pending',
     method: this.verification.method || '',
@@ -352,7 +321,6 @@ websiteSchema.methods.toResponse = function() {
     id: this._id.toString(),
     name: this.name || '',
     domain: this.domain || '',
-    apiKeys: safeApiKeys,
     status: this.status || 'pending',
     verification: verification,
     settings: settings,

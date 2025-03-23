@@ -6,9 +6,7 @@ import Website from '@/app/lib/models/website';
 import Link from 'next/link';
 import CodeSection from './components/CodeSection';
 import ClientStatsCard from './components/ClientStatsCard';
-import { generateApiKey } from '@/app/lib/server-utils';
-import crypto from 'crypto';
-import { BellIcon, ChartBarIcon, ArrowUpIcon, CodeBracketIcon } from '@heroicons/react/24/outline';
+import { BellIcon, ChartBarIcon, ArrowUpIcon } from '@heroicons/react/24/outline';
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -100,7 +98,6 @@ export default async function DashboardPage() {
     { name: 'Total Notifications', value: totalNotifications, iconName: 'bell', color: 'primary' },
     { name: 'Total Displays', value: displayCount, iconName: 'chart-bar', color: 'secondary' },
     { name: 'Click Rate', value: `${clickRate}%`, iconName: 'arrow-up', color: 'accent' },
-    { name: 'API Key', value: website.apiKeys && website.apiKeys.length > 0 ? website.apiKeys[0].key : '-', iconName: 'code-bracket', color: 'info' },
   ];
 
   // Determine base URL for the widget
@@ -118,22 +115,18 @@ export default async function DashboardPage() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat, index) => (
           <div key={stat.name} className={`stat shadow-md bg-base-100 rounded-box border-t-4 border-${stat.color}`}>
             <div className="stat-figure text-${stat.color}">
               {stat.iconName === 'bell' && <BellIcon className="h-6 w-6" />}
               {stat.iconName === 'chart-bar' && <ChartBarIcon className="h-6 w-6" />}
               {stat.iconName === 'arrow-up' && <ArrowUpIcon className="h-6 w-6" />}
-              {stat.iconName === 'code-bracket' && <CodeBracketIcon className="h-6 w-6" />}
             </div>
             <div className="stat-title">{stat.name}</div>
             <div className="stat-value text-${stat.color}">{stat.value}</div>
             {stat.name === 'Click Rate' && Number(String(stat.value).replace('%', '')) < 5 && (
               <div className="stat-desc">↘︎ Needs improvement</div>
-            )}
-            {stat.name === 'API Key' && (
-              <div className="stat-desc text-xs truncate w-full">Used for website integration</div>
             )}
           </div>
         ))}
