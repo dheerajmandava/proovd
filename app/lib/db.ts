@@ -1,66 +1,124 @@
 import mongoose from 'mongoose';
 
-// MongoDB connection string from environment variable
-const MONGODB_URI = "mongodb+srv://test:test@cluster0.qh719.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-
-/**
- * Global is used here to maintain a cached connection across hot reloads
- * in development. This prevents connections growing exponentially
- * during API Route usage.
- */
-interface GlobalWithMongoose {
-  mongoose: {
-    conn: mongoose.Connection | null;
-    promise: Promise<mongoose.Connection> | null;
-  };
-}
-
-// Declare a global variable
-declare const global: GlobalWithMongoose;
-
-// Initialize the global mongoose object if it doesn't exist
-global.mongoose = global.mongoose || {
-  conn: null,
-  promise: null,
+// Helper to debug MongoDB connections
+const debugMongo = (message: string, ...args: any[]) => {
+  if (process.env.MONGODB_DEBUG === 'true') {
+    console.log(`[MongoDB Debug] ${message}`, ...args);
+  }
 };
 
-/**
- * Connect to MongoDB
- * @returns {Promise<mongoose.Connection>} Mongoose connection
- */
-export async function connectToDatabase(): Promise<mongoose.Connection> {
-  if (global.mongoose.conn) {
-    // Use existing database connection
-    return global.mongoose.conn;
-  }
+// Set strictQuery to false to suppress deprecation warnings
+mongoose.set('strictQuery', false);
 
-  if (!global.mongoose.promise) {
-    // Create new promise if not available
-    const opts = {
-      bufferCommands: false,
-    };
+// Cache connection
+let cachedConnection: { isConnected?: number; db?: any; client?: any } = {};
 
-    global.mongoose.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose.connection;
+// Connection options with improved parameters
+const connectionOptions = {
+  bufferCommands: true,
+  autoIndex: true,
+  maxPoolSize: 10,
+  serverSelectionTimeoutMS: 15000,
+  socketTimeoutMS: 45000,
+  family: 4,
+  connectTimeoutMS: 30000,
+};
+
+export async function connectToDatabase() {
+  // If already connected, use the existing connection
+  if (cachedConnection.isConnected) {
+    debugMongo('Using existing connection', {
+      connectionState: mongoose.connection.readyState,
+      host: mongoose.connection.host,
+      port: mongoose.connection.port,
+      name: mongoose.connection.name,
     });
+    return { db: mongoose.connection.db, client: mongoose.connection.getClient() };
   }
 
-  // Wait for the connection to be established
-  const conn = await global.mongoose.promise;
-  global.mongoose.conn = conn;
+  try {
+    // Get MongoDB URI from environment with fallback
+    const MONGODB_URI = process.env.MONGODB_URI ||
+      'mongodb://localhost:27017/test';
+    
+    const dbName = process.env.MONGODB_DB || 'test';
+    
+    debugMongo('Connecting to MongoDB...', {
+      uri: MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'), // Hide credentials in logs
+      dbName: dbName,
+      options: connectionOptions,
+    });
 
-  return conn;
+    // Enable mongoose debug mode if debug is enabled
+    if (process.env.MONGODB_DEBUG === 'true') {
+      mongoose.set('debug', true);
+    }
+
+    // Connect to MongoDB
+    await mongoose.connect(MONGODB_URI, {
+      ...connectionOptions,
+      dbName: dbName,
+    });
+
+    const connection = mongoose.connection;
+    
+    // Log connected state
+    debugMongo('MongoDB connected successfully', {
+      connectionState: connection.readyState,
+      host: connection.host,
+      port: connection.port,
+      name: connection.name,
+    });
+
+    // List all collections in the database
+    const collections = await connection.db.listCollections().toArray();
+    debugMongo('Available collections:', collections.map(c => c.name));
+
+    // Update cache
+    cachedConnection.isConnected = connection.readyState;
+    cachedConnection.db = connection.db;
+    cachedConnection.client = connection.getClient();
+
+    // Return connection
+    return { db: connection.db, client: connection.getClient() };
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    throw error;
+  }
 }
 
-/**
- * Disconnect from MongoDB
- * Mostly used for testing
- */
-export async function disconnectFromDatabase(): Promise<void> {
-  if (global.mongoose.conn) {
+// Utility to log connection status
+export function getConnectionStatus() {
+  const states = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting',
+    99: 'uninitialized',
+  };
+  
+  const status = {
+    readyState: mongoose.connection.readyState,
+    readyStateText: states[mongoose.connection.readyState as keyof typeof states] || 'unknown',
+    host: mongoose.connection.host,
+    port: mongoose.connection.port,
+    name: mongoose.connection.name,
+    models: Object.keys(mongoose.models),
+  };
+  
+  debugMongo('Current connection status:', status);
+  return status;
+}
+
+// Safely disconnect from MongoDB
+export async function disconnectFromDatabase() {
+  try {
     await mongoose.disconnect();
-    global.mongoose.conn = null;
-    global.mongoose.promise = null;
+    cachedConnection = {};
+    debugMongo('Disconnected from MongoDB');
+  } catch (error) {
+    console.error('Error disconnecting from MongoDB:', error);
+    throw error;
   }
 }
 

@@ -1,47 +1,6 @@
-import mongoose, { Schema, models, model, Document, Model } from 'mongoose';
+import mongoose, { Schema, models, model } from 'mongoose';
 import { VerificationMethod, VerificationStatus } from '@/app/lib/domain-verification';
 import { generateWebsiteId } from '../server-utils';
-import { retryDbOperation } from './db-utils';
-
-// Define the Website document interface
-export interface WebsiteDocument extends Document {
-  name: string;
-  domain: string;
-  userId: mongoose.Types.ObjectId;
-  status: string;
-  settings: {
-    position: string;
-    delay: number;
-    displayDuration: number;
-    maxNotifications: number;
-    theme: string;
-    [key: string]: any;
-  };
-  verification?: {
-    status: VerificationStatus;
-    method?: VerificationMethod;
-    token?: string;
-    verifiedAt?: Date;
-  };
-  analytics?: {
-    totalImpressions: number;
-    totalClicks: number;
-    conversionRate: number;
-    dailyStats?: any[];
-  };
-  allowedDomains?: string[];
-  createdAt: Date;
-  updatedAt: Date;
-  toJSON(): any;
-}
-
-// Define the Website model type with retry methods
-export interface WebsiteModel extends Model<WebsiteDocument> {
-  findOneWithRetry(filter: any): Promise<WebsiteDocument | null>;
-  findByIdWithRetry(id: string): Promise<WebsiteDocument | null>;
-  findWithRetry(filter: any): Promise<WebsiteDocument[]>;
-  updateOneWithRetry(filter: any, update: any): Promise<any>;
-}
 
 // Define the Website schema
 const websiteSchema = new Schema(
@@ -380,24 +339,7 @@ websiteSchema.methods.toResponse = function() {
   return JSON.parse(JSON.stringify(responseObj));
 };
 
-// Add retry methods to the schema
-websiteSchema.statics.findOneWithRetry = function(filter: any) {
-  return retryDbOperation(() => this.findOne(filter));
-};
-
-websiteSchema.statics.findByIdWithRetry = function(id: string) {
-  return retryDbOperation(() => this.findById(id));
-};
-
-websiteSchema.statics.findWithRetry = function(filter: any) {
-  return retryDbOperation(() => this.find(filter));
-};
-
-websiteSchema.statics.updateOneWithRetry = function(filter: any, update: any) {
-  return retryDbOperation(() => this.updateOne(filter, update));
-};
-
 // Create or reuse the model
-const Website = (models.Website || model('Website', websiteSchema)) as WebsiteModel;
+const Website = models.Website || model('Website', websiteSchema);
 
 export default Website;

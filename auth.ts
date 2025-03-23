@@ -13,6 +13,7 @@ import { connectToDatabase } from "@/app/lib/db"
 import User from "@/app/lib/models/user"
 import { MongoClient } from "mongodb"
 import { AuthOptions } from "next-auth"
+
 // Define the validation schema for sign-in credentials
 const signInSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -32,16 +33,28 @@ interface UserDocument {
 }
 
 // MongoDB connection for the adapter
-let clientPromise: Promise<MongoClient>;
+let clientPromise: Promise<any>;
 
-// Initialize MongoDB client once
-try {
-  const { client } = await connectToDatabase();
-  clientPromise = Promise.resolve(client);
-} catch (error) {
-  console.error("Failed to establish MongoDB connection for Auth:", error);
-  throw error;
-}
+// Initialize MongoDB client (without top-level await)
+const initMongoClient = () => {
+  try {
+    // Define async function to get the client
+    const getClient = async () => {
+      const { client } = await connectToDatabase();
+      return client;
+    };
+
+    // Execute it and set the promise
+    clientPromise = getClient();
+    return clientPromise;
+  } catch (error) {
+    console.error("Failed to establish MongoDB connection for Auth:", error);
+    throw error;
+  }
+};
+
+// Initialize the client
+initMongoClient();
 
 // Extend the built-in Session and User types
 declare module "next-auth" {
@@ -79,7 +92,7 @@ export const authOptions: AuthOptions = {
   // Use MongoDB as storage
   adapter: MongoDBAdapter(clientPromise, {
     databaseName: process.env.MONGODB_DB || "proovd",
-  }),
+  }) as any,
   
   // Configure auth providers
   providers: [
@@ -101,15 +114,16 @@ export const authOptions: AuthOptions = {
         try {
           await connectToDatabase();
           
-          // Find user by email
-          const user = await User.findOne({ email: credentials.email });
+          // Find user by email - using the new retry method
+          console.log("Finding user with retry mechanism");
+          const user = await User.findOneWithRetry({ email: credentials.email });
           
           if (!user) {
             console.log("User not found:", credentials.email);
             return null;
           }
           
-          console.log("Found user:", credentials.email, "Auth Provider:", user.provider, "Has password:", !!user.password);
+          console.log("Found user:", credentials.email, "Auth Provider:", user.authProvider, "Has password:", !!user.password);
           
           // For users created via credentials, check password
           if (!user.password) {
@@ -131,8 +145,8 @@ export const authOptions: AuthOptions = {
           
           console.log("User authenticated successfully:", credentials.email);
           
-          // Update last login time
-          await User.updateOne(
+          // Update last login time - using the new retry method
+          await User.updateOneWithRetry(
             { _id: user._id },
             { $set: { lastLogin: new Date() } }
           );
@@ -155,11 +169,11 @@ export const authOptions: AuthOptions = {
   // Configure session strategy
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days 
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   
   // Secret for encrypting cookies
-  secret: "3d0eb738bf16e8f2fc55d26a364b0de8d0f064c4b8953ad35da7b5f4d7fc1ff8",  
+  secret: process.env.NEXTAUTH_SECRET,
   
   // Configure debug mode
   debug: process.env.NODE_ENV === "development",
@@ -208,14 +222,14 @@ export const authOptions: AuthOptions = {
       try {
         await connectToDatabase();
         
-        // Check if user already exists
-        const existingUser = await User.findOne({ email: user.email });
+        // Check if user already exists - using the new retry method
+        const existingUser = await User.findOneWithRetry({ email: user.email });
         
         if (existingUser) {
           console.log("Existing user found for", user.email, ", updating last login time");
           
-          // Update existing user's last login time
-          await User.updateOne(
+          // Update existing user's last login time - using the new retry method
+          await User.updateOneWithRetry(
             { _id: existingUser._id },
             { $set: { lastLogin: new Date() } }
           );
