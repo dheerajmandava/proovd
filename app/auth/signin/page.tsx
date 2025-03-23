@@ -1,4 +1,5 @@
 import SignInForm from "@/app/components/auth/SignInForm";
+import { Suspense } from "react";
 
 export default function SignInPage() {
   return (
@@ -11,7 +12,9 @@ export default function SignInPage() {
           </p>
         </div>
         
-        <SignInForm />
+        <Suspense fallback={<div className="text-center">Loading sign-in form...</div>}>
+          <SignInForm />
+        </Suspense>
         
         <div className="text-center mt-8">
           <p className="text-sm text-gray-700 opacity-80">

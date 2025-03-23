@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { isValidObjectId } from 'mongoose';
 
 /**
@@ -7,10 +7,7 @@ import { isValidObjectId } from 'mongoose';
  * Returns a small JavaScript loader that loads the main widget script
  * This is the public endpoint that users will include in their websites
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request, { params }) {
   try {
     // Get the website ID from the params
     const { id } = params;

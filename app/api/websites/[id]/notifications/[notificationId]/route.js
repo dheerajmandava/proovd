@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectToDatabase } from '@/app/lib/db';
 import Notification from '@/app/lib/models/notification';
@@ -6,18 +6,14 @@ import Website from '@/app/lib/models/website';
 import { sanitizeInput } from '@/app/lib/server-utils';
 import Metric from '@/app/lib/models/metric';
 
-type RouteContext = {
-  params: { id: string; notificationId: string };
-};
-
 /**
  * GET /api/websites/[id]/notifications/[notificationId]
  * 
  * Gets a specific notification with its metrics
  */
-export async function GET(_req: NextRequest, context: RouteContext) {
+export async function GET(_req, { params }) {
   try {
-    const { id, notificationId } = context.params;
+    const { id, notificationId } = params;
 
     // Check authentication
     const session = await auth();
@@ -104,9 +100,9 @@ export async function GET(_req: NextRequest, context: RouteContext) {
  * 
  * Updates a specific notification
  */
-export async function PATCH(req: NextRequest, context: RouteContext) {
+export async function PATCH(req, { params }) {
   try {
-    const { id, notificationId } = context.params;
+    const { id, notificationId } = params;
 
     // Check authentication
     const session = await auth();
@@ -194,9 +190,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
  * 
  * Deletes a specific notification and its metrics
  */
-export async function DELETE(_req: NextRequest, context: RouteContext) {
+export async function DELETE(_req, { params }) {
   try {
-    const { id, notificationId } = context.params;
+    const { id, notificationId } = params;
 
     // Check authentication
     const session = await auth();

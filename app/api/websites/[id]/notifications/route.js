@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/app/lib/db';
 import Website from '@/app/lib/models/website';
 import Notification from '@/app/lib/models/notification';
@@ -10,10 +10,7 @@ import { auth } from '@/auth';
  * 
  * Fetch all notifications for a specific website
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request, { params }) {
   try {
     // Get the current user
     const session = await auth();
@@ -24,7 +21,7 @@ export async function GET(
       );
     }
 
-    const { id } = await params;
+    const { id } = params;
 
     // Validate ObjectId
     if (!isValidObjectId(id)) {
@@ -72,10 +69,7 @@ export async function GET(
  * 
  * Create a new notification for a website
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request, { params }) {
   try {
     // Get the current user
     const session = await auth();

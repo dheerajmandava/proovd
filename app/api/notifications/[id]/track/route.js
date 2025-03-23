@@ -1,12 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/app/lib/db';
 import Notification from '@/app/lib/models/notification';
 import User from '@/app/lib/models/user';
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request, { params }) {
   try {
     const notificationId = params.id;
     const body = await request.json();

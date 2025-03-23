@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/app/lib/db';
 import Website from '@/app/lib/models/website';
 import Notification from '@/app/lib/models/notification';
@@ -6,18 +6,14 @@ import Metric from '@/app/lib/models/metric';
 import { getMetricsTimeSeries, getTopNotifications } from '@/app/lib/analytics';
 import { auth } from '@/auth';
 
-type RouteContext = {
-  params: { id: string };
-};
-
 /**
  * GET /api/websites/[id]/analytics
  * 
  * Gets analytics data for a specific website
  */
-export async function GET(req: NextRequest, context: RouteContext) {
+export async function GET(req, { params }) {
   try {
-    const { id } = context.params;
+    const { id } = params;
     const searchParams = req.nextUrl.searchParams;
     const timeRange = searchParams.get('timeRange') || 'week';
     const groupBy = searchParams.get('groupBy') || 'day';
@@ -65,8 +61,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
     // Get time series data
     const timeSeries = await getMetricsTimeSeries(
       website._id,
-      timeRange as any,
-      groupBy as any
+      timeRange,
+      groupBy
     );
 
     // Get summary metrics
