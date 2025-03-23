@@ -13,7 +13,6 @@ import { connectToDatabase } from "@/app/lib/db"
 import User from "@/app/lib/models/user"
 import { MongoClient } from "mongodb"
 import { AuthOptions } from "next-auth"
-import { secret } from '@aws-amplify/backend'
 // Define the validation schema for sign-in credentials
 const signInSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -156,11 +155,11 @@ export const authOptions: AuthOptions = {
   // Configure session strategy
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60, // 30 days 
   },
   
   // Secret for encrypting cookies
-  secret: secret('NEXTAUTH_SECRET').toString(),  
+  secret: "3d0eb738bf16e8f2fc55d26a364b0de8d0f064c4b8953ad35da7b5f4d7fc1ff8",  
   
   // Configure debug mode
   debug: process.env.NODE_ENV === "development",
