@@ -3,7 +3,6 @@ import Credentials from "next-auth/providers/credentials"
 import Google from "next-auth/providers/google"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
-import { v4 as uuidv4 } from "uuid"
 import type { NextAuthOptions, Session } from "next-auth"
 import type { JWT } from "next-auth/jwt"
 import type { Account, User as AuthUser } from "next-auth"
@@ -30,16 +29,7 @@ interface UserDocument {
   image?: string;
   authProvider?: string;
   plan?: string;
-  apiKey?: string;
   [key: string]: any;
-}
-
-// Define extended User type
-interface ExtendedUser extends AuthUser {
-  id?: string;
-  provider?: string;
-  plan?: string;
-  apiKey?: string;
 }
 
 // MongoDB connection for the adapter
@@ -248,9 +238,7 @@ export const authOptions: AuthOptions = {
 };
 
 // Export the configured auth
-export const { 
-  handlers: { GET, POST },
-  auth,
-  signIn,
-  signOut
-} = NextAuth(authOptions); 
+export const auth = async () => await getServerSession(authOptions);
+
+// For edge compatibility
+export default NextAuth(authOptions); 

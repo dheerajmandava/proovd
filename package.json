@@ -19,6 +19,7 @@
     "db:test-transactions": "chmod +x ./scripts/test-transactions.js && node ./scripts/test-transactions.js"
   },
   "dependencies": {
+    "@auth/mongodb-adapter": "^3.8.0",
     "@clerk/nextjs": "^6.12.6",
     "@headlessui/react": "^2.2.0",
     "@heroicons/react": "^2.2.0",
