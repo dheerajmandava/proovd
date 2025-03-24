@@ -150,8 +150,13 @@ export async function GET(request, { params }) {
       theme: website.settings?.theme || 'light',
       loop: website.settings?.loop || false,
       randomize: website.settings?.randomize || false,
-      initialDelay: website.settings?.initialDelay || website.settings?.delay || 5
+      initialDelay: website.settings?.initialDelay || website.settings?.delay || 5,
+      displayOrder: website.settings?.displayOrder || 'newest',
+      customStyles: website.settings?.customStyles || ''
     };
+    
+    // Log settings being sent to the client for debugging
+    console.log('Sending widget settings to client:', widgetSettings);
 
     // Return notifications and website settings
     return NextResponse.json(
