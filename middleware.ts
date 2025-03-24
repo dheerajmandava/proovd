@@ -9,6 +9,7 @@ const PUBLIC_PAGES = ['/', '/auth/signin', '/auth/signup', '/pricing', '/docs', 
 const API_PUBLIC_ENDPOINTS = [
   '/api/auth',
   '/api/websites/*/widget.js',
+  '/api/websites/*/notifications/show',
   '/api/notifications/*/impression',
   '/api/notifications/*/click',
   '/api/cdn/w'
@@ -21,6 +22,28 @@ export async function middleware(request: NextRequest) {
   const { nextUrl } = request
   const pathname = nextUrl.pathname
   const hostname = request.headers.get('host') || ''
+  const method = request.method
+
+  // Handle CORS preflight requests
+  if (method === 'OPTIONS') {
+    // Check if this is a preflight request for a public API endpoint
+    const isPublicApiPreflight = API_PUBLIC_ENDPOINTS.some(pattern => 
+      matchesPattern(pathname, pattern)
+    );
+    
+    if (isPublicApiPreflight) {
+      const origin = request.headers.get('origin') || '*';
+      return new NextResponse(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
+  }
 
   // If request is to cdn subdomain
   if (hostname.startsWith('cdn.')) {
