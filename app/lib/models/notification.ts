@@ -16,7 +16,7 @@ const notificationSchema = new Schema(
     },
     type: {
       type: String,
-      enum: ['purchase', 'signup', 'custom'],
+      enum: ['purchase', 'signup', 'custom', 'conversion'],
       default: 'custom',
     },
     status: {
@@ -40,6 +40,11 @@ const notificationSchema = new Schema(
     url: {
       type: String,
       trim: true,
+    },
+    urlTarget: {
+      type: String,
+      enum: ['_self', '_blank', 'new'],
+      default: '_blank',
     },
     image: {
       type: String,
@@ -66,7 +71,38 @@ const notificationSchema = new Schema(
         type: Date,
       },
     },
+    // New display settings
+    displayFrequency: {
+      type: String,
+      enum: ['always', 'once_per_session', 'once_per_browser'],
+      default: 'always',
+    },
+    displayDuration: {
+      type: Number,
+      min: 1,
+      max: 60,
+      default: 5,
+    },
+    timeAgo: {
+      type: String,
+      trim: true,
+    },
+    fakeTimestamp: {
+      type: Date,
+    },
+    priority: {
+      type: Number,
+      default: 1,
+    },
     displayCount: {
+      type: Number,
+      default: 0,
+    },
+    impressions: {
+      type: Number,
+      default: 0,
+    },
+    clicks: {
       type: Number,
       default: 0,
     },
@@ -88,6 +124,7 @@ const notificationSchema = new Schema(
 notificationSchema.index({ siteId: 1 });
 notificationSchema.index({ siteId: 1, status: 1 });
 notificationSchema.index({ siteId: 1, location: 1 });
+notificationSchema.index({ siteId: 1, priority: -1 }); // For priority order
 
 // Method to create a formatted response object
 notificationSchema.methods.toResponse = function () {
@@ -100,8 +137,16 @@ notificationSchema.methods.toResponse = function () {
     productName: this.productName,
     message: this.message,
     url: this.url,
+    urlTarget: this.urlTarget,
     image: this.image,
     displayRules: this.displayRules,
+    displayFrequency: this.displayFrequency,
+    displayDuration: this.displayDuration,
+    timeAgo: this.timeAgo,
+    fakeTimestamp: this.fakeTimestamp,
+    priority: this.priority,
+    impressions: this.impressions,
+    clicks: this.clicks,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };

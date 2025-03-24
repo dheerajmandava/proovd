@@ -90,20 +90,28 @@ export async function GET(request, { params }) {
     }
 
     // Get active notifications for this website
+    // Sort by priority (high to low) and then by creation date (newest first)
     const notifications = await Notification.find({ 
       siteId: id,
       status: 'active'
-    }).sort({ createdAt: -1 });
+    }).sort({ priority: -1, createdAt: -1 });
 
     // Format notifications for response
     const formattedNotifications = notifications.map(notification => {
       // Convert the notification to a plain object
       const notificationObj = notification.toObject ? notification.toObject() : notification;
       
-      // Add formatted timestamp if not present
-      if (!notificationObj.timeAgo && notificationObj.createdAt) {
+      // Use fake timestamp if available
+      if (notificationObj.fakeTimestamp) {
+        notificationObj.timestamp = notificationObj.fakeTimestamp;
+      } else {
+        notificationObj.timestamp = notificationObj.createdAt;
+      }
+      
+      // Use pre-defined timeAgo if available
+      if (!notificationObj.timeAgo) {
         const now = new Date();
-        const createdAt = new Date(notificationObj.createdAt);
+        const createdAt = new Date(notificationObj.timestamp || notificationObj.createdAt);
         const diffMs = now - createdAt;
         const diffMins = Math.round(diffMs / 60000);
         
@@ -120,20 +128,36 @@ export async function GET(request, { params }) {
         }
       }
       
+      // Ensure critical display parameters are present
+      if (!notificationObj.displayFrequency) {
+        notificationObj.displayFrequency = 'always';
+      }
+      
+      if (!notificationObj.displayDuration) {
+        notificationObj.displayDuration = 
+          website.settings?.displayDuration || 5;
+      }
+      
       return notificationObj;
     });
+
+    // Get advanced website settings for the widget
+    const widgetSettings = {
+      position: website.settings?.position || 'bottom-left',
+      delay: website.settings?.delay || 5,
+      displayDuration: website.settings?.displayDuration || 5,
+      maxNotifications: website.settings?.maxNotifications || 5,
+      theme: website.settings?.theme || 'light',
+      loop: website.settings?.loop || false,
+      randomize: website.settings?.randomize || false,
+      initialDelay: website.settings?.initialDelay || website.settings?.delay || 5
+    };
 
     // Return notifications and website settings
     return NextResponse.json(
       { 
         notifications: formattedNotifications,
-        settings: website.settings || {
-          position: 'bottom-left',
-          delay: 5,
-          displayDuration: 5,
-          maxNotifications: 5,
-          theme: 'light',
-        }
+        settings: widgetSettings
       },
       {
         headers: {

@@ -150,32 +150,77 @@ export async function GET(
             container.style.bottom = '20px';
             container.style.right = '20px';
             break;
-        case 'top-left':
-          container.style.top = '20px';
-          container.style.left = '20px';
-          break;
-        case 'top-right':
-          container.style.top = '20px';
-          container.style.right = '20px';
-          break;
-        default:
-          container.style.bottom = '20px';
-          container.style.left = '20px';
+          case 'top-left':
+            container.style.top = '20px';
+            container.style.left = '20px';
+            break;
+          case 'top-right':
+            container.style.top = '20px';
+            container.style.right = '20px';
+            break;
+          default:
+            container.style.bottom = '20px';
+            container.style.left = '20px';
         }
         
         // Append to body
         document.body.appendChild(container);
         
-        // Load the notifications
-        const api = apiBaseUrl;
+        // State management
+        let notificationQueue = [];
+        let currentNotification = null;
+        let isDisplaying = false;
+        let displayTimer = null;
         
-        // Track seen notifications
-        const seenNotifications = new Set();
+        // Helper functions for frequency management
+        const storage = {
+          isNotificationSeen: (id, frequency) => {
+            const key = \`proovd_notification_\${id}\`;
+            if (frequency === 'once_per_session') {
+              return sessionStorage.getItem(key) !== null;
+            } else if (frequency === 'once_per_browser') {
+              return localStorage.getItem(key) !== null;
+            }
+            return false;
+          },
+          markNotificationSeen: (id, frequency) => {
+            const key = \`proovd_notification_\${id}\`;
+            if (frequency === 'once_per_session') {
+              sessionStorage.setItem(key, Date.now().toString());
+            } else if (frequency === 'once_per_browser') {
+              localStorage.setItem(key, Date.now().toString());
+            }
+          }
+        };
         
-        // Function to fetch notifications
-        async function fetchNotifications() {
+        // Format time ago strings
+        function formatTimeAgo(timestamp) {
+          if (!timestamp) return 'recently';
+          
+          const now = new Date();
+          const time = new Date(timestamp);
+          const diff = Math.floor((now - time) / 1000);
+          
+          if (diff < 60) return 'just now';
+          if (diff < 120) return '1 minute ago';
+          if (diff < 3600) return Math.floor(diff / 60) + ' minutes ago';
+          if (diff < 7200) return '1 hour ago';
+          if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
+          if (diff < 172800) return 'yesterday';
+          return Math.floor(diff / 86400) + ' days ago';
+        }
+        
+        // Sanitize text to prevent XSS
+        function sanitizeText(text) {
+          const element = document.createElement('div');
+          element.textContent = text;
+          return element.innerHTML;
+        }
+        
+        // Load all notifications at startup
+        async function loadNotifications() {
           try {
-            const response = await fetch(\`\${api}/api/websites/\${websiteId}/notifications/show\`, {
+            const response = await fetch(\`\${apiBaseUrl}/api/websites/\${websiteId}/notifications/show\`, {
               method: 'GET',
               headers: {
                 'Content-Type': 'application/json',
@@ -187,22 +232,63 @@ export async function GET(
             }
             
             const data = await response.json();
-            return data.notifications || [];
+            
+            if (data.notifications && data.notifications.length > 0) {
+              // Filter notifications based on frequency settings
+              notificationQueue = data.notifications.filter(notification => {
+                const frequency = notification.displayFrequency || 'always';
+                return frequency === 'always' || !storage.isNotificationSeen(notification._id, frequency);
+              });
+              
+              // Randomize slightly if needed
+              if (widgetSettings.randomize) {
+                shuffleArray(notificationQueue);
+              }
+              
+              // Start display process after initial delay
+              setTimeout(processQueue, (widgetSettings.initialDelay || widgetSettings.delay || 5) * 1000);
+            }
           } catch (error) {
-            console.error('Error fetching notifications:', error);
-            return [];
+            console.error('Error loading notifications:', error);
           }
         }
         
-        // Function to show a notification
-        function showNotification(notification) {
-          // Skip if already seen
-          if (seenNotifications.has(notification.id)) {
-            return;
+        // Fisher-Yates shuffle algorithm for randomizing order
+        function shuffleArray(array) {
+          for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+          }
+        }
+        
+        // Process notification queue
+        function processQueue() {
+          if (isDisplaying || notificationQueue.length === 0) return;
+          
+          // Get the next notification
+          currentNotification = notificationQueue.shift();
+          
+          // If using a loop setting, push notification back to end of queue
+          if (widgetSettings.loop && notificationQueue.length < widgetSettings.maxNotifications) {
+            const notificationFrequency = currentNotification.displayFrequency || 'always';
+            if (notificationFrequency === 'always') {
+              notificationQueue.push(currentNotification);
+            }
           }
           
-          // Mark as seen
-          seenNotifications.add(notification.id);
+          // Display the notification
+          displayNotification(currentNotification);
+        }
+        
+        // Display a notification
+        function displayNotification(notification) {
+          isDisplaying = true;
+          
+          // Mark as seen based on frequency setting
+          const frequency = notification.displayFrequency || 'always';
+          if (frequency !== 'always') {
+            storage.markNotificationSeen(notification._id, frequency);
+          }
           
           // Create notification element
           const notificationEl = document.createElement('div');
@@ -218,6 +304,7 @@ export async function GET(
           notificationEl.style.opacity = '0';
           notificationEl.style.transform = 'translateY(20px)';
           notificationEl.style.transition = 'opacity 0.3s, transform 0.3s';
+          notificationEl.style.cursor = notification.url ? 'pointer' : 'default';
           
           // Create content based on notification type
           let content = '';
@@ -234,7 +321,7 @@ export async function GET(
                   <div>
                     <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Someone')}</div>
                     <div>\${sanitizeText(notification.message || 'purchased recently')}</div>
-                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp)}</div>
+                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp || notification.createdAt)}</div>
                   </div>
                 </div>
               \`;
@@ -251,7 +338,7 @@ export async function GET(
                   <div>
                     <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Someone')}</div>
                     <div>\${sanitizeText(notification.message || 'signed up recently')}</div>
-                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp)}</div>
+                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp || notification.createdAt)}</div>
                   </div>
                 </div>
               \`;
@@ -263,161 +350,127 @@ export async function GET(
                 <div style="display: flex; align-items: center;">
                   <div style="margin-right: 10px;">
                     <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Activity').charAt(0) + '</div>'}
+                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Someone').charAt(0) + '</div>'}
                     </div>
                   </div>
                   <div>
-                    <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Recent Activity')}</div>
-                    <div>\${sanitizeText(notification.message || 'Something happened')}</div>
-                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp)}</div>
+                    <div style="font-weight: bold;">\${sanitizeText(notification.title || notification.name || '')}</div>
+                    <div>\${sanitizeText(notification.message || '')}</div>
+                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp || notification.createdAt)}</div>
                   </div>
                 </div>
               \`;
           }
           
-          // Set the content
-          notificationEl.innerHTML = content;
-          
-          // Add click handler
-          notificationEl.addEventListener('click', function() {
-            if (notification.url) {
-              recordClick(notification.id);
-              window.open(notification.url, '_blank');
-            }
+          // Add close button
+          const closeButton = document.createElement('div');
+          closeButton.style.position = 'absolute';
+          closeButton.style.top = '8px';
+          closeButton.style.right = '8px';
+          closeButton.style.fontSize = '16px';
+          closeButton.style.fontWeight = 'bold';
+          closeButton.style.cursor = 'pointer';
+          closeButton.style.color = widgetSettings.theme === 'dark' ? '#ccc' : '#888';
+          closeButton.innerHTML = '×';
+          closeButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideNotification(notificationEl);
           });
           
-          // Append to container
+          notificationEl.innerHTML = content;
+          notificationEl.style.position = 'relative';
+          notificationEl.appendChild(closeButton);
+          
+          // Add URL handler
+          if (notification.url) {
+            notificationEl.addEventListener('click', () => {
+              // Track click
+              trackClick(notification._id);
+              
+              // Open URL
+              if (notification.urlTarget === '_blank' || notification.urlTarget === 'new') {
+                window.open(notification.url, '_blank');
+              } else {
+                window.location.href = notification.url;
+              }
+            });
+          }
+          
+          // Display with animation
           container.appendChild(notificationEl);
           
-          // Record impression
-          recordImpression(notification.id);
+          // Forces a reflow, allowing the transition to take effect
+          void notificationEl.offsetWidth;
           
-          // Animate in
+          // Show notification with animation
+          notificationEl.style.opacity = '1';
+          notificationEl.style.transform = 'translateY(0)';
+          
+          // Track impression
+          trackImpression(notification._id);
+          
+          // Set display duration
+          const duration = notification.displayDuration || widgetSettings.displayDuration || 5;
+          displayTimer = setTimeout(() => {
+            hideNotification(notificationEl);
+          }, duration * 1000);
+        }
+        
+        // Hide notification with animation
+        function hideNotification(el) {
+          clearTimeout(displayTimer);
+          
+          el.style.opacity = '0';
+          el.style.transform = 'translateY(20px)';
+          
           setTimeout(() => {
-            notificationEl.style.opacity = '1';
-            notificationEl.style.transform = 'translateY(0)';
-          }, 10);
-          
-          // Remove after display duration
-          setTimeout(() => {
-            notificationEl.style.opacity = '0';
-            notificationEl.style.transform = 'translateY(20px)';
-            
-            // Remove from DOM after animation
-            setTimeout(() => {
-              container.removeChild(notificationEl);
-            }, 300);
-          }, widgetSettings.displayDuration * 1000);
-        }
-        
-        // Function to sanitize text
-        function sanitizeText(text) {
-          if (!text) return '';
-          const div = document.createElement('div');
-          div.textContent = text;
-          return div.innerHTML;
-        }
-        
-        // Function to format time ago
-        function formatTimeAgo(timestamp) {
-          if (!timestamp) return 'recently';
-          
-          const now = new Date();
-          const past = new Date(timestamp);
-          const diffMs = now - past;
-          
-          // Convert to seconds
-          const diffSec = Math.floor(diffMs / 1000);
-          
-          if (diffSec < 60) return 'just now';
-          if (diffSec < 3600) return \`\${Math.floor(diffSec / 60)} minutes ago\`;
-          if (diffSec < 86400) return \`\${Math.floor(diffSec / 3600)} hours ago\`;
-          if (diffSec < 2592000) return \`\${Math.floor(diffSec / 86400)} days ago\`;
-          
-          // Fallback to date
-          return past.toLocaleDateString();
-        }
-        
-        // Function to record impression
-        async function recordImpression(notificationId) {
-          try {
-            await fetch(\`\${api}/api/notifications/\${notificationId}/impression\`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ websiteId }),
-            });
-          } catch (error) {
-            console.error('Error recording impression:', error);
-          }
-        }
-        
-        // Function to record click
-        async function recordClick(notificationId) {
-          try {
-            await fetch(\`\${api}/api/notifications/\${notificationId}/click\`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ websiteId }),
-            });
-          } catch (error) {
-            console.error('Error recording click:', error);
-          }
-        }
-        
-        // Function to start showing notifications
-        async function startNotifications() {
-          const notifications = await fetchNotifications();
-          
-          // Queue notifications
-          let index = 0;
-          let activeCount = 0;
-          const maxActive = widgetSettings.maxNotifications || 5;
-          
-          function showNext() {
-            if (index >= notifications.length) {
-              // Restart from beginning if we've shown all
-              setTimeout(() => {
-                index = 0;
-                showNext();
-              }, 30000); // Wait 30 seconds before restarting
-              return;
-            }
-            
-            if (activeCount >= maxActive) {
-              // Wait until a notification is removed
-              setTimeout(showNext, 1000);
-              return;
-            }
-            
-            // Show next notification
-            const notification = notifications[index++];
-            showNotification(notification);
-            activeCount++;
-            
-            // Decrease active count after notification is removed
-            setTimeout(() => {
-              activeCount--;
-            }, widgetSettings.displayDuration * 1000 + 300);
+            if (el.parentNode) el.parentNode.removeChild(el);
+            isDisplaying = false;
             
             // Schedule next notification
-            setTimeout(showNext, widgetSettings.delay * 1000);
-          }
-          
-          // Start showing notifications after initial delay
-          setTimeout(showNext, widgetSettings.delay * 1000);
+            setTimeout(() => {
+              processQueue();
+            }, (widgetSettings.delay || 5) * 1000);
+          }, 300); // Animation duration
         }
         
-        // Start after DOM is fully loaded
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', startNotifications);
-        } else {
-          startNotifications();
+        // Track impression
+        function trackImpression(notificationId) {
+          try {
+            fetch(\`\${apiBaseUrl}/api/notifications/\${notificationId}/impression\`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ websiteId }),
+            });
+          } catch (error) {
+            console.error('Error tracking impression:', error);
+          }
         }
-    })();
+        
+        // Track click
+        function trackClick(notificationId) {
+          try {
+            fetch(\`\${apiBaseUrl}/api/notifications/\${notificationId}/click\`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ websiteId }),
+            });
+          } catch (error) {
+            console.error('Error tracking click:', error);
+          }
+        }
+        
+        // Initialize when DOM is fully loaded
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', loadNotifications);
+        } else {
+          loadNotifications();
+        }
+      })();
     `;
 
     // Return the widget script with appropriate headers
