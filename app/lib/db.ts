@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 
+
 // Helper to debug MongoDB connections
 const debugMongo = (message: string, ...args: any[]) => {
   if (process.env.MONGODB_DEBUG === 'true') {
@@ -40,9 +41,9 @@ export async function connectToDatabase() {
 
   try {
     // Get MongoDB URI from environment with fallback
-    const MONGODB_URI = "mongodb+srv://dheeru:dheeru@cluster0.zqzqy.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+    const MONGODB_URI = process.env.MONGODB_URI;
     
-    const dbName = "proovd"
+    const dbName = process.env.MONGODB_DB;
     
     debugMongo('Connecting to MongoDB...', {
       uri: MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'), // Hide credentials in logs

@@ -137,7 +137,7 @@ export async function GET(
         document.body.appendChild(container);
         
         // Load the notifications
-        const api = '${process.env.NEXT_PUBLIC_API_URL || process.env.VERCEL_URL || 'http://localhost:3000'}';
+        const api = '${process.env.NEXTAUTH_URL || 'http://localhost:3000'}';
         
         // Track seen notifications
         const seenNotifications = new Set();
