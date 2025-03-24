@@ -11,9 +11,11 @@ export async function GET(request: NextRequest) {
     // Fix the API URL to use the current host
     const host = request.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';
+    
+    // The actual string in widget.js is: this.apiUrl = 'http://localhost:3000';
     widgetContent = widgetContent.replace(
-      "apiUrl = '${process.env.NEXTAUTH_URL || 'http://localhost:3000'}';",
-      `apiUrl = '${protocol}://${host}';`
+      "this.apiUrl = 'http://localhost:3000';",
+      `this.apiUrl = '${protocol}://${host}';`
     );
     
     // Set appropriate headers

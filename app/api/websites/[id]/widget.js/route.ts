@@ -111,7 +111,7 @@ export async function GET(
     
     // Get the API URL from the current request
     const host = request.headers.get('host') || '';
-    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    const protocol = 'https';
     const apiUrl = `${protocol}://${host}`;
     
     // Build the widget script
@@ -120,9 +120,10 @@ export async function GET(
       (function() {
         const websiteId = "${id}";
         const widgetSettings = ${JSON.stringify(settings)};
+        const apiBaseUrl = '${apiUrl}';
         
         // Create container element
-      const container = document.createElement('div');
+        const container = document.createElement('div');
         container.id = 'proovd-notifications';
         container.style.position = 'fixed';
         container.style.zIndex = '9999';
@@ -154,7 +155,7 @@ export async function GET(
         document.body.appendChild(container);
         
         // Load the notifications
-        const api = '${apiUrl}';
+        const api = apiBaseUrl;
         
         // Track seen notifications
         const seenNotifications = new Set();

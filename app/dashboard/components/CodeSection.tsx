@@ -4,17 +4,19 @@ import { useState } from 'react';
 import { CheckIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 
 interface CodeSectionProps {
-  websiteId: string;
+  websiteId?: string;
+  code?: string;
+  language?: string;
 }
 
-export default function CodeSection({ websiteId }: CodeSectionProps) {
+export default function CodeSection({ websiteId, code: propCode, language }: CodeSectionProps) {
   const [isCopied, setIsCopied] = useState(false);
   
-  // Get base URL from environment or use a default
-  const baseUrl = process.env.NEXT_PUBLIC_CDN_URL || 'https://cdn.proovd.in';
+  // Get base URL from environment
+  const baseUrl = 'https://www.proovd.in';
   
-  // Generate the installation code
-  const code = `<script src="${baseUrl}/w/${websiteId}.js"></script>`;
+  // Generate the installation code using the main domain
+  const code = propCode || (websiteId ? `<script src="${baseUrl}/api/cdn/w/${websiteId}.js"></script>` : '');
   
   const copyToClipboard = async () => {
     try {

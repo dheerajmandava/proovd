@@ -191,7 +191,9 @@ export default function WebsiteSetupPage() {
   const domain = website.domain;
 
   // Widget installation code snippets
-  const scriptTag = `<script src="https://cdn.proovd.in/w/${params.id}.js"></script>`;
+  const baseUrl = 'https://www.proovd.in';
+  
+  const scriptTag = `<script src="${baseUrl}/api/cdn/w/${params.id}.js"></script>`;
   
   return (
     <div className="container mx-auto py-6 space-y-8">
