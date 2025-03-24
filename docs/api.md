@@ -11,7 +11,7 @@ Example:
 ```bash
 curl -X GET "https://proovd.in/api/websites/YOUR_WEBSITE_ID/notifications/show"
 ```
-
+ 
 ## Rate Limits
 
 To ensure service stability, the API has the following rate limits:
