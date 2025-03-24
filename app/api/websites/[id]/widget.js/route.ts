@@ -26,6 +26,9 @@ export async function GET(
         status: 400,
         headers: {
           'Content-Type': 'application/javascript',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET',
+          'Access-Control-Max-Age': '86400',
         },
       });
     }
@@ -41,6 +44,9 @@ export async function GET(
         status: 404,
         headers: {
           'Content-Type': 'application/javascript',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET',
+          'Access-Control-Max-Age': '86400',
         },
       });
     }
@@ -51,6 +57,9 @@ export async function GET(
         status: 403,
         headers: {
           'Content-Type': 'application/javascript',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET',
+          'Access-Control-Max-Age': '86400',
         },
       });
     }
@@ -79,6 +88,9 @@ export async function GET(
               status: 403,
               headers: {
                 'Content-Type': 'application/javascript',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET',
+                'Access-Control-Max-Age': '86400',
               },
             });
           
@@ -96,6 +108,11 @@ export async function GET(
         maxNotifications: 5,
       theme: 'light',
     };
+    
+    // Get the API URL from the current request
+    const host = request.headers.get('host') || '';
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    const apiUrl = `${protocol}://${host}`;
     
     // Build the widget script
     const widgetScript = `
@@ -137,7 +154,7 @@ export async function GET(
         document.body.appendChild(container);
         
         // Load the notifications
-        const api = '${process.env.NEXTAUTH_URL || 'http://localhost:3000'}';
+        const api = '${apiUrl}';
         
         // Track seen notifications
         const seenNotifications = new Set();
