@@ -15,6 +15,11 @@ export interface WebsiteDocument extends Document {
     displayDuration: number;
     maxNotifications: number;
     theme: string;
+    displayOrder: string;
+    randomize: boolean;
+    initialDelay: number;
+    loop: boolean;
+    customStyles: string;
     [key: string]: any;
   };
   verification?: {
@@ -87,8 +92,29 @@ const websiteSchema = new Schema(
       },
       theme: {
         type: String,
-        enum: ['light', 'dark'],
+        enum: ['light', 'dark', 'custom'],
         default: 'light',
+      },
+      displayOrder: {
+        type: String,
+        enum: ['newest', 'random', 'smart'],
+        default: 'newest',
+      },
+      randomize: {
+        type: Boolean,
+        default: false,
+      },
+      initialDelay: {
+        type: Number,
+        default: 5,
+      },
+      loop: {
+        type: Boolean,
+        default: false,
+      },
+      customStyles: {
+        type: String,
+        default: '',
       },
     },
     allowedDomains: {
@@ -341,7 +367,12 @@ websiteSchema.methods.toResponse = function() {
     delay: this.settings.delay || 5,
     displayDuration: this.settings.displayDuration || 5,
     maxNotifications: this.settings.maxNotifications || 5,
-    theme: this.settings.theme || 'light'
+    theme: this.settings.theme || 'light',
+    displayOrder: this.settings.displayOrder || 'newest',
+    randomize: this.settings.randomize || false,
+    initialDelay: this.settings.initialDelay || 5,
+    loop: this.settings.loop || false,
+    customStyles: this.settings.customStyles || ''
   } : {};
   
   const dailyStats = Array.isArray(this.analytics?.dailyStats) ? 

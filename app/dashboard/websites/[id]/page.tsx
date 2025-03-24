@@ -5,26 +5,15 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   ArrowTopRightOnSquareIcon, 
-  ChartBarIcon, 
   CogIcon, 
-  BellIcon,
-  PencilSquareIcon,
   ShieldCheckIcon,
   ShieldExclamationIcon 
 } from '@heroicons/react/24/outline';
 import VerificationStatusBadge from '@/app/components/VerificationStatusBadge';
 import NotificationsTab from './components/NotificationsTab';
 import OverviewTab from './components/OverviewTab';
+import SettingsTab from './components/SettingsTab';
 import dynamic from 'next/dynamic';
-
-// Dynamically import the WebsiteSettingsPage component
-const WebsiteSettingsPage = dynamic(() => import('./settings/page'), {
-  loading: () => (
-    <div className="flex justify-center items-center h-64">
-      <span className="loading loading-spinner loading-lg text-primary"></span>
-    </div>
-  )
-});
 
 // Dynamically import the WebsiteSetupPage component
 const WebsiteSetupPage = dynamic(() => import('./setup/page'), {
@@ -157,13 +146,6 @@ export default function WebsiteDetailsPage({
         </button>
         <button 
           role="tab"
-          className={`tab ${activeTab === 'analytics' ? 'tab-active' : ''}`}
-          onClick={() => handleTabChange('analytics')}
-        >
-          Analytics
-        </button>
-        <button 
-          role="tab"
           className={`tab ${activeTab === 'settings' ? 'tab-active' : ''}`}
           onClick={() => handleTabChange('settings')}
         >
@@ -196,18 +178,7 @@ export default function WebsiteDetailsPage({
       {/* Tab Content */}
       {activeTab === 'overview' && <OverviewTab websiteId={websiteId} />}
       {activeTab === 'notifications' && <NotificationsTab websiteId={websiteId} />}
-      {activeTab === 'analytics' && (
-        <div className="card bg-base-100 shadow-xl">
-          <div className="card-body items-center text-center">
-            <h2 className="card-title">Analytics Coming Soon</h2>
-            <p>We're working on building powerful analytics tools for your website.</p>
-            <div className="card-actions mt-4">
-              <button className="btn btn-primary btn-disabled">Coming Soon</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {activeTab === 'settings' && <WebsiteSettingsPage />}
+      {activeTab === 'settings' && <SettingsTab websiteId={websiteId} />}
     </div>
   );
 } 

@@ -52,6 +52,8 @@ export interface IUser extends Document {
     pageviews: number;
     lastReset: Date;
   };
+  emailNotifications: boolean;  // Whether user wants to receive email notifications
+  notificationDigest: 'realtime' | 'daily' | 'weekly';  // Email notification frequency
   createdAt: Date;
   updatedAt: Date;
 }
@@ -90,6 +92,12 @@ const UserSchema: Schema = new Schema(
     usageStats: {
       pageviews: { type: Number, default: 0 },
       lastReset: { type: Date, default: Date.now }
+    },
+    emailNotifications: { type: Boolean, default: true },
+    notificationDigest: { 
+      type: String, 
+      enum: ['realtime', 'daily', 'weekly'],
+      default: 'daily'
     }
   },
   { timestamps: true }

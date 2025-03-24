@@ -18,6 +18,11 @@ export interface Website {
     displayDuration: number;
     maxNotifications: number;
     theme: string;
+    displayOrder: string;
+    randomize: boolean;
+    initialDelay: number;
+    loop: boolean;
+    customStyles: string;
   };
   allowedDomains?: string[];
   createdAt: Date;
@@ -62,10 +67,6 @@ export interface User {
   createdAt: Date;
   lastLogin?: Date;
 }
-
-export type VerificationStatus = 'pending' | 'verified' | 'failed';
-
-export type VerificationMethod = 'DNS' | 'FILE' | 'META';
 
 export interface VerificationDetails {
   status: VerificationStatus;

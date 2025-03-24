@@ -280,6 +280,36 @@ export async function PATCH(
       updatedFields.name = data.name;
     }
     
+    // Handle settings update if provided
+    if (data.settings) {
+      // Update specific settings fields
+      if (data.settings.position) website.settings.position = data.settings.position;
+      if (data.settings.delay !== undefined) website.settings.delay = parseInt(data.settings.delay.toString(), 10);
+      if (data.settings.displayDuration !== undefined) website.settings.displayDuration = parseInt(data.settings.displayDuration.toString(), 10);
+      if (data.settings.maxNotifications !== undefined) website.settings.maxNotifications = parseInt(data.settings.maxNotifications.toString(), 10);
+      if (data.settings.theme) website.settings.theme = data.settings.theme;
+      if (data.settings.displayOrder) website.settings.displayOrder = data.settings.displayOrder;
+      if (data.settings.randomize !== undefined) website.settings.randomize = Boolean(data.settings.randomize);
+      if (data.settings.initialDelay !== undefined) website.settings.initialDelay = parseInt(data.settings.initialDelay.toString(), 10);
+      if (data.settings.loop !== undefined) website.settings.loop = Boolean(data.settings.loop);
+      if (data.settings.customStyles !== undefined) website.settings.customStyles = data.settings.customStyles;
+      
+      updatedFields.settings = website.settings;
+    }
+    
+    // Handle allowed domains update if provided
+    if (data.allowedDomains && Array.isArray(data.allowedDomains)) {
+      website.allowedDomains = data.allowedDomains;
+      updatedFields.allowedDomains = data.allowedDomains;
+    }
+    
+    // Handle user preferences update
+    if (data.user) {
+      // These are stored in the user model, not in website
+      // We'll need to implement this as a separate API endpoint
+      updatedFields.userPreferences = "User preferences were provided but are handled by a separate API";
+    }
+    
     // Save changes
     await website.save();
     
