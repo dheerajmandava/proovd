@@ -71,12 +71,24 @@ export async function GET(
     if (referer) {
       try {
         const refererUrl = new URL(referer);
-        const refererDomain = refererUrl.hostname.toLowerCase();
+        let refererDomain = refererUrl.hostname.toLowerCase();
+        
+         // Normalize domain by removing www. prefix
+        refererDomain = refererDomain.replace(/^www\./i, '');
+
+        // Also normalize the website domain
+        const normalizedSiteDomain = website.domain.replace(/^www\./i, '');
         
         // Check if domain matches or is in allowed domains
+        const allowedDomainsList = website.allowedDomains || [];
+
+        // Normalize each allowed domain too
+        const normalizedAllowedDomains = allowedDomainsList.map(d => d.replace(/^www\./i, ''));
+
+        // Check if domain matches or is in allowed domains
         const domainMatches = 
-          website.domain === refererDomain || 
-          (website.allowedDomains && website.allowedDomains.includes(refererDomain));
+          normalizedSiteDomain === refererDomain || 
+          normalizedAllowedDomains.includes(refererDomain);
         
         if (!domainMatches) {
           // Log the mismatch but don't block in development
