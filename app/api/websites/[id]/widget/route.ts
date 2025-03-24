@@ -50,7 +50,7 @@ export async function GET(
     }
     
     // Check if the referer matches the verified domain in production
-    if (process.env.NODE_ENV === 'production' && refererDomain) {
+    if (refererDomain) {
       // Extract the base domain for comparison, accounting for subdomains
       const refererBaseDomain = refererDomain.split('.').slice(-2).join('.');
       const websiteBaseDomain = websiteDomain.split('.').slice(-2).join('.');
@@ -140,7 +140,7 @@ export async function POST(
     }
 
     // Check if the domain is verified in production
-    if (process.env.NODE_ENV === 'production' && refererDomain) {
+    if (refererDomain) {
       const websiteDomain = website.domain;
       
       // Extract the base domain for comparison, accounting for subdomains

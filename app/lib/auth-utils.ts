@@ -23,11 +23,6 @@ export async function checkApiAuth(req: NextRequest) {
       };
     }
     
-    // Log successful auth access in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`API auth check passed: ${req.nextUrl.pathname} - User ${session.user.id}`);
-    }
-    
     return { 
       authenticated: true,
       session,

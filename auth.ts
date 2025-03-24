@@ -175,9 +175,6 @@ export const authOptions: AuthOptions = {
   // Secret for encrypting cookies
   secret: process.env.NEXTAUTH_SECRET,
   
-  // Configure debug mode
-  debug: process.env.NODE_ENV === "development",
-  
   // Configure pages
   pages: {
     signIn: "/auth/signin",

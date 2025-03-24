@@ -74,14 +74,14 @@ export async function GET(
           console.warn(`Domain mismatch: ${refererDomain} vs ${website.domain} or ${website.allowedDomains}`);
           
           // In production, block mismatched domains
-          if (process.env.NODE_ENV === 'production') {
+         
             return new NextResponse(`console.error("Domain not authorized");`, {
               status: 403,
               headers: {
                 'Content-Type': 'application/javascript',
               },
             });
-          }
+          
         }
       } catch (error) {
         console.error('Error parsing referer:', error);

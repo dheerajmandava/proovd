@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const host = request.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     widgetContent = widgetContent.replace(
-      "apiUrl = ${process.env.NEXTAUTH_URL || 'http://localhost:3000'};",
+      "apiUrl = '${process.env.NEXTAUTH_URL || 'http://localhost:3000'}';",
       `apiUrl = '${protocol}://${host}';`
     );
     
