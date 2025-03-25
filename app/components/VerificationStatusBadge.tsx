@@ -6,8 +6,7 @@ import {
   ShieldExclamationIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
-
-type VerificationStatus = 'pending' | 'verified' | 'failed';
+import { VerificationStatus } from '@/app/lib/domain-verification';
 
 interface VerificationStatusBadgeProps {
   status: VerificationStatus;
@@ -30,17 +29,17 @@ export default function VerificationStatusBadge({
   let label = '';
   
   switch (status) {
-    case 'verified':
+    case VerificationStatus.VERIFIED:
       statusClasses = "bg-green-100 text-green-800";
       icon = <ShieldCheckIcon className={iconClasses} />;
       label = "Verified";
       break;
-    case 'failed':
+    case VerificationStatus.FAILED:
       statusClasses = "bg-red-100 text-red-800";
       icon = <ShieldExclamationIcon className={iconClasses} />;
       label = "Failed";
       break;
-    case 'pending':
+    case VerificationStatus.PENDING:
     default:
       statusClasses = "bg-yellow-100 text-yellow-800";
       icon = <ClockIcon className={iconClasses} />;

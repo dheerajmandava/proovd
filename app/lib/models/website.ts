@@ -26,6 +26,7 @@ export interface WebsiteDocument extends Document {
     status: VerificationStatus;
     method?: VerificationMethod;
     token?: string;
+    attempts?: number;
     verifiedAt?: Date;
   };
   analytics?: {

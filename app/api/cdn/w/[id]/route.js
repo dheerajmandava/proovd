@@ -7,7 +7,8 @@ import { isValidObjectId } from 'mongoose';
  * Returns a small JavaScript loader that loads the main widget script
  * This is a public endpoint that users will include in their websites
  */
-export async function GET(request, { params }) {
+export async function GET(request, props) {
+  const params = await props.params;
   try {
     // Get the website ID from the params
     const { id } = params;

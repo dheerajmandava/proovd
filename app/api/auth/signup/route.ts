@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { connectToDatabase } from '@/app/lib/db';
-import User from '@/app/lib/models/user';
+import { createUser, getUserByEmail } from '@/app/lib/services';
+import { handleApiError } from '@/app/lib/utils/error';
 import { z } from 'zod';
 
 // Define the validation schema for registration
@@ -39,36 +39,13 @@ export async function POST(request: Request) {
     const { name, email, password } = result.data;
     console.log('Validated registration data for:', email);
 
-    // Connect to database
-    try {
-      await connectToDatabase();
-      console.log('Connected to database for registration');
-    } catch (dbError) {
-      console.error('Database connection error during registration:', dbError);
-      return NextResponse.json(
-        { success: false, message: 'Unable to connect to database. Please try again later.' },
-        { status: 500 }
-      );
-    }
-
     // Normalize email (lowercase, trim)
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email: normalizedEmail }).select('+authProvider');
+    const existingUser = await getUserByEmail(normalizedEmail);
     if (existingUser) {
-      console.log(`Registration attempted for existing user: ${normalizedEmail}, auth provider: ${existingUser.authProvider || 'unknown'}`);
-      
-      if (existingUser.authProvider === 'google') {
-        return NextResponse.json(
-          { 
-            success: false, 
-            message: 'This email is already registered using Google. Please sign in with Google.',
-            provider: 'google' 
-          },
-          { status: 409 }
-        );
-      }
+      console.log(`Registration attempted for existing user: ${normalizedEmail}`);
       
       return NextResponse.json(
         { 
@@ -84,45 +61,16 @@ export async function POST(request: Request) {
     const hashedPassword = await bcrypt.hash(password, salt);
     console.log(`Generated hashed password for ${normalizedEmail} (length: ${hashedPassword.length})`);
 
-    // Generate API key
-    const apiKey = uuidv4();
-
     try {
-      // Create new user with explicit authProvider and password fields
-      const userData = {
+      // Create new user using the service
+      const newUser = await createUser({
         name: name.trim(),
         email: normalizedEmail,
         password: hashedPassword,
-        authProvider: 'credentials',
-        apiKey,
-        plan: 'free',
-        lastLogin: new Date(),
-        websites: [],
-        usageStats: {
-          pageviews: 0,
-          lastReset: new Date()
-        }
-      };
-      
-      console.log('Attempting to create user with data:', { 
-        ...userData, 
-        password: hashedPassword ? `[Hashed: ${hashedPassword.substring(0, 10)}...]` : undefined 
+        authProvider: 'credentials'
       });
       
-      // Create the user directly with the User.create method
-      const newUser = await User.create(userData);
-      
       console.log(`User created successfully with ID: ${newUser._id}`);
-      
-      // Verify the user was saved with password by fetching it fresh from DB
-      // IMPORTANT: Use .select('+password +authProvider') to include fields with select: false
-      const savedUser = await User.findById(newUser._id).select('+password +authProvider');
-      
-      console.log(`User verification - ID: ${savedUser?._id}`);
-      console.log(`User verification - Email: ${savedUser?.email}`);
-      console.log(`User verification - Auth Provider: ${savedUser?.authProvider}`);
-      console.log(`User verification - Has password: ${Boolean(savedUser?.password)}`);
-      console.log(`User verification - Password length: ${savedUser?.password?.length || 0}`);
 
       // Return success response without sensitive data
       return NextResponse.json(
@@ -139,6 +87,7 @@ export async function POST(request: Request) {
       );
     } catch (error: any) {
       console.error('Error saving new user:', error);
+      const apiError = handleApiError(error);
       
       // Return a user-friendly error message
       return NextResponse.json(
@@ -146,13 +95,14 @@ export async function POST(request: Request) {
           success: false, 
           message: error.code === 11000 
             ? 'Email already in use' 
-            : 'Registration failed. Please try again later.' 
+            : apiError.message 
         },
-        { status: 500 }
+        { status: apiError.statusCode }
       );
     }
   } catch (error: any) {
     console.error('Registration error:', error);
+    const apiError = handleApiError(error);
     
     // Return a user-friendly error message
     return NextResponse.json(
@@ -160,9 +110,9 @@ export async function POST(request: Request) {
         success: false, 
         message: error.code === 11000 
           ? 'Email already in use' 
-          : 'Registration failed. Please try again later.' 
+          : apiError.message 
       },
-      { status: 500 }
+      { status: apiError.statusCode }
     );
   }
 } 

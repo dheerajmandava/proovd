@@ -9,10 +9,10 @@ import type { Account, User as AuthUser } from "next-auth"
 import type { SessionStrategy } from "next-auth"
 import { getServerSession } from "next-auth/next"
 import { MongoDBAdapter } from "@auth/mongodb-adapter"
-import { connectToDatabase } from "@/app/lib/db"
-import User from "@/app/lib/models/user"
-import { MongoClient } from "mongodb"
+import { getUserWithAuthData, updateUserLastLogin } from "@/app/lib/services/user.service"
+import { connectToDatabase, withDatabaseConnection } from "@/app/lib/database/connection"
 import { AuthOptions } from "next-auth"
+import { MongoClient } from "mongodb"
 
 // Define the validation schema for sign-in credentials
 const signInSchema = z.object({
@@ -31,30 +31,6 @@ interface UserDocument {
   plan?: string;
   [key: string]: any;
 }
-
-// MongoDB connection for the adapter
-let clientPromise: Promise<any>;
-
-// Initialize MongoDB client (without top-level await)
-const initMongoClient = () => {
-  try {
-    // Define async function to get the client
-    const getClient = async () => {
-      const { client } = await connectToDatabase();
-      return client;
-    };
-
-    // Execute it and set the promise
-    clientPromise = getClient();
-    return clientPromise;
-  } catch (error) {
-    console.error("Failed to establish MongoDB connection for Auth:", error);
-    throw error;
-  }
-};
-
-// Initialize the client
-initMongoClient();
 
 // Extend the built-in Session and User types
 declare module "next-auth" {
@@ -87,9 +63,46 @@ declare module "next-auth/jwt" {
   }
 }
 
+// Create a MongoDB client
+const mongoClient = new MongoClient(process.env.MONGODB_URI || "", {
+  maxPoolSize: 50,  // Match the pool size in connection.ts
+  connectTimeoutMS: 30000,
+  socketTimeoutMS: 60000,
+  serverSelectionTimeoutMS: 30000,
+});
+
+// Client promise
+const clientPromise = mongoClient.connect()
+  .then(client => {
+    console.log("Connected MongoDB client for Next Auth");
+    return client;
+  })
+  .catch(err => {
+    console.error("MongoDB client connection error:", err);
+    throw err;
+  });
+
+// Ensure the main database connection is also established
+connectToDatabase().catch(error => {
+  console.error("Failed to connect to MongoDB:", error);
+});
+
+// Wrap user service calls with retry logic for better reliability
+const getUserWithRetry = async (email: string) => {
+  return withDatabaseConnection(async () => {
+    return await getUserWithAuthData(email);
+  });
+};
+
+const updateUserLoginWithRetry = async (userId: string) => {
+  return withDatabaseConnection(async () => {
+    return await updateUserLastLogin(userId);
+  });
+};
+
 // Configure auth options
 export const authOptions: AuthOptions = {
-  // Use MongoDB as storage
+  // Use standard MongoDBAdapter with separate client
   adapter: MongoDBAdapter(clientPromise, {
     databaseName: process.env.MONGODB_DB || "proovd",
   }) as any,
@@ -112,11 +125,11 @@ export const authOptions: AuthOptions = {
         console.log("Attempting to authorize user:", credentials.email);
         
         try {
+          // Ensure database is connected before proceeding
           await connectToDatabase();
           
-          // Find user by email - using the new retry method
-          console.log("Finding user with retry mechanism");
-          const user = await User.findOneWithRetry({ email: credentials.email });
+          // Get the user with password from the database using the service with retry
+          const user = await getUserWithRetry(credentials.email);
           
           if (!user) {
             console.log("User not found:", credentials.email);
@@ -145,11 +158,8 @@ export const authOptions: AuthOptions = {
           
           console.log("User authenticated successfully:", credentials.email);
           
-          // Update last login time - using the new retry method
-          await User.updateOneWithRetry(
-            { _id: user._id },
-            { $set: { lastLogin: new Date() } }
-          );
+          // Update last login time using the service with retry
+          await updateUserLoginWithRetry(user._id.toString());
           
           return {
             id: user._id.toString(),
@@ -160,6 +170,15 @@ export const authOptions: AuthOptions = {
           };
         } catch (error) {
           console.error("Auth error:", error);
+          
+          // Attempt to reconnect for future requests
+          try {
+            console.log("Attempting to reconnect database for future auth requests...");
+            connectToDatabase().catch(err => console.error("Reconnection attempt failed:", err));
+          } catch (reconnectError) {
+            console.error("Failed to initiate reconnection:", reconnectError);
+          }
+          
           return null;
         }
       },
@@ -217,19 +236,17 @@ export const authOptions: AuthOptions = {
     async signIn({ user, account, profile, email, credentials }) {
       console.log("Sign in attempt for email:", user.email, "provider:", account?.provider);
       try {
+        // Ensure database is connected
         await connectToDatabase();
         
-        // Check if user already exists - using the new retry method
-        const existingUser = await User.findOneWithRetry({ email: user.email });
+        // Get user from database using service with retry
+        const existingUser = await getUserWithRetry(user.email);
         
         if (existingUser) {
           console.log("Existing user found for", user.email, ", updating last login time");
           
-          // Update existing user's last login time - using the new retry method
-          await User.updateOneWithRetry(
-            { _id: existingUser._id },
-            { $set: { lastLogin: new Date() } }
-          );
+          // Update existing user's last login time using service with retry
+          await updateUserLoginWithRetry(existingUser._id.toString());
           
           // Pass the ID from the database to the JWT
           user.id = existingUser._id.toString();
@@ -241,14 +258,36 @@ export const authOptions: AuthOptions = {
         return false;
       } catch (error) {
         console.error("Error during signIn callback:", error);
+        
+        // Attempt to reconnect for future requests
+        try {
+          console.log("Attempting to reconnect database after signIn error...");
+          connectToDatabase().catch(err => console.error("Reconnection attempt failed:", err));
+        } catch (reconnectError) {
+          console.error("Failed to initiate reconnection:", reconnectError);
+        }
+        
         return false;
       }
     },
   },
+  
+  // Add debug mode in non-production environments
+  debug: process.env.NODE_ENV !== 'production',
 };
 
-// Export the configured auth
-export const auth = async () => await getServerSession(authOptions);
+// Export the configured auth with improved error handling
+export const auth = async () => {
+  try {
+    // Ensure database is connected before getting the session
+    await connectToDatabase();
+    return await getServerSession(authOptions);
+  } catch (error) {
+    console.error("Error in auth function:", error);
+    // Return null session on error to prevent cascading failures
+    return null;
+  }
+};
 
 // For edge compatibility
 export default NextAuth(authOptions); 

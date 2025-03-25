@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Website from '@/app/lib/models/website';
-import { sanitizeInput, extractDomain } from '@/app/lib/server-utils';
 import { auth } from '@/auth';
-import { VerificationMethod } from '@/app/lib/domain-verification';
-import { initializeDomainVerification, verifyDomainWithDetails } from '@/app/lib/server-domain-verification';
-import Notification from '@/app/lib/models/notification';
-import mongoose from 'mongoose';
 import { isValidObjectId } from 'mongoose';
-import { getServerSession } from '@/auth';
-import { authOptions } from '@/auth';
-import { UserModel } from '@/app/lib/models/user';
-import { WebsiteModel } from '@/app/lib/models/website';
-import { Types } from 'mongoose';
-import { v4 as uuidv4 } from 'uuid';
-import { getUserWebsiteLimit, handleApiError } from '@/app/lib/api-helpers';
-import { Session } from 'next-auth';
+import { 
+  createWebsite, 
+  getWebsitesByUserId, 
+  getWebsiteById,
+  deleteWebsite, 
+  getWebsiteByDomain 
+} from '@/app/lib/services';
+import { 
+  CustomError, 
+  createUnauthorizedError, 
+  createBadRequestError, 
+  createNotFoundError, 
+  handleApiError 
+} from '@/app/lib/utils/server-error';
+import { extractDomain } from '@/app/lib/server-utils';
+import { initializeDomainVerification, verifyDomainWithDetails } from '@/app/lib/server-domain-verification';
+import { VerificationMethod } from '@/app/lib/domain-verification';
 
 /**
  * NOTE: MongoDB transactions require a replica set or mongos deployment.
@@ -28,115 +30,35 @@ import { Session } from 'next-auth';
  * See: https://www.mongodb.com/docs/manual/tutorial/deploy-replica-set/
  */
 
-// Corrected return type of createWebsiteWithRetry
-interface WebsiteDocument extends mongoose.Document {
-  _id: mongoose.Types.ObjectId;
-  name: string;
-  domain: string;
-  status: string;
-  verification: any;
-  createdAt: Date;
-  save: Function;
-}
-
-/**
- * Helper function to create a website with transaction support
- * Will retry on write conflicts up to the specified number of retries
- */
-async function createWebsiteWithRetry(
-  websiteData: any,
-  maxRetries = 3
-): Promise<WebsiteDocument> {
-  let attemptCount = 0;
-  let lastError: any = null;
-  
-  while (attemptCount < maxRetries) {
-    attemptCount++;
-    const session = await mongoose.startSession();
-    
-    try {
-      session.startTransaction();
-      
-      // Create new website with the provided data
-      const website = new Website(websiteData);
-      
-      // Save the website within the transaction
-      await website.save({ session });
-      console.log(`Website added with ID: ${website._id} (Attempt ${attemptCount})`);
-      
-      // Commit the transaction
-      await session.commitTransaction();
-      session.endSession();
-      
-      return website;
-    } catch (error: any) {
-      // Abort the transaction on error
-      if (session.inTransaction()) {
-        await session.abortTransaction();
-      }
-      session.endSession();
-      
-      // If it's a write conflict, retry
-      if (error.code === 112 && error.codeName === 'WriteConflict') {
-        console.log(`Write conflict encountered, retrying (${attemptCount}/${maxRetries})`);
-        lastError = error;
-        
-        // Add a small delay before retrying to reduce contention
-        await new Promise(resolve => setTimeout(resolve, 100 * attemptCount));
-        continue;
-      }
-      
-      // For other errors, throw immediately
-      throw error;
-    }
-  }
-  
-  // If we've exhausted retries, throw the last error
-  throw lastError || new Error('Failed to create website after maximum retries');
-}
-
 /**
  * POST /api/websites
  * Create a new website
  */
 export async function POST(req: NextRequest) {
-  console.log('Add website API called');
-  
   try {
     // Get authenticated user
     const session = await auth();
     if (!session?.user?.id) {
-      console.log('Authentication failed for website API');
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+      throw createUnauthorizedError('Authentication required');
     }
 
-    console.log(`Auth session accessed: user ${session.user.id} (${session.user.email})`);
-    
     // Parse request body
     const body = await req.json();
     const { name, domain, verificationMethod, verificationToken } = body;
-    console.log('Request data:', body);
     
     // Basic validation
     if (!name || !domain) {
-      return NextResponse.json({ error: 'Name and domain are required' }, { status: 400 });
+      throw createBadRequestError('Name and domain are required');
     }
     
     // Normalize domain
     const normalizedDomain = domain.replace(/^https?:\/\//, '').replace(/^www\./, '').trim().toLowerCase();
-    console.log('Processed domain:', normalizedDomain);
-    
-    // Connect to database
-    await connectToDatabase();
     
     // Check if domain already exists for this user
-    const existingWebsite = await Website.findOne({
-      userId: session.user.id,
-      domain: normalizedDomain
-    });
+    const existingWebsite = await getWebsiteByDomain(normalizedDomain);
     
-    if (existingWebsite) {
-      return NextResponse.json({ error: 'You already have a website with this domain' }, { status: 400 });
+    if (existingWebsite && existingWebsite.userId === session.user.id) {
+      throw createBadRequestError('You already have a website with this domain');
     }
     
     // Initialize domain verification
@@ -150,21 +72,15 @@ export async function POST(req: NextRequest) {
         token: verificationToken,
         attempts: 0
       };
-      console.log('Using provided verification token:', verificationToken);
     } else {
       // Generate a new verification token
       verification = initializeDomainVerification(normalizedDomain);
     }
     
-    console.log('Verification data:', verification);
-    
     // First verify the domain before creating the website
-    console.log('Verifying domain before creating website...');
     const verificationResult = await verifyDomainWithDetails(normalizedDomain, verification);
     
     if (!verificationResult.isVerified) {
-      console.log('Domain verification failed:', verificationResult.reason);
-      
       // Return the verification details so the user can complete verification
       return NextResponse.json({
         error: 'Domain verification required',
@@ -173,8 +89,6 @@ export async function POST(req: NextRequest) {
         token: verification.token,
       }, { status: 400 });
     }
-    
-    console.log('Domain verified successfully, creating website');
     
     // Create the website with status active and verification complete
     const websiteData = {
@@ -187,14 +101,22 @@ export async function POST(req: NextRequest) {
         status: 'verified',
         verifiedAt: new Date().toISOString()
       },
-      createdAt: new Date(),
-      notifications: []
+      settings: {
+        position: 'bottom-left',
+        delay: 5,
+        displayDuration: 5,
+        maxNotifications: 5,
+        theme: 'light',
+        displayOrder: 'newest',
+        randomize: false,
+        initialDelay: 5,
+        loop: false,
+        customStyles: ''
+      }
     };
     
-    // Create new website with retry for transaction conflicts
-    const website = await createWebsiteWithRetry(websiteData);
-    
-    console.log(`Website created with ID: ${website._id}`);
+    // Create new website
+    const website = await createWebsite(websiteData);
     
     return NextResponse.json({
       id: website._id,
@@ -205,10 +127,11 @@ export async function POST(req: NextRequest) {
     
   } catch (error: any) {
     console.error('Error creating website:', error);
-    return NextResponse.json({ 
-      error: 'Failed to create website',
-      details: error.message 
-    }, { status: 500 });
+    const apiError = handleApiError(error);
+    return NextResponse.json(
+      { error: apiError.message },
+      { status: apiError.statusCode }
+    );
   }
 }
 
@@ -249,118 +172,29 @@ Add the following meta tag to the <head> section of your website's homepage:
  */
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
+    // Authentication
     const session = await auth();
     if (!session?.user?.id) {
-      console.log('API authentication failed for websites route');
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      throw createUnauthorizedError('Authentication required');
     }
     
-    // Connect to the database
-    await connectToDatabase();
+    // Get websites from service
+    const websites = await getWebsitesByUserId(session.user.id);
     
-    // Get all websites for this user
-    const websites = await Website.find({ userId: session.user.id })
-      .sort({ createdAt: -1 });
+    // Format response with consistent structure
+    return NextResponse.json({ 
+      websites: websites,
+      success: true 
+    });
     
-    // Format response
-    const formattedWebsites = websites.map(website => ({
-      id: website._id.toString(),
-      name: website.name,
-      domain: website.domain,
-      status: website.status,
-      verification: website.verification,
-      createdAt: website.createdAt,
-      verifiedAt: website.verifiedAt,
-      analytics: {
-        totalImpressions: website.analytics?.totalImpressions || 0,
-        totalClicks: website.analytics?.totalClicks || 0,
-        conversionRate: website.analytics?.conversionRate || 0
-      }
-    }));
-    
-    return NextResponse.json({ websites: formattedWebsites });
-    
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching websites:', error);
-    
-    // More specific error handling
-    if (error instanceof mongoose.Error.MongooseServerSelectionError) {
-      return NextResponse.json(
-        { error: 'Database connection error', details: 'Please try again later' },
-        { status: 503 }
-      );
-    }
-    
+    const apiError = handleApiError(error);
     return NextResponse.json(
-      { error: 'Failed to fetch websites', details: (error as Error).message },
-      { status: 500 }
+      { error: apiError.message },
+      { status: apiError.statusCode }
     );
   }
-}
-
-/**
- * Helper function to delete a website with transaction support
- * Will retry on write conflicts up to the specified number of retries
- */
-async function deleteWebsiteWithRetry(
-  websiteId: string,
-  maxRetries = 3
-): Promise<boolean> {
-  let attemptCount = 0;
-  let lastError: any = null;
-  
-  while (attemptCount < maxRetries) {
-    attemptCount++;
-    const session = await mongoose.startSession();
-    
-    try {
-      session.startTransaction();
-      
-      // Delete the website
-      const result = await Website.deleteOne(
-        { _id: websiteId },
-        { session }
-      );
-      
-      // Make sure it was deleted
-      if (result.deletedCount !== 1) {
-        throw new Error('Website not found or already deleted');
-      }
-      
-      // Commit the transaction
-      await session.commitTransaction();
-      session.endSession();
-      
-      console.log(`Website deleted successfully (Attempt ${attemptCount})`);
-      return true;
-    } catch (error: any) {
-      // Abort the transaction on error
-      if (session.inTransaction()) {
-        await session.abortTransaction();
-      }
-      session.endSession();
-      
-      // If it's a write conflict, retry
-      if (error.code === 112 && error.codeName === 'WriteConflict') {
-        console.log(`Write conflict encountered during delete, retrying (${attemptCount}/${maxRetries})`);
-        lastError = error;
-        
-        // Add a small delay before retrying to reduce contention
-        await new Promise(resolve => setTimeout(resolve, 100 * attemptCount));
-        continue;
-      }
-      
-      // For other errors, throw immediately
-      throw error;
-    }
-  }
-  
-  // If we've exhausted retries, throw the last error
-  throw lastError || new Error('Failed to delete website after maximum retries');
 }
 
 /**
@@ -373,10 +207,7 @@ export async function DELETE(request: NextRequest) {
     // Check authentication
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      throw createUnauthorizedError('Authentication required');
     }
     
     // Get the website ID from the search params
@@ -384,37 +215,31 @@ export async function DELETE(request: NextRequest) {
     const websiteId = url.searchParams.get('id');
     
     if (!websiteId) {
-      return NextResponse.json(
-        { error: 'Website ID is required' },
-        { status: 400 }
-      );
+      throw createBadRequestError('Website ID is required');
     }
     
     if (!isValidObjectId(websiteId)) {
-      return NextResponse.json(
-        { error: 'Invalid website ID' },
-        { status: 400 }
-      );
+      throw createBadRequestError('Invalid website ID');
     }
     
-    // Connect to database
-    await connectToDatabase();
-    
-    // Check website ownership
-    const website = await Website.findOne({
-      _id: websiteId,
-      userId: session.user.id
-    });
+    // Get website to verify ownership
+    const website = await getWebsiteById(websiteId);
     
     if (!website) {
-      return NextResponse.json(
-        { error: 'Website not found or you do not have permission to delete it' },
-        { status: 404 }
-      );
+      throw createNotFoundError('Website not found');
     }
     
-    // Delete the website with retry logic
-    await deleteWebsiteWithRetry(websiteId);
+    // Check if user owns the website
+    if (website.userId !== session.user.id) {
+      throw createUnauthorizedError('You do not have permission to delete this website');
+    }
+    
+    // Delete the website with service
+    const success = await deleteWebsite(websiteId);
+    
+    if (!success) {
+      throw createNotFoundError('Website not found or already deleted');
+    }
     
     return NextResponse.json({ 
       success: true,
@@ -422,33 +247,10 @@ export async function DELETE(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Error deleting website:', error);
-    
-    if (error instanceof mongoose.Error.CastError) {
-      return NextResponse.json(
-        { error: 'Invalid website ID format' },
-        { status: 400 }
-      );
-    }
-    
-    // Handle transaction not supported error
-    if (error.codeName === 'IllegalOperation' && error.code === 20) {
-      return NextResponse.json({
-        error: 'Database configuration error',
-        details: 'MongoDB transactions require a replica set deployment for production use. Please update your MongoDB configuration.'
-      }, { status: 500 });
-    }
-    
-    // Handle write conflict errors
-    if (error.codeName === 'WriteConflict' && error.code === 112) {
-      return NextResponse.json({
-        error: 'Database write conflict',
-        details: 'Database encountered a conflict when deleting. Please try again.'
-      }, { status: 500 });
-    }
-    
+    const apiError = handleApiError(error);
     return NextResponse.json(
-      { error: 'Failed to delete website', details: error.message },
-      { status: 500 }
+      { error: apiError.message },
+      { status: apiError.statusCode }
     );
   }
 } 

@@ -22,14 +22,14 @@ export default function Header() {
         </div>
         
         <div className="flex-none gap-3">
-          <div className="dropdown dropdown-end">
+          {/* <div className="dropdown dropdown-end">
             <div className="indicator">
               <button className="btn btn-ghost btn-circle">
                 <BellIcon className="h-5 w-5" />
                 <span className="badge badge-sm badge-primary indicator-item">3</span>
               </button>
             </div>
-          </div>
+          </div> */}
           
           <div className="dropdown dropdown-end">
             <label tabIndex={0} className="btn btn-ghost btn-circle avatar">

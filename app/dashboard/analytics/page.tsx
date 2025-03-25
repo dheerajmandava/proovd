@@ -1,8 +1,7 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
-import { connectToDatabase } from '@/app/lib/db';
-import User from '@/app/lib/models/user';
-import Notification from '@/app/lib/models/notification';
+import { getUserByEmail } from '@/app/lib/services';
+import { getAnalyticsSummary, getAnalyticsDaily, getNotificationTypeBreakdown } from '@/app/lib/services/analytics.service';
 
 export default async function AnalyticsPage() {
   const session = await auth();
@@ -11,62 +10,27 @@ export default async function AnalyticsPage() {
     redirect('/auth/signin');
   }
 
-  await connectToDatabase();
-  
-  const user = await User.findOne({ email: session.user.email });
+  const user = await getUserByEmail(session.user.email);
   
   if (!user) {
     redirect('/auth/signin');
   }
 
-  // Get analytics data
-  const totalNotifications = await Notification.countDocuments({ userId: user._id });
+  // Get analytics data using services
+  const userId = user._id.toString();
   
-  // Get total displays and clicks
-  const stats = await Notification.aggregate([
-    { $match: { userId: user._id } },
-    { 
-      $group: { 
-        _id: null, 
-        totalDisplays: { $sum: "$displays" }, 
-        totalClicks: { $sum: "$clicks" } 
-      } 
-    }
-  ]);
+  // Get notification type breakdown
+  const typeBreakdown = await getNotificationTypeBreakdown(userId);
   
-  const totalDisplays = stats.length > 0 ? stats[0].totalDisplays : 0;
-  const totalClicks = stats.length > 0 ? stats[0].totalClicks : 0;
-  const clickRate = totalDisplays > 0 ? ((totalClicks / totalDisplays) * 100).toFixed(2) : 0;
+  // Get analytics summary (total notifications, displays, clicks)
+  const summary = await getAnalyticsSummary(userId);
+  const totalNotifications = summary.totalNotifications || 0;
+  const totalDisplays = summary.totalDisplays || 0;
+  const totalClicks = summary.totalClicks || 0;
+  const clickRate = totalDisplays > 0 ? ((totalClicks / totalDisplays) * 100).toFixed(2) : "0.00";
   
-  // Get notification types breakdown
-  const typeBreakdown = await Notification.aggregate([
-    { $match: { userId: user._id } },
-    { $group: { _id: "$type", count: { $sum: 1 } } },
-    { $sort: { count: -1 } }
-  ]);
-  
-  // Get recent performance (last 7 days)
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  
-  const dailyStats = await Notification.aggregate([
-    { 
-      $match: { 
-        userId: user._id,
-        createdAt: { $gte: sevenDaysAgo }
-      } 
-    },
-    {
-      $group: {
-        _id: { 
-          $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } 
-        },
-        displays: { $sum: "$displays" },
-        clicks: { $sum: "$clicks" }
-      }
-    },
-    { $sort: { _id: 1 } }
-  ]);
+  // Get daily stats for the last 7 days
+  const dailyStats = await getAnalyticsDaily(userId, 7);
   
   // Format data for charts
   const dates = [];

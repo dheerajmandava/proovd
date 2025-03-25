@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Notification from '@/app/lib/models/notification';
+import { trackNotificationImpression } from '@/app/lib/services/notification.service';
 import { isValidObjectId } from '@/app/lib/server-utils';
 
 /**
@@ -9,7 +8,8 @@ import { isValidObjectId } from '@/app/lib/server-utils';
  * Public endpoint to track notification impressions.
  * This does not require authentication.
  */
-export async function POST(request, { params }) {
+export async function POST(request, props) {
+  const params = await props.params;
   try {
     const { id } = params;
     const origin = request.headers.get('origin') || '*';
@@ -47,16 +47,10 @@ export async function POST(request, { params }) {
       );
     }
     
-    // Connect to the database
-    await connectToDatabase();
+    // Track impression using the service
+    const result = await trackNotificationImpression(id, websiteId);
     
-    // Find notification
-    const notification = await Notification.findOne({ 
-      _id: id,
-      siteId: websiteId
-    });
-    
-    if (!notification) {
+    if (!result) {
       return NextResponse.json(
         { error: 'Notification not found' },
         { 
@@ -68,41 +62,6 @@ export async function POST(request, { params }) {
           }
         }
       );
-    }
-    
-    // Track impression
-    notification.impressions = (notification.impressions || 0) + 1;
-    await notification.save();
-    
-    // Update website analytics
-    try {
-      const Website = (await import('@/app/lib/models/website')).default;
-      const website = await Website.findById(websiteId);
-      if (website) {
-        // Initialize analytics if needed
-        if (!website.analytics) {
-          website.analytics = {
-            totalImpressions: 0,
-            totalClicks: 0,
-            conversionRate: 0
-          };
-        }
-        
-        // Update impression count
-        website.analytics.totalImpressions = (website.analytics.totalImpressions || 0) + 1;
-        
-        // Recalculate conversion rate
-        const totalClicks = website.analytics.totalClicks || 0;
-        const totalImpressions = website.analytics.totalImpressions || 0;
-        website.analytics.conversionRate = totalImpressions > 0 
-          ? (totalClicks / totalImpressions) * 100 
-          : 0;
-        
-        await website.save();
-      }
-    } catch (error) {
-      console.error('Error updating website analytics:', error);
-      // Continue even if website analytics update fails
     }
     
     return NextResponse.json(

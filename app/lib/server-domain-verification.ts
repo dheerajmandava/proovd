@@ -1,7 +1,7 @@
 import dns from 'dns/promises';
 import https from 'https';
 import crypto from 'crypto';
-import { VerificationMethod, VerificationDetails } from './domain-verification';
+import { VerificationMethod, VerificationDetails, VerificationStatus } from './domain-verification';
 
 /**
  * Server-side domain extraction utility
@@ -61,7 +61,7 @@ export function initializeDomainVerification(
   const token = crypto.randomBytes(6).toString('hex');
   
   return {
-    status: 'pending',
+    status: VerificationStatus.PENDING,
     method: VerificationMethod.DNS, // Only use DNS verification
     token,
     attempts: 0

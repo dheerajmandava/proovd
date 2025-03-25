@@ -1,202 +1,192 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { CogIcon } from '@heroicons/react/24/outline';
-import Link from 'next/link';
+import { useWebsiteData, useWebsiteSettings, WebsiteData, WebsiteSettings } from '@/app/lib/hooks';
+import { useUserData, useUpdateUserPreferences } from '@/app/lib/hooks';
 
 interface SettingsTabProps {
   websiteId: string;
 }
 
-interface WebsiteSettings {
-  position: string;
-  delay: number;
-  displayDuration: number;
-  maxNotifications: number;
-  theme: string;
-  allowedDomains: string[];
-  email: string;
-  emailNotifications: boolean;
-  notificationDigest: string;
-  displayOrder: string;
-  randomize: boolean;
-  initialDelay: number;
-  loop: boolean;
-  customStyles: string;
-}
-
 export default function SettingsTab({ websiteId }: SettingsTabProps) {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  // State for new domain input
   const [newDomain, setNewDomain] = useState('');
-  const [settings, setSettings] = useState<WebsiteSettings>({
-    position: 'bottom-left',
-    delay: 5,
-    displayDuration: 5,
-    maxNotifications: 5,
-    theme: 'light',
-    allowedDomains: [],
-    email: '',
-    emailNotifications: true,
-    notificationDigest: 'daily',
-    displayOrder: 'newest',
-    randomize: false,
-    initialDelay: 5,
-    loop: false,
-    customStyles: ''
-  });
-  const [websiteName, setWebsiteName] = useState('');
-  const [websiteDomain, setWebsiteDomain] = useState('');
-
-  useEffect(() => {
-    fetchWebsite();
-  }, [websiteId]);
-
-  const fetchWebsite = async () => {
-    try {
-      // First fetch website settings
-      const websiteResponse = await fetch(`/api/websites/${websiteId}`);
-      
-      if (!websiteResponse.ok) {
-        throw new Error('Failed to fetch website');
-      }
-      
-      const websiteData = await websiteResponse.json();
-      setWebsiteName(websiteData.name);
-      setWebsiteDomain(websiteData.domain);
-      
-      // Then fetch user preferences
-      const userResponse = await fetch('/api/user/preferences');
-      let userData: { email?: string; emailNotifications?: boolean; notificationDigest?: string } = {};
-      
-      if (userResponse.ok) {
-        userData = await userResponse.json();
-      }
-      
-      // Set settings with defaults if any property is missing
-      setSettings({
-        position: websiteData.settings?.position || 'bottom-left',
-        delay: websiteData.settings?.delay || 5,
-        displayDuration: websiteData.settings?.displayDuration || 5,
-        maxNotifications: websiteData.settings?.maxNotifications || 5,
-        theme: websiteData.settings?.theme || 'light',
-        allowedDomains: websiteData.allowedDomains || [],
-        email: userData.email || '',
-        emailNotifications: userData.emailNotifications !== undefined ? userData.emailNotifications : true,
-        notificationDigest: userData.notificationDigest || 'daily',
-        displayOrder: websiteData.settings?.displayOrder || 'newest',
-        randomize: websiteData.settings?.randomize || false,
-        initialDelay: websiteData.settings?.initialDelay || websiteData.settings?.delay || 5,
-        loop: websiteData.settings?.loop || false,
-        customStyles: websiteData.settings?.customStyles || ''
-      });
-      
-      setIsLoading(false);
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to load website settings' });
-      setIsLoading(false);
-    }
+  const [message, setMessage] = useState({ type: '', text: '' });
+  
+  // Custom hook for fetching website data
+  const { 
+    website, 
+    isLoading: isLoadingWebsite, 
+    error: websiteError,
+    refreshWebsite 
+  } = useWebsiteData(websiteId);
+  
+  // Custom hook for updating website settings
+  const { 
+    updateSettings, 
+    isUpdating: isUpdatingSettings, 
+    error: updateSettingsError 
+  } = useWebsiteSettings();
+  
+  // Custom hooks for user data and preferences
+  const { 
+    user: userData, 
+    isLoading: isLoadingUser, 
+    error: userError 
+  } = useUserData();
+  
+  const { 
+    updatePreferences, 
+    isUpdating: isUpdatingPreferences 
+  } = useUpdateUserPreferences();
+  
+  // Combined loading state
+  const isLoading = isLoadingWebsite || isLoadingUser;
+  
+  // Prepare settings object combining website settings and user preferences
+  const combinedSettings = {
+    // Website settings with defaults
+    position: website?.settings?.position || 'bottom-left',
+    delay: website?.settings?.delay || 5,
+    displayDuration: website?.settings?.displayDuration || 5,
+    maxNotifications: website?.settings?.maxNotifications || 5,
+    theme: website?.settings?.theme || 'light',
+    displayOrder: website?.settings?.displayOrder || 'newest',
+    randomize: website?.settings?.randomize || false,
+    initialDelay: website?.settings?.initialDelay || 5,
+    loop: website?.settings?.loop || false,
+    customStyles: website?.settings?.customStyles || '',
+    
+    // User data with defaults
+    email: userData?.email || '',
+    emailNotifications: userData?.emailNotifications !== undefined 
+      ? userData.emailNotifications 
+      : true,
+    notificationDigest: userData?.notificationDigest || 'daily',
+    
+    // Allowed domains
+    allowedDomains: website?.allowedDomains || [],
   };
   
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+  // New state for tracking local changes
+  const [localSettings, setLocalSettings] = useState<Partial<WebsiteSettings> & { allowedDomains?: string[] }>({});
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Handle form input changes
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    let updatedValue: string | number | boolean = value;
     
-    setSettings(prev => ({
+    // Convert number fields
+    if (name === 'displayDuration' || name === 'delay' || name === 'initialDelay' || name === 'maxNotifications') {
+      updatedValue = parseInt(value, 10);
+    }
+    
+    // Convert checkbox fields
+    if (type === 'checkbox') {
+      updatedValue = (e.target as HTMLInputElement).checked;
+    }
+    
+    // Update local state instead of immediately saving
+    setLocalSettings(prev => ({
       ...prev,
-      [name]: name === 'displayDuration' || name === 'delay' || name === 'maxNotifications' 
-        ? parseInt(value, 10) 
-        : value
+      [name]: updatedValue
     }));
   };
 
+  // Track changes to see if save button should be enabled
+  useEffect(() => {
+    setHasChanges(Object.keys(localSettings).length > 0);
+  }, [localSettings]);
+
+  // Save all changes at once
+  const handleSaveSettings = () => {
+    if (!hasChanges) return;
+    
+    updateSettings(websiteId, localSettings)
+      .then(() => {
+        refreshWebsite();
+        setLocalSettings({});
+        setHasChanges(false);
+        setMessage({ type: 'success', text: 'Settings saved successfully' });
+      })
+      .catch((error) => {
+        setMessage({ type: 'error', text: error.message || 'Failed to save settings' });
+      });
+  };
+
+  // Handle slider changes
+  const handleSliderChange = (name: string, value: number) => {
+    setLocalSettings(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Handle adding a new domain
   const handleAddDomain = () => {
     if (!newDomain) return;
     
     const domain = newDomain.trim();
-    if (settings.allowedDomains.includes(domain)) {
+    const currentDomains = localSettings.allowedDomains || combinedSettings.allowedDomains;
+    
+    if (currentDomains.includes(domain)) {
       setMessage({ type: 'error', text: 'Domain already exists' });
       return;
     }
     
-    setSettings({
-      ...settings,
-      allowedDomains: [...settings.allowedDomains, domain]
-    });
-    setNewDomain('');
-  };
-  
-  const handleRemoveDomain = (domain: string) => {
-    setSettings({
-      ...settings,
-      allowedDomains: settings.allowedDomains.filter(d => d !== domain)
-    });
-  };
-  
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsSaving(true);
-    setMessage({ type: '', text: '' });
+    const newAllowedDomains = [...currentDomains, domain];
     
-    try {
-      // First update website settings
-      const websiteResponse = await fetch(`/api/websites/${websiteId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          settings: {
-            position: settings.position,
-            delay: settings.delay,
-            displayDuration: settings.displayDuration,
-            maxNotifications: settings.maxNotifications,
-            theme: settings.theme,
-            displayOrder: settings.displayOrder,
-            randomize: settings.randomize,
-            initialDelay: settings.initialDelay,
-            loop: settings.loop,
-            customStyles: settings.customStyles
-          },
-          allowedDomains: settings.allowedDomains,
-        }),
-      });
-      
-      if (!websiteResponse.ok) {
-        throw new Error('Failed to update website settings');
-      }
-      
-      // Then update user preferences
-      const userResponse = await fetch('/api/user/preferences', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: settings.email,
-          emailNotifications: settings.emailNotifications,
-          notificationDigest: settings.notificationDigest
-        }),
-      });
-      
-      if (!userResponse.ok) {
-        throw new Error('Failed to update user preferences');
-      }
-      
-      setMessage({ type: 'success', text: 'Settings saved successfully' });
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to save settings' });
-    } finally {
-      setIsSaving(false);
-    }
+    // Update local settings instead of making API call directly
+    setLocalSettings(prev => ({
+      ...prev,
+      allowedDomains: newAllowedDomains
+    }));
+    
+    setNewDomain('');
+    setMessage({ type: 'success', text: 'Domain added. Click Save Settings to apply changes.' });
   };
   
+  // Handle removing a domain
+  const handleRemoveDomain = (domain: string) => {
+    const currentDomains = localSettings.allowedDomains || combinedSettings.allowedDomains;
+    const newAllowedDomains = currentDomains.filter(d => d !== domain);
+    
+    // Update local settings instead of making API call directly
+    setLocalSettings(prev => ({
+      ...prev,
+      allowedDomains: newAllowedDomains
+    }));
+    
+    setMessage({ type: 'success', text: 'Domain removed. Click Save Settings to apply changes.' });
+  };
+  
+  // Combined settings object that prioritizes local changes
+  const displaySettings = {
+    ...combinedSettings,
+    ...localSettings
+  };
+
+  // Show loading state
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
         <span className="loading loading-spinner loading-lg text-primary"></span>
+      </div>
+    );
+  }
+  
+  // Show error state
+  if (websiteError || userError || updateSettingsError) {
+    const errorMessage = websiteError?.message || userError?.message || updateSettingsError?.message || 'Failed to load settings';
+    console.error('Settings tab error:', errorMessage);
+    
+    return (
+      <div className="alert alert-error">
+        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>{errorMessage}</span>
       </div>
     );
   }
@@ -218,19 +208,23 @@ export default function SettingsTab({ websiteId }: SettingsTabProps) {
         <div className="lg:col-span-2">
           <div className="card bg-base-100 shadow-xl">
             <div className="card-body">
-              <div className="card-title">
-                <CogIcon className="h-6 w-6 mr-2" />
+              <h2 className="card-title flex items-center">
+                <svg className="h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
                 Website Settings
-              </div>
+              </h2>
               
-              <form onSubmit={handleSubmit} className="mt-6">
-                <div className="form-control w-full">
-                  <label className="label">
-                    <span className="label-text font-medium">Notification Position</span>
-                  </label>
+              <div className="mt-4">
+                <div className="mb-6">
+                  <div className="flex justify-between mb-2">
+                    <label className="font-medium">Notification Position</label>
+                    <span className="text-sm capitalize">{displaySettings.position.replace('-', ' ')}</span>
+                  </div>
                   <select
                     name="position"
-                    value={settings.position}
+                    value={displaySettings.position}
                     onChange={handleChange}
                     className="select select-bordered w-full"
                   >
@@ -239,68 +233,70 @@ export default function SettingsTab({ websiteId }: SettingsTabProps) {
                     <option value="bottom-right">Bottom Right</option>
                     <option value="bottom-left">Bottom Left</option>
                   </select>
-                  <label className="label">
-                    <span className="label-text-alt">Where notifications appear on your website</span>
-                  </label>
+                  <p className="text-xs text-gray-500 mt-1">Where notifications appear on your website</p>
                 </div>
                 
-                <div className="form-control w-full">
-                  <label className="label">
-                    <span className="label-text font-medium">Delay Between Notifications (seconds)</span>
-                  </label>
-                  <input
-                    type="range"
-                    name="delay"
-                    min="0"
-                    max="20"
-                    value={settings.delay}
-                    onChange={handleChange}
-                    className="range range-primary"
-                  />
-                  <div className="w-full flex justify-between text-xs px-2 mt-2">
-                    <span>0s</span>
-                    <span>5s</span>
-                    <span>10s</span>
-                    <span>15s</span>
-                    <span>20s</span>
+                <div className="mb-6">
+                  <div className="flex justify-between mb-2">
+                    <label className="font-medium">Delay Between Notifications</label>
+                   
                   </div>
-                  <label className="label">
-                    <span className="label-text-alt">Current: {settings.delay} seconds</span>
-                  </label>
-                </div>
-                
-                <div className="form-control w-full">
-                  <label className="label">
-                    <span className="label-text font-medium">Maximum Notifications</span>
-                  </label>
-                  <input
-                    type="range"
-                    name="maxNotifications"
-                    min="1"
-                    max="10"
-                    value={settings.maxNotifications}
-                    onChange={handleChange}
-                    className="range range-primary"
-                  />
-                  <div className="w-full flex justify-between text-xs px-2 mt-2">
-                    <span>1</span>
-                    <span>3</span>
-                    <span>5</span>
-                    <span>7</span>
-                    <span>10</span>
+                  <div className="w-full max-w-xs">
+                    <input
+                      type="range"
+                      name="delay"
+                      min="0"
+                      max="20"
+                      value={displaySettings.delay}
+                      onChange={handleChange}
+                      className="range range-primary"
+                      step="1"
+                    />
+                    <div className="flex justify-between px-2.5 mt-2 text-xs">
+                      <span>0s</span>
+                      <span>5s</span>
+                      <span>10s</span>
+                      <span>15s</span>
+                      <span>20s</span>
+                    </div>
                   </div>
-                  <label className="label">
-                    <span className="label-text-alt">Current: {settings.maxNotifications} notifications</span>
-                  </label>
+                  <p className="text-xs text-gray-500 mt-1">Current: {displaySettings.delay} seconds</p>
                 </div>
                 
-                <div className="form-control w-full">
-                  <label className="label">
-                    <span className="label-text font-medium">Theme</span>
-                  </label>
+                <div className="mb-6">
+                  <div className="flex justify-between mb-2">
+                    <label className="font-medium">Maximum Notifications</label>
+                    <span className="text-sm">{displaySettings.maxNotifications}</span>
+                  </div>
+                  <div className="w-full max-w-xs">
+                    <input
+                      type="range"
+                      name="maxNotifications"
+                      min="1"
+                      max="10"
+                      value={displaySettings.maxNotifications}
+                      onChange={handleChange}
+                      className="range range-primary"
+                      step="1"
+                    />
+                    <div className="flex justify-between px-2.5 mt-2 text-xs">
+                      <span>1</span>
+                      <span>3</span>
+                      <span>5</span>
+                      <span>7</span>
+                      <span>10</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Current: {displaySettings.maxNotifications} notifications</p>
+                </div>
+                
+                <div className="mb-6">
+                  <div className="flex justify-between mb-2">
+                    <label className="font-medium">Theme</label>
+                  </div>
                   <select
                     name="theme"
-                    value={settings.theme}
+                    value={displaySettings.theme}
                     onChange={handleChange}
                     className="select select-bordered w-full"
                   >
@@ -308,330 +304,226 @@ export default function SettingsTab({ websiteId }: SettingsTabProps) {
                     <option value="dark">Dark</option>
                     <option value="custom">Custom</option>
                   </select>
-                  <label className="label">
-                    <span className="label-text-alt">Visual appearance of notifications</span>
-                  </label>
+                  <p className="text-xs text-gray-500 mt-1">Visual appearance of notifications</p>
                 </div>
                 
-                <div className="form-control w-full">
-                  <label className="label">
-                    <span className="label-text font-medium">Display Order</span>
-                  </label>
+                <div className="mb-6">
+                  <div className="flex justify-between mb-2">
+                    <label className="font-medium">Display Order</label>
+                  </div>
                   <select
                     name="displayOrder"
-                    value={settings.displayOrder}
+                    value={displaySettings.displayOrder}
                     onChange={handleChange}
                     className="select select-bordered w-full"
                   >
                     <option value="newest">Newest First</option>
-                    <option value="random">Random</option>
-                    <option value="smart">Smart (Optimized)</option>
+                    <option value="oldest">Oldest First</option>
                   </select>
-                  <label className="label">
-                    <span className="label-text-alt">How notifications are ordered when displayed</span>
-                  </label>
-                </div>
-                
-                <div className="form-control w-full">
-                  <label className="label">
-                    <span className="label-text font-medium">Initial Delay (seconds)</span>
-                  </label>
-                  <input
-                    type="range"
-                    name="initialDelay"
-                    min="0"
-                    max="30"
-                    value={settings.initialDelay}
-                    onChange={handleChange}
-                    className="range range-primary"
-                  />
-                  <div className="w-full flex justify-between text-xs px-2 mt-2">
-                    <span>0s</span>
-                    <span>10s</span>
-                    <span>20s</span>
-                    <span>30s</span>
-                  </div>
-                  <label className="label">
-                    <span className="label-text-alt">Current: {settings.initialDelay} seconds</span>
-                  </label>
-                </div>
-                
-                <div className="form-control w-full">
-                  <label className="label">
-                    <span className="label-text font-medium">Advanced Options</span>
-                  </label>
-                  <div className="flex flex-col gap-3 mt-2">
-                    <div className="flex items-center">
-                      <label className="label cursor-pointer justify-start gap-2">
-                        <input
-                          type="checkbox"
-                          name="randomize"
-                          checked={settings.randomize}
-                          onChange={(e) => setSettings({...settings, randomize: e.target.checked})}
-                          className="checkbox checkbox-primary"
-                        />
-                        <span className="label-text">Randomize Notifications</span>
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <label className="label cursor-pointer justify-start gap-2">
-                        <input
-                          type="checkbox"
-                          name="loop"
-                          checked={settings.loop}
-                          onChange={(e) => setSettings({...settings, loop: e.target.checked})}
-                          className="checkbox checkbox-primary"
-                        />
-                        <span className="label-text">Loop Notifications</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                
-                {settings.theme === 'custom' && (
-                  <div className="form-control w-full">
-                    <label className="label">
-                      <span className="label-text font-medium">Custom CSS</span>
-                    </label>
-                    <textarea
-                      name="customStyles"
-                      value={settings.customStyles}
-                      onChange={(e) => setSettings({...settings, customStyles: e.target.value})}
-                      className="textarea textarea-bordered h-24 font-mono text-sm"
-                      placeholder=".notification { background: #f5f5f5; }"
-                    />
-                    <label className="label">
-                      <span className="label-text-alt">Custom CSS for notification styling</span>
-                    </label>
-                  </div>
-                )}
-                
-                <div className="form-control w-full">
-                  <label className="label">
-                    <span className="label-text font-medium">Display Duration (seconds)</span>
-                  </label>
-                  <input
-                    type="range"
-                    name="displayDuration"
-                    min="1"
-                    max="20"
-                    value={settings.displayDuration}
-                    onChange={handleChange}
-                    className="range range-primary"
-                  />
-                  <div className="w-full flex justify-between text-xs px-2 mt-2">
-                    <span>1s</span>
-                    <span>5s</span>
-                    <span>10s</span>
-                    <span>15s</span>
-                    <span>20s</span>
-                  </div>
-                  <label className="label">
-                    <span className="label-text-alt">Current: {settings.displayDuration} seconds</span>
-                  </label>
-                </div>
-                
-                <div className="card-title mb-6 mt-6">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
-                  </svg>
-                  Allowed Domains
-                </div>
-                
-                <div className="form-control mb-4">
-                  <label className="label">
-                    <span className="label-text font-medium">Domain Name</span>
-                  </label>
-                  <div className="flex space-x-2">
-                    <input
-                      type="text"
-                      placeholder="example.com"
-                      value={newDomain}
-                      onChange={(e) => setNewDomain(e.target.value)}
-                      className="input input-bordered flex-grow"
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={handleAddDomain}
-                    >
-                      Add
-                    </button>
-                  </div>
-                  <label className="label">
-                    <span className="label-text-alt">Add domains that can show notifications from this website</span>
-                  </label>
+                  <p className="text-xs text-gray-500 mt-1">How notifications are ordered when displayed</p>
                 </div>
                 
                 <div className="mb-6">
-                  {settings.allowedDomains.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="table table-compact w-full">
-                        <thead>
-                          <tr>
-                            <th>Domain</th>
-                            <th className="w-20 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {settings.allowedDomains.map((domain, index) => (
-                            <tr key={index}>
-                              <td>{domain}</td>
-                              <td className="text-right">
-                                <button
-                                  type="button"
-                                  className="btn btn-xs btn-error"
-                                  onClick={() => handleRemoveDomain(domain)}
-                                >
-                                  Remove
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  <div className="flex justify-between mb-2">
+                    <label className="font-medium">Initial Delay</label>
+                    <span className="text-sm">{displaySettings.initialDelay} seconds</span>
+                  </div>
+                  <div className="w-full max-w-xs">
+                    <input
+                      type="range"
+                      name="initialDelay"
+                      min="0"
+                      max="30"
+                      value={displaySettings.initialDelay}
+                      onChange={handleChange}
+                      className="range range-primary"
+                      step="1"
+                    />
+                    <div className="flex justify-between px-2.5 mt-2 text-xs">
+                      <span>0s</span>
+                      <span>10s</span>
+                      <span>20s</span>
+                      <span>30s</span>
                     </div>
-                  ) : (
-                    <div className="alert alert-info">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                      </svg>
-                      <span>No domains added yet. Add domains to control where notifications can appear.</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Current: {displaySettings.initialDelay} seconds</p>
+                </div>
+                
+                <div className="mb-6">
+                  <p className="font-medium mb-2">Advanced Options</p>
+                  
+                  <div className="form-control mb-2">
+                    <label className="label cursor-pointer justify-start">
+                      <input
+                        type="checkbox"
+                        name="randomize"
+                        checked={displaySettings.randomize}
+                        onChange={handleChange}
+                        className="checkbox checkbox-primary mr-2"
+                      />
+                      <span className="label-text">Randomize Notifications</span>
+                    </label>
+                  </div>
+                  
+                  <div className="form-control">
+                    <label className="label cursor-pointer justify-start">
+                      <input
+                        type="checkbox"
+                        name="loop"
+                        checked={displaySettings.loop}
+                        onChange={handleChange}
+                        className="checkbox checkbox-primary mr-2"
+                      />
+                      <span className="label-text">Loop Notifications</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div className="mb-6">
+                  <div className="flex justify-between mb-2">
+                    <label className="font-medium">Display Duration</label>
+                    <span className="text-sm">{displaySettings.displayDuration} seconds</span>
+                  </div>
+                  <div className="w-full max-w-xs">
+                    <input
+                      type="range"
+                      name="displayDuration"
+                      min="1"
+                      max="20"
+                      value={displaySettings.displayDuration}
+                      onChange={handleChange}
+                      className="range range-primary"
+                      step="1"
+                    />
+                    <div className="flex justify-between px-2.5 mt-2 text-xs">
+                      <span>1s</span>
+                      <span>5s</span>
+                      <span>10s</span>
+                      <span>15s</span>
+                      <span>20s</span>
                     </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Current: {displaySettings.displayDuration} seconds</p>
+                </div>
+              </div>
+
+              {/* Add save button at the bottom of the settings card */}
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  className={`btn ${hasChanges ? 'btn-primary' : 'btn-disabled'}`}
+                  onClick={handleSaveSettings}
+                  disabled={!hasChanges}
+                >
+                  Save Settings
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div className="card bg-base-100 shadow-xl mt-6">
+            <div className="card-body">
+              <h2 className="card-title flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Allowed Domains
+              </h2>
+              
+              <p className="text-sm text-gray-600 mt-2">
+                By default, your widget will only load on {website?.domain}. Add additional domains where you want to display notifications.
+              </p>
+              
+              {/* Allowed Domains List */}
+              <div className="mt-4">
+                <h3 className="font-medium text-lg mb-2">Allowed Domains</h3>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {(localSettings.allowedDomains || combinedSettings.allowedDomains).map((domain) => (
+                    <div key={domain} className="badge badge-primary badge-lg gap-2">
+                      {domain}
+                      <button 
+                        type="button" 
+                        className="btn btn-xs btn-ghost btn-circle"
+                        onClick={() => handleRemoveDomain(domain)}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                  {(localSettings.allowedDomains || combinedSettings.allowedDomains).length === 0 && (
+                    <p className="text-sm text-base-content/70">No domains added yet. Add domains to allow notifications on additional websites.</p>
                   )}
                 </div>
-                
-                <div className="card-title mb-6">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                  </svg>
-                  Notification Preferences
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="form-control w-full">
-                    <label className="label">
-                      <span className="label-text font-medium">Email</span>
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={settings.email}
-                      onChange={handleChange}
-                      className="input input-bordered w-full"
-                    />
-                    <label className="label">
-                      <span className="label-text-alt">Used for notifications and account updates</span>
-                    </label>
-                  </div>
-                  
-                  <div className="form-control w-full">
-                    <label className="label">
-                      <span className="label-text font-medium">Email Notifications</span>
-                    </label>
-                    <div className="flex items-center h-12">
-                      <label className="label cursor-pointer justify-start gap-2">
-                        <input
-                          type="checkbox"
-                          name="emailNotifications"
-                          checked={settings.emailNotifications}
-                          onChange={(e) => setSettings({...settings, emailNotifications: e.target.checked})}
-                          className="checkbox checkbox-primary"
-                        />
-                        <span className="label-text">Receive email notifications</span>
-                      </label>
-                    </div>
-                    <label className="label">
-                      <span className="label-text-alt">Get notified about important updates</span>
-                    </label>
-                  </div>
-                  
-                  <div className="form-control w-full">
-                    <label className="label">
-                      <span className="label-text font-medium">Notification Digest</span>
-                    </label>
-                    <select
-                      name="notificationDigest"
-                      value={settings.notificationDigest}
-                      onChange={handleChange}
-                      className="select select-bordered w-full"
-                      disabled={!settings.emailNotifications}
-                    >
-                      <option value="realtime">Real-time</option>
-                      <option value="daily">Daily Digest</option>
-                      <option value="weekly">Weekly Digest</option>
-                    </select>
-                    <label className="label">
-                      <span className="label-text-alt">How often you receive email summaries</span>
-                    </label>
-                  </div>
-                </div>
-                
-                <div className="form-control w-full mt-6">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <label className="label mb-0 pb-0">
-                        <span className="label-text font-medium">API Keys</span>
-                      </label>
-                      <label className="label mt-0 pt-0">
-                        <span className="label-text-alt">Manage API keys for this website</span>
-                      </label>
-                    </div>
-                    <Link 
-                      href={`/dashboard/websites/${websiteId}/api-keys`} 
-                      className="btn btn-sm btn-primary"
-                    >
-                      Manage API Keys
-                    </Link>
-                  </div>
-                </div>
-                
-                <div className="card-actions justify-end mt-6">
-                  <button
-                    type="submit"
-                    disabled={isSaving}
+                {/* Add Domain Form */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="example.com"
+                    className="input input-bordered flex-grow"
+                    value={newDomain}
+                    onChange={(e) => setNewDomain(e.target.value)}
+                  />
+                  <button 
+                    type="button"
                     className="btn btn-primary"
+                    onClick={handleAddDomain}
                   >
-                    {isSaving ? (
-                      <>
-                        <span className="loading loading-spinner loading-xs"></span>
-                        Saving...
-                      </>
-                    ) : 'Save Settings'}
+                    Add Domain
                   </button>
                 </div>
-              </form>
+              </div>
             </div>
           </div>
         </div>
         
-        <div>
+        <div className="lg:col-span-1">
           <div className="card bg-base-100 shadow-xl">
             <div className="card-body">
-              <div className="card-title">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 mr-2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+              <h2 className="card-title flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 About Settings
+              </h2>
+              
+              <div className="mt-4 space-y-4">
+                <div>
+                  <p className="font-medium">Position:</p>
+                  <p className="text-sm">Determines where notifications appear on your visitors' screens.</p>
+                </div>
+                
+                <div>
+                  <p className="font-medium">Theme:</p>
+                  <p className="text-sm">Choose between light and dark appearance for notifications.</p>
+                </div>
+                
+                <div>
+                  <p className="font-medium">Display Duration:</p>
+                  <p className="text-sm">How long each notification remains visible.</p>
+                </div>
+                
+                <div>
+                  <p className="font-medium">Delay Between Notifications:</p>
+                  <p className="text-sm">Wait time before showing the next notification.</p>
+                </div>
+                
+                <div>
+                  <p className="font-medium">Maximum Notifications:</p>
+                  <p className="text-sm">Limits how many notifications a visitor sees per session.</p>
+                </div>
+                
+                <div>
+                  <p className="font-medium">Allowed Domains:</p>
+                  <p className="text-sm">Control which domains can display your notifications.</p>
+                </div>
               </div>
-              <div className="text-sm space-y-3 mt-4">
-                <p>
-                  <span className="font-semibold">Position:</span> Determines where notifications appear on your visitors' screens.
-                </p>
-                <p>
-                  <span className="font-semibold">Theme:</span> Choose between light and dark appearance for notifications.
-                </p>
-                <p>
-                  <span className="font-semibold">Display Duration:</span> How long each notification remains visible.
-                </p>
-                <p>
-                  <span className="font-semibold">Delay Between Notifications:</span> Wait time before showing the next notification.
-                </p>
-                <p>
-                  <span className="font-semibold">Maximum Notifications:</span> Limits how many notifications a visitor sees per session.
-                </p>
-                <p>
-                  <span className="font-semibold">Allowed Domains:</span> Control which domains can display your notifications.
+              
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                <h3 className="font-semibold">Need Help?</h3>
+                <p className="mt-2 text-sm">
+                  Check out our <a href="#" className="text-blue-600 hover:underline">documentation</a> for more information on how to customize your notifications.
                 </p>
               </div>
             </div>

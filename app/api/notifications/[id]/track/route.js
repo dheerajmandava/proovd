@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Notification from '@/app/lib/models/notification';
-import User from '@/app/lib/models/user';
+import { trackNotificationImpression, trackNotificationClick } from '@/app/lib/services';
+import { getUserByApiKey } from '@/app/lib/services/user.service';
+import { handleApiError } from '@/app/lib/utils/error';
 
-export async function POST(request, { params }) {
+export async function POST(request, props) {
+  const params = await props.params;
   try {
     const notificationId = params.id;
     const body = await request.json();
@@ -16,10 +17,8 @@ export async function POST(request, { params }) {
       );
     }
 
-    await connectToDatabase();
-
     // Find user by API key
-    const user = await User.findOne({ apiKey });
+    const user = await getUserByApiKey(apiKey);
 
     if (!user) {
       return NextResponse.json(
@@ -28,34 +27,28 @@ export async function POST(request, { params }) {
       );
     }
 
-    // Find notification
-    const notification = await Notification.findOne({
-      _id: notificationId,
-      userId: user._id
-    });
+    // Track based on action type
+    let success = false;
+    if (action === 'display') {
+      success = await trackNotificationImpression(notificationId, user._id);
+    } else if (action === 'click') {
+      success = await trackNotificationClick(notificationId, user._id);
+    }
 
-    if (!notification) {
+    if (!success) {
       return NextResponse.json(
-        { error: 'Notification not found' },
+        { error: 'Notification not found or tracking failed' },
         { status: 404 }
       );
     }
 
-    // Update notification stats
-    if (action === 'display') {
-      notification.displayCount += 1;
-    } else if (action === 'click') {
-      notification.clickCount += 1;
-    }
-
-    await notification.save();
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error tracking notification:', error);
+    const apiError = handleApiError(error);
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: apiError.message },
+      { status: apiError.statusCode }
     );
   }
 } 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { connectToDatabase } from '@/app/lib/db';
+import { connectToDatabase } from '@/app/lib/database/connection';
 import User from '@/app/lib/models/user';
 import { z } from 'zod';
 

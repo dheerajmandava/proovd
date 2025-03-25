@@ -24,11 +24,11 @@ export enum VerificationStatus {
  * Verification data interface
  */
 export interface VerificationDetails {
-  status: 'pending' | 'verified' | 'failed';
+  status: VerificationStatus;
   method: VerificationMethod;
   token: string;
   attempts: number;
-  verifiedAt?: string;
+  verifiedAt?: Date;
 }
 
 /**
@@ -86,7 +86,7 @@ export function initializeDomainVerification(
   const token = generateVerificationToken(domain);
   
   return {
-    status: 'pending',
+    status: VerificationStatus.PENDING,
     method,
     token,
     attempts: 0

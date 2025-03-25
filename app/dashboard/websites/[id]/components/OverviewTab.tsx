@@ -76,17 +76,22 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
         if (!notificationsResponse.ok) throw new Error('Failed to load notifications');
         const notificationsData = await notificationsResponse.json();
         
-        // Format notifications for display
-        const formatted = notificationsData.notifications.map((notification: any) => ({
-          id: notification.id,
-          name: notification.name,
-          action: notification.type === 'purchase' ? 'Purchased' : 
-                  notification.type === 'signup' ? 'Signed up' : 'Custom',
-          location: notification.location || 'Global',
-          timestamp: notification.createdAt,
-          timeAgo: formatTimeAgo(notification.createdAt),
-        }));
-        setFormattedNotifications(formatted);
+        // Format notifications for display with safety check
+        if (notificationsData && notificationsData.notifications && Array.isArray(notificationsData.notifications)) {
+          const formatted = notificationsData.notifications.map((notification: any) => ({
+            id: notification.id,
+            name: notification.name,
+            action: notification.type === 'purchase' ? 'Purchased' : 
+                    notification.type === 'signup' ? 'Signed up' : 'Custom',
+            location: notification.location || 'Global',
+            timestamp: notification.createdAt,
+            timeAgo: formatTimeAgo(notification.createdAt),
+          }));
+          setFormattedNotifications(formatted);
+        } else {
+          console.error('Unexpected notifications data format:', notificationsData);
+          setFormattedNotifications([]);
+        }
       } catch (err: any) {
         setError(err.message || 'An error occurred');
       } finally {
@@ -133,8 +138,8 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
     );
   }
 
-  // Generate the installation code snippet
-  const installationCode = `<script src="https://cdn.proovd.in/w/${websiteData.id}.js"></script>`;
+  // Generate the installation code snippet with proper website ID
+  const installationCode = `<script src="https://cdn.proovd.in/w/${websiteId}.js"></script>`;
 
   // Update the conversion rate rendering to safely handle division by zero
   const renderConversionRate = () => {

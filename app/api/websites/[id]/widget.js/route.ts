@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Website from '@/app/lib/models/website';
+import { getWebsiteById } from '@/app/lib/services';
 import { isValidObjectId } from 'mongoose';
+import { handleApiError } from '@/app/lib/utils/error';
 import { sanitizeInput } from '@/app/lib/server-utils';
 
 /**
@@ -12,10 +12,8 @@ import { sanitizeInput } from '@/app/lib/server-utils';
  * 
  * Authentication is based on the website ID and domain verification.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // Get the website ID from the params
     const { id } = params;
@@ -33,11 +31,8 @@ export async function GET(
       });
     }
 
-    // Connect to the database
-    await connectToDatabase();
-
-    // Get the website
-    const website = await Website.findOne({ _id: id });
+    // Get the website using service layer
+    const website = await getWebsiteById(id);
 
     if (!website) {
       return new NextResponse(`console.error("Website not found");`, {

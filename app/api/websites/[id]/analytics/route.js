@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Website from '@/app/lib/models/website';
-import Notification from '@/app/lib/models/notification';
-import Metric from '@/app/lib/models/metric';
-import { getMetricsTimeSeries, getTopNotifications } from '@/app/lib/analytics';
+import { 
+  getWebsiteById, 
+  getWebsiteMetricsSummary, 
+  getWebsiteTimeSeries, 
+  getTopNotifications 
+} from '@/app/lib/services';
+import { handleApiError } from '@/app/lib/utils/error';
 import { auth } from '@/auth';
 
 /**
@@ -11,7 +13,8 @@ import { auth } from '@/auth';
  * 
  * Gets analytics data for a specific website
  */
-export async function GET(req, { params }) {
+export async function GET(req, props) {
+  const params = await props.params;
   try {
     const { id } = params;
     const searchParams = req.nextUrl.searchParams;
@@ -42,67 +45,33 @@ export async function GET(req, { params }) {
       );
     }
 
-    // Connect to database
-    await connectToDatabase();
+    // Verify website ownership using service
+    const website = await getWebsiteById(id);
 
-    // Verify website ownership
-    const website = await Website.findOne({
-      _id: id,
-      userId: session.user.id
-    });
-
-    if (!website) {
+    if (!website || website.userId !== session.user.id) {
       return NextResponse.json(
         { error: 'Website not found' },
         { status: 404 }
       );
     }
 
-    // Get time series data
-    const timeSeries = await getMetricsTimeSeries(
-      website._id,
-      timeRange,
-      groupBy
-    );
-
-    // Get summary metrics
-    const totalImpressions = await Metric.countDocuments({
-      siteId: website._id,
-      type: 'impression'
-    });
-
-    const totalClicks = await Metric.countDocuments({
-      siteId: website._id,
-      type: 'click'
-    });
-
-    const conversionRate = totalImpressions > 0 
-      ? ((totalClicks / totalImpressions) * 100).toFixed(2) 
-      : '0.00';
-
-    const totalNotifications = await Notification.countDocuments({
-      siteId: website._id
-    });
-
-    // Get top performing notifications
-    const topNotifications = await getTopNotifications(website._id, 5);
+    // Get analytics data using services
+    const summary = await getWebsiteMetricsSummary(id);
+    const timeSeries = await getWebsiteTimeSeries(id, timeRange, groupBy);
+    const topNotifications = await getTopNotifications(id, 5);
 
     // Return the analytics data
     return NextResponse.json({
-      summary: {
-        totalImpressions,
-        totalClicks,
-        conversionRate,
-        totalNotifications
-      },
+      summary,
       timeSeries,
       topNotifications
     });
   } catch (error) {
     console.error('Error fetching analytics:', error);
+    const apiError = handleApiError(error);
     return NextResponse.json(
-      { error: 'Failed to fetch analytics' },
-      { status: 500 }
+      { error: apiError.message },
+      { status: apiError.statusCode }
     );
   }
 } 

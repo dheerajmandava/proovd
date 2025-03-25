@@ -1,9 +1,7 @@
 import Link from 'next/link';
 import { auth } from '@/auth';
-import { connectToDatabase } from '@/app/lib/db';
-import Website from '@/app/lib/models/website';
-import Notification from '@/app/lib/models/notification';
-import Metric from '@/app/lib/models/metric';
+import { getWebsiteMetricsSummary } from '@/app/lib/services';
+import { getServerSideWebsitesRaw } from '@/app/lib/server/data-fetchers';
 import WebsiteCard from './components/WebsiteCard';
 import { GlobeAltIcon, PlusIcon } from '@heroicons/react/24/outline';
 
@@ -24,37 +22,14 @@ export default async function WebsitesPage() {
     );
   }
 
-  // Connect to the database
-  await connectToDatabase();
+  // Get all websites for this user (raw data)
+  const websites = await getServerSideWebsitesRaw();
 
-  // Get all websites for this user
-  const websites = await Website.find({ userId: session.user.id })
-    .sort({ createdAt: -1 });
-
-  // Get metrics for each website
+  // Get metrics for each website and prepare data for display
   const websitesWithMetrics = await Promise.all(
     websites.map(async (website) => {
-      // Get notification count
-      const notificationsCount = await Notification.countDocuments({ 
-        siteId: website._id 
-      });
-
-      // Get impression count
-      const impressionsCount = await Metric.countDocuments({ 
-        siteId: website._id, 
-        type: 'impression' 
-      });
-
-      // Get click count
-      const clicksCount = await Metric.countDocuments({ 
-        siteId: website._id, 
-        type: 'click' 
-      });
-
-      // Calculate conversion rate
-      const conversionRate = impressionsCount > 0 
-        ? ((clicksCount / impressionsCount) * 100).toFixed(2) 
-        : '0.00';
+      // Get website metrics summary
+      const metrics = await getWebsiteMetricsSummary(website._id.toString());
 
       // Get the first API key from the apiKeys array if it exists
       const apiKey = website.apiKeys && website.apiKeys.length > 0 
@@ -82,10 +57,10 @@ export default async function WebsitesPage() {
         apiKeys: safeApiKeys,
         status: website.status || 'pending',
         createdAt: website.createdAt,
-        notificationsCount: notificationsCount || 0,
-        impressionsCount: impressionsCount || 0,
-        clicksCount: clicksCount || 0,
-        conversionRate: conversionRate || '0.00'
+        notificationsCount: metrics.totalNotifications || 0,
+        impressionsCount: metrics.totalImpressions || 0,
+        clicksCount: metrics.totalClicks || 0,
+        conversionRate: metrics.conversionRate || '0.00'
       }));
     })
   );

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Website from '@/app/lib/models/website';
-import Notification from '@/app/lib/models/notification';
+import { getWebsiteById } from '@/app/lib/services';
+import { isValidObjectId } from 'mongoose';
 import { cors } from '@/app/lib/cors';
+import { handleApiError } from '@/app/lib/utils/error';
+import Notification from '@/app/lib/models/notification';
 
 /**
  * GET /api/websites/[id]/widget
@@ -10,10 +11,8 @@ import { cors } from '@/app/lib/cors';
  * Serve the widget JS file for a specific website
  * Now uses domain-based verification instead of API key
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // Apply CORS headers for cross-origin requests
   const corsResponse = cors(request);
   if (corsResponse instanceof NextResponse) return corsResponse;
@@ -21,15 +20,20 @@ export async function GET(
   try {
     const { id } = params;
     
+    // Validate the ID
+    if (!isValidObjectId(id)) {
+      return NextResponse.json(
+        { error: 'Invalid website ID' },
+        { status: 400 }
+      );
+    }
+    
     // Get the referer header (the domain that loaded the script)
     const referer = request.headers.get('referer');
     const refererDomain = referer ? new URL(referer).hostname : null;
 
-    // Connect to the database
-    await connectToDatabase();
-
-    // Get the website by ID
-    const website = await Website.findOne({ _id: id });
+    // Get the website by ID using the service
+    const website = await getWebsiteById(id);
 
     if (!website) {
       return NextResponse.json(
@@ -38,26 +42,31 @@ export async function GET(
       );
     }
 
-    // Check if the domain is verified
-    const websiteDomain = website.domain;
-    const isVerified = website.verification?.status === 'verified' || website.status === 'verified';
-    
-    if (!isVerified) {
+    // Check if the website is active
+    if (website.status !== 'active' && website.status !== 'verified') {
       return NextResponse.json(
-        { error: 'Domain not verified', verificationStatus: website.verification.status },
+        { error: 'Website is not active' },
         { status: 403 }
       );
     }
     
-    // Check if the referer matches the verified domain in production
+    // Check if the domain is verified or if the referer domain is allowed
     if (refererDomain) {
-      // Extract the base domain for comparison, accounting for subdomains
-      const refererBaseDomain = refererDomain.split('.').slice(-2).join('.');
-      const websiteBaseDomain = websiteDomain.split('.').slice(-2).join('.');
+      // Extract base domain for comparison (e.g., example.com from www.example.com)
+      const websiteDomain = website.domain.toLowerCase();
+      const baseDomain = refererDomain.replace(/^www\./, '');
+      const websiteBaseDomain = websiteDomain.replace(/^www\./, '');
       
-      if (refererBaseDomain !== websiteBaseDomain && !refererDomain.endsWith(websiteDomain)) {
+      // Check if domains match or if referer is in allowed domains
+      const allowedDomains = website.allowedDomains || [];
+      const isDomainAllowed = 
+        baseDomain === websiteBaseDomain || 
+        allowedDomains.includes(refererDomain) ||
+        allowedDomains.includes(baseDomain);
+      
+      if (!isDomainAllowed) {
         return NextResponse.json(
-          { error: 'Domain mismatch' },
+          { error: 'Unauthorized domain' },
           { status: 403 }
         );
       }
@@ -111,10 +120,8 @@ export async function GET(
  * Track clicks on notifications in the widget
  * Now uses domain-based verification instead of API key
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // Apply CORS headers for cross-origin requests
   const corsResponse = cors(request);
   if (corsResponse instanceof NextResponse) return corsResponse;

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Notification from '@/app/lib/models/notification';
-import Website from '@/app/lib/models/website';
+import { 
+  getWebsiteByApiKey, 
+  getNotificationById, 
+  updateNotification, 
+  createMetric, 
+  hasSessionSeenNotification 
+} from '@/app/lib/services';
 import { sanitizeInput } from '@/app/lib/server-utils';
-import Metric from '@/app/lib/models/metric';
 import { isBot } from '@/app/lib/bot-detection';
+import { handleApiError } from '@/app/lib/utils/server-error';
 
 /**
  * API endpoint for tracking impressions and clicks on notifications
@@ -40,11 +44,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Connect to database
-    await connectToDatabase();
-
     // Validate API key and get website
-    const website = await Website.findOne({ apiKey, status: 'active' });
+    const website = await getWebsiteByApiKey(apiKey);
     if (!website) {
       return NextResponse.json(
         { error: 'Invalid API key' },
@@ -56,12 +57,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Find notification
-    const notification = await Notification.findOne({ 
-      _id: notificationId,
-      siteId: website._id
-    });
-
-    if (!notification) {
+    const notification = await getNotificationById(notificationId);
+    if (!notification || notification.siteId.toString() !== website._id.toString()) {
       return NextResponse.json(
         { error: 'Notification not found' },
         { 
@@ -89,17 +86,11 @@ export async function POST(request: NextRequest) {
     
     // For impressions, check if this session has already seen this notification
     if (action === 'impression' && sessionId) {
-      const existingImpression = await Metric.findOne({
-        notificationId,
-        sessionId,
-        type: 'impression'
-      });
-      
-      isUnique = !existingImpression;
+      isUnique = !(await hasSessionSeenNotification(notificationId, sessionId));
     }
 
     // Create metric entry
-    const metric = await Metric.create({
+    await createMetric({
       siteId: website._id,
       notificationId: notification._id,
       type: action === 'impression' ? 'impression' : 'click',
@@ -110,23 +101,21 @@ export async function POST(request: NextRequest) {
       sessionId,
       clientId,
       isBot: detectedAsBot,
-      isUnique,
-      timestamp: new Date()
+      isUnique
     });
 
     // Only update notification counts for non-bot traffic and unique impressions for impressions
     if (!detectedAsBot && (action !== 'impression' || isUnique)) {
       // Update notification counts
+      const updates: any = {};
+      
       if (action === 'impression') {
-        notification.displayCount = (notification.displayCount || 0) + 1;
-        // Also track unique impression count
-        if (isUnique) {
-          notification.uniqueImpressionCount = (notification.uniqueImpressionCount || 0) + 1;
-        }
+        updates.impressions = (notification.impressions || 0) + 1;
       } else if (action === 'click') {
-        notification.clickCount = (notification.clickCount || 0) + 1;
+        updates.clicks = (notification.clicks || 0) + 1;
       }
-      await notification.save();
+      
+      await updateNotification(notificationId, updates);
     }
 
     return NextResponse.json(
@@ -138,10 +127,11 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error tracking event:', error);
+    const apiError = handleApiError(error);
     return NextResponse.json(
-      { error: 'Failed to track event' },
+      { error: apiError.message },
       { 
-        status: 500,
+        status: apiError.statusCode,
         headers 
       }
     );

@@ -143,20 +143,39 @@
         if (data.settings) {
           console.log('Proovd: Received server settings:', data.settings);
           
+          // Save previous settings for comparison
+          const prevPosition = config.position;
+          const prevTheme = config.theme;
+          
           // Apply all settings from server
           config.position = data.settings.position || config.position;
           config.theme = data.settings.theme || config.theme;
           config.delay = data.settings.delay || config.delay;
           config.displayTime = data.settings.displayDuration || config.displayTime;
           config.maxNotifications = data.settings.maxNotifications || config.maxNotifications;
-          config.initialDelay = data.settings.initialDelay || config.initialDelay || config.delay;
-          config.loop = data.settings.loop !== undefined ? data.settings.loop : (config.loop || false);
-          config.randomize = data.settings.randomize !== undefined ? data.settings.randomize : (config.randomize || false);
-          config.displayOrder = data.settings.displayOrder || config.displayOrder || 'newest';
-          config.customStyles = data.settings.customStyles || config.customStyles || '';
+          config.initialDelay = data.settings.initialDelay || config.initialDelay;
+          config.loop = typeof data.settings.loop === 'boolean' ? data.settings.loop : config.loop;
+          config.randomize = typeof data.settings.randomize === 'boolean' ? data.settings.randomize : config.randomize;
+          config.displayOrder = data.settings.displayOrder || config.displayOrder;
+          config.customStyles = data.settings.customStyles || config.customStyles;
           
-          // Update container position based on new settings
-          setPosition(container, config.position);
+          // Always update container position when settings change
+          if (prevPosition !== config.position) {
+            console.log('Proovd: Updating position to', config.position);
+            setPosition(container, config.position);
+          }
+          
+          // Update theme on existing notifications if changed
+          if (prevTheme !== config.theme && shadow) {
+            console.log('Proovd: Updating theme to', config.theme);
+            const notifications = shadow.querySelectorAll('.proovd-notification');
+            notifications.forEach(notification => {
+              // Remove old theme classes
+              notification.classList.remove('proovd-theme-light', 'proovd-theme-dark', 'proovd-theme-blue', 'proovd-theme-green', 'proovd-theme-red', 'proovd-theme-minimal');
+              // Add new theme class
+              notification.classList.add(`proovd-theme-${config.theme}`);
+            });
+          }
           
           // Apply custom styles if provided
           if (config.customStyles && shadow) {
@@ -174,17 +193,12 @@
           let notifications = data.notifications;
           
           // Apply display order setting
-          if (config.displayOrder === 'random' || config.randomize) {
+          if (config.randomize || config.displayOrder === 'random') {
             // Randomize order
             notifications = shuffleArray([...notifications]);
-          } else if (config.displayOrder === 'smart') {
-            // Smart ordering logic (most engaging first)
-            notifications.sort((a, b) => {
-              // Sort by conversion rate (clicks/impressions)
-              const aRate = a.clicks && a.impressions ? (a.clicks / a.impressions) : 0;
-              const bRate = b.clicks && b.impressions ? (b.clicks / b.impressions) : 0;
-              return bRate - aRate;
-            });
+          } else if (config.displayOrder === 'oldest') {
+            // Reverse to show oldest first
+            notifications = [...notifications].reverse();
           }
           // 'newest' is default (no sorting needed as API already returns newest first)
           
@@ -216,8 +230,15 @@
    * Display notifications one at a time with delays
    */
   function displayNotificationsSequentially(notifications) {
-    let currentIndex = 0;
     let notificationsQueue = [...notifications];
+    
+    // Clear any existing notifications if container exists
+    if (shadow) {
+      const existingNotifications = shadow.querySelectorAll('.proovd-notification');
+      existingNotifications.forEach(notification => {
+        removeNotification(notification);
+      });
+    }
     
     const showNext = () => {
       if (notificationsQueue.length === 0) {
@@ -236,7 +257,7 @@
           // Add a small delay before starting the loop again
           setTimeout(() => {
             showNext();
-          }, 2000); // 2 second pause between loops
+          }, config.delay * 1000); // Use the configured delay between loops
         }
         return;
       }
@@ -248,8 +269,8 @@
       trackImpression(notification._id);
       
       // Set timeout for next notification
-        setTimeout(() => {
-          showNext();
+      setTimeout(() => {
+        showNext();
       }, (config.displayTime + config.delay) * 1000);
     };
     

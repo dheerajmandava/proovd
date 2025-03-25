@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { connectToDatabase } from '@/app/lib/db';
-import Notification from '@/app/lib/models/notification';
-import Website from '@/app/lib/models/website';
+import { getWebsiteById, getNotificationById, updateNotification, deleteNotification } from '@/app/lib/services';
+import { isValidObjectId } from 'mongoose';
 import { sanitizeInput } from '@/app/lib/server-utils';
+import { handleApiError } from '@/app/lib/utils/server-error';
 import Metric from '@/app/lib/models/metric';
 
 /**
@@ -11,9 +11,10 @@ import Metric from '@/app/lib/models/metric';
  * 
  * Gets a specific notification with its metrics
  */
-export async function GET(_req, { params }) {
+export async function GET(_req, context) {
   try {
-    const { id, notificationId } = params;
+    const id = (await context.params).id;
+    const notificationId = (await context.params).notificationId;
 
     // Check authentication
     const session = await auth();
@@ -24,16 +25,18 @@ export async function GET(_req, { params }) {
       );
     }
 
-    // Connect to database
-    await connectToDatabase();
+    // Validate IDs
+    if (!isValidObjectId(id) || !isValidObjectId(notificationId)) {
+      return NextResponse.json(
+        { error: 'Invalid ID format' },
+        { status: 400 }
+      );
+    }
 
     // Verify website ownership
-    const website = await Website.findOne({
-      _id: id,
-      userId: session.user.id
-    });
+    const website = await getWebsiteById(id);
 
-    if (!website) {
+    if (!website || website.userId !== session.user.id) {
       return NextResponse.json(
         { error: 'Website not found' },
         { status: 404 }
@@ -41,12 +44,9 @@ export async function GET(_req, { params }) {
     }
 
     // Get the notification
-    const notification = await Notification.findOne({
-      _id: notificationId,
-      siteId: website._id
-    });
+    const notification = await getNotificationById(notificationId);
 
-    if (!notification) {
+    if (!notification || notification.siteId.toString() !== id) {
       return NextResponse.json(
         { error: 'Notification not found' },
         { status: 404 }
@@ -88,9 +88,10 @@ export async function GET(_req, { params }) {
     });
   } catch (error) {
     console.error('Error fetching notification:', error);
+    const apiError = handleApiError(error);
     return NextResponse.json(
-      { error: 'Failed to fetch notification' },
-      { status: 500 }
+      { error: apiError.message },
+      { status: apiError.statusCode }
     );
   }
 }
@@ -100,9 +101,10 @@ export async function GET(_req, { params }) {
  * 
  * Updates a specific notification
  */
-export async function PATCH(req, { params }) {
+export async function PATCH(req, context) {
   try {
-    const { id, notificationId } = params;
+    const id = (await context.params).id;
+    const notificationId = (await context.params).notificationId;
 
     // Check authentication
     const session = await auth();
@@ -117,16 +119,10 @@ export async function PATCH(req, { params }) {
     const body = await req.json();
     const { name, location, productName, url, image, status } = body;
 
-    // Connect to database
-    await connectToDatabase();
-
     // Verify website ownership
-    const website = await Website.findOne({
-      _id: id,
-      userId: session.user.id
-    });
+    const website = await getWebsiteById(id);
 
-    if (!website) {
+    if (!website || website.userId !== session.user.id) {
       return NextResponse.json(
         { error: 'Website not found' },
         { status: 404 }
@@ -134,12 +130,9 @@ export async function PATCH(req, { params }) {
     }
 
     // Get the notification
-    const notification = await Notification.findOne({
-      _id: notificationId,
-      siteId: website._id
-    });
+    const notification = await getNotificationById(notificationId);
 
-    if (!notification) {
+    if (!notification || notification.siteId.toString() !== id) {
       return NextResponse.json(
         { error: 'Notification not found' },
         { status: 404 }
@@ -190,9 +183,10 @@ export async function PATCH(req, { params }) {
  * 
  * Deletes a specific notification and its metrics
  */
-export async function DELETE(_req, { params }) {
+export async function DELETE(_req, context) {
   try {
-    const { id, notificationId } = params;
+    const id = (await context.params).id;
+    const notificationId = (await context.params).notificationId;
 
     // Check authentication
     const session = await auth();
@@ -203,16 +197,10 @@ export async function DELETE(_req, { params }) {
       );
     }
 
-    // Connect to database
-    await connectToDatabase();
-
     // Verify website ownership
-    const website = await Website.findOne({
-      _id: id,
-      userId: session.user.id
-    });
+    const website = await getWebsiteById(id);
 
-    if (!website) {
+    if (!website || website.userId !== session.user.id) {
       return NextResponse.json(
         { error: 'Website not found' },
         { status: 404 }
@@ -220,12 +208,9 @@ export async function DELETE(_req, { params }) {
     }
 
     // Get the notification
-    const notification = await Notification.findOne({
-      _id: notificationId,
-      siteId: website._id
-    });
+    const notification = await getNotificationById(notificationId);
 
-    if (!notification) {
+    if (!notification || notification.siteId.toString() !== id) {
       return NextResponse.json(
         { error: 'Notification not found' },
         { status: 404 }
@@ -236,7 +221,7 @@ export async function DELETE(_req, { params }) {
     await Metric.deleteMany({ notificationId });
 
     // Delete the notification
-    await Notification.deleteOne({ _id: notificationId });
+    await deleteNotification(notificationId);
 
     // Return success
     return NextResponse.json({

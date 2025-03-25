@@ -20,6 +20,7 @@ export default function WebsiteSelector({ activeWebsiteId, onSelect }: WebsiteSe
   const [websites, setWebsites] = useState<Website[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   
@@ -27,19 +28,43 @@ export default function WebsiteSelector({ activeWebsiteId, onSelect }: WebsiteSe
     const fetchWebsites = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('/api/websites');
-        const data = await response.json();
+        setError(null);
         
-        if (data.websites) {
+        const response = await fetch('/api/websites', {
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Error ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('Fetched websites data:', data);
+        
+        if (data.websites && Array.isArray(data.websites)) {
           setWebsites(data.websites);
           
           // If we have websites but no active ID, set the first one
           if (data.websites.length > 0 && !activeWebsiteId) {
             onSelect(data.websites[0]._id);
           }
+        } else if (data && Array.isArray(data)) {
+          // Handle case where API returns array directly
+          setWebsites(data);
+          
+          // If we have websites but no active ID, set the first one
+          if (data.length > 0 && !activeWebsiteId) {
+            onSelect(data[0]._id);
+          }
+        } else {
+          console.error('Unexpected API response format:', data);
+          setError('Unexpected data format from API');
+          setWebsites([]);
         }
       } catch (error) {
         console.error('Error fetching websites:', error);
+        setError('Failed to load websites');
+        setWebsites([]);
       } finally {
         setIsLoading(false);
       }
@@ -66,6 +91,15 @@ export default function WebsiteSelector({ activeWebsiteId, onSelect }: WebsiteSe
       <div className="select select-bordered w-full h-12 flex items-center justify-between opacity-70">
         <span className="loading loading-spinner loading-sm"></span>
         <span>Loading websites...</span>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="alert alert-error p-2 text-xs">
+        <span>{error}</span>
+        <button onClick={() => window.location.reload()} className="btn btn-xs btn-ghost">Retry</button>
       </div>
     );
   }

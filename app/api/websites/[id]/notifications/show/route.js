@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Website from '@/app/lib/models/website';
-import Notification from '@/app/lib/models/notification';
+import { getWebsiteById, getNotificationsByWebsiteId } from '@/app/lib/services';
 import { isValidObjectId } from '@/app/lib/server-utils';
+import { handleApiError } from '@/app/lib/utils/error';
 
 /**
  * GET /api/websites/[id]/notifications/show
@@ -10,7 +9,8 @@ import { isValidObjectId } from '@/app/lib/server-utils';
  * Public endpoint to fetch active notifications for a website.
  * This endpoint does not require authentication but validates the domain.
  */
-export async function GET(request, { params }) {
+export async function GET(request, props) {
+  const params = await props.params;
   try {
     const { id } = params;
     const url = request.nextUrl.searchParams.get('url');
@@ -31,11 +31,8 @@ export async function GET(request, { params }) {
       );
     }
 
-    // Connect to the database
-    await connectToDatabase();
-
-    // Find the website
-    const website = await Website.findOne({ _id: id });
+    // Get the website using service
+    const website = await getWebsiteById(id);
 
     if (!website) {
       return NextResponse.json(
@@ -89,56 +86,49 @@ export async function GET(request, { params }) {
       }
     }
 
-    // Get active notifications for this website
-    // Sort by priority (high to low) and then by creation date (newest first)
-    const notifications = await Notification.find({ 
-      siteId: id,
-      status: 'active'
-    }).sort({ priority: -1, createdAt: -1 });
+    // Get active notifications using service
+    const notifications = await getNotificationsByWebsiteId(id);
 
     // Format notifications for response
     const formattedNotifications = notifications.map(notification => {
-      // Convert the notification to a plain object
-      const notificationObj = notification.toObject ? notification.toObject() : notification;
-      
       // Use fake timestamp if available
-      if (notificationObj.fakeTimestamp) {
-        notificationObj.timestamp = notificationObj.fakeTimestamp;
+      if (notification.fakeTimestamp) {
+        notification.timestamp = notification.fakeTimestamp;
       } else {
-        notificationObj.timestamp = notificationObj.createdAt;
+        notification.timestamp = notification.createdAt;
       }
       
       // Use pre-defined timeAgo if available
-      if (!notificationObj.timeAgo) {
+      if (!notification.timeAgo) {
         const now = new Date();
-        const createdAt = new Date(notificationObj.timestamp || notificationObj.createdAt);
+        const createdAt = new Date(notification.timestamp || notification.createdAt);
         const diffMs = now - createdAt;
         const diffMins = Math.round(diffMs / 60000);
         
         if (diffMins < 1) {
-          notificationObj.timeAgo = 'Just now';
+          notification.timeAgo = 'Just now';
         } else if (diffMins < 60) {
-          notificationObj.timeAgo = `${diffMins} minutes ago`;
+          notification.timeAgo = `${diffMins} minutes ago`;
         } else if (diffMins < 1440) {
           const hours = Math.floor(diffMins / 60);
-          notificationObj.timeAgo = `${hours} hours ago`;
+          notification.timeAgo = `${hours} hours ago`;
         } else {
           const days = Math.floor(diffMins / 1440);
-          notificationObj.timeAgo = `${days} days ago`;
+          notification.timeAgo = `${days} days ago`;
         }
       }
       
       // Ensure critical display parameters are present
-      if (!notificationObj.displayFrequency) {
-        notificationObj.displayFrequency = 'always';
+      if (!notification.displayFrequency) {
+        notification.displayFrequency = 'always';
       }
       
-      if (!notificationObj.displayDuration) {
-        notificationObj.displayDuration = 
+      if (!notification.displayDuration) {
+        notification.displayDuration = 
           website.settings?.displayDuration || 5;
       }
       
-      return notificationObj;
+      return notification;
     });
 
     // Get advanced website settings for the widget
@@ -176,11 +166,12 @@ export async function GET(request, { params }) {
   } catch (error) {
     console.error('Error fetching public notifications:', error);
     const origin = request.headers.get('origin') || '*';
+    const apiError = handleApiError(error);
     
     return NextResponse.json(
-      { error: 'Failed to fetch notifications' },
+      { error: apiError.message },
       { 
-        status: 500,
+        status: apiError.statusCode,
         headers: {
           'Access-Control-Allow-Origin': origin,
           'Access-Control-Allow-Methods': 'GET, OPTIONS',

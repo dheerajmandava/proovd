@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Website from '@/app/lib/models/website';
-import Notification from '@/app/lib/models/notification';
-import Metric from '@/app/lib/models/metric';
+import { getWebsiteById, createMetric, updateNotification } from '@/app/lib/services';
 import { isValidObjectId } from '@/app/lib/server-utils';
+import { handleApiError } from '@/app/lib/utils/server-error';
 
 /**
  * POST /api/metrics
@@ -40,12 +38,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Connect to database
-    await connectToDatabase();
-
     // Find website by ID
-    const website = await Website.findOne({ _id: websiteId, status: { $in: ['active', 'verified'] } });
-    if (!website) {
+    const website = await getWebsiteById(websiteId);
+    if (!website || !['active', 'verified'].includes(website.status)) {
       return NextResponse.json(
         { error: 'Website not found or inactive' },
         { status: 404 }
@@ -58,37 +53,31 @@ export async function POST(req: NextRequest) {
     }
 
     // Create metric record
-    const metric = new Metric({
+    await createMetric({
       siteId: website._id,
       notificationId,
       type,
       url,
       userAgent: req.headers.get('user-agent'),
       ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
-      timestamp: new Date()
+      isBot: false,
+      isUnique: true
     });
 
-    await metric.save();
-
     // Update notification metrics counter
-    if (type === 'impression') {
-      await Notification.updateOne(
-        { _id: notificationId },
-        { $inc: { impressions: 1 } }
-      );
-    } else if (type === 'click') {
-      await Notification.updateOne(
-        { _id: notificationId },
-        { $inc: { clicks: 1 } }
-      );
-    }
+    const updates = type === 'impression' 
+      ? { impressions: 1 } 
+      : { clicks: 1 };
+      
+    await updateNotification(notificationId, updates, true); // Using increment=true
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error recording metric:', error);
+    const apiError = handleApiError(error);
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: apiError.message },
+      { status: apiError.statusCode }
     );
   }
 } 

@@ -5,14 +5,12 @@ import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { auth } from '@/auth';
-import { connectToDatabase } from '@/app/lib/db';
-import Website from '@/app/lib/models/website';
+import { VerificationMethod } from '@/app/lib/domain-verification';
 import { Check, Copy, AlertTriangle, Info, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Button } from '@/app/components/ui/button';
 import CodeSection from '@/app/dashboard/components/CodeSection';
-import { VerificationMethod } from '@/app/lib/domain-verification';
 import LoadingScreen from '@/app/components/ui/loading-screen';
 import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
 

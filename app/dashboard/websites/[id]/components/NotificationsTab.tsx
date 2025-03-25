@@ -3,25 +3,30 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { timeAgo } from '@/app/lib/utils';
+import { useNotifications, useDeleteNotification } from '@/app/lib/hooks';
+import type { Notification as NotificationType } from '@/app/lib/hooks';
 
 // Define notification type interface
 interface Notification {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  location: string;
-  productName?: string;
-  message?: string;
-  url?: string;
+  _id: string;
+  title: string;
+  message: string;
+  link?: string;
   image?: string;
+  status: string;
+  siteId: string;
+  impressions: number;
+  clicks: number;
   createdAt: string;
   updatedAt: string;
+  priority?: number;
+  fakeTimestamp?: string;
+  timeAgo?: string;
 }
 
 // Define website interface
 interface Website {
-  id: string;
+  _id: string;
   name: string;
   domain: string;
 }
@@ -31,34 +36,43 @@ interface NotificationsTabProps {
 }
 
 export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [website, setWebsite] = useState<Website | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [fetchError, setFetchError] = useState('');
   
-  // Fetch website and notifications
+  // Use custom hooks for notifications data and deletion
+  const { 
+    notifications, 
+    isLoading, 
+    error: notificationsError, 
+    refreshNotifications 
+  } = useNotifications(websiteId);
+  
+  const { 
+    deleteNotification, 
+    isDeleting, 
+    error: deleteError 
+  } = useDeleteNotification();
+  
+  // Track which notifications are being deleted
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  
+  // Fetch website data
   useEffect(() => {
-    async function fetchData() {
+    async function fetchWebsiteData() {
       try {
-        // Fetch website data
+        if (!websiteId) return;
+        
         const websiteResponse = await fetch(`/api/websites/${websiteId}`);
         if (!websiteResponse.ok) throw new Error('Failed to load website');
         const websiteData = await websiteResponse.json();
         setWebsite(websiteData);
-        
-        // Fetch notifications
-        const notificationsResponse = await fetch(`/api/websites/${websiteId}/notifications`);
-        if (!notificationsResponse.ok) throw new Error('Failed to load notifications');
-        const notificationsData = await notificationsResponse.json();
-        setNotifications(notificationsData.notifications || []);
       } catch (err: any) {
-        setError(err.message || 'An error occurred');
-      } finally {
-        setIsLoading(false);
+        console.error('Error fetching website data:', err);
+        setFetchError(err.message || 'Failed to load website');
       }
     }
     
-    fetchData();
+    fetchWebsiteData();
   }, [websiteId]);
   
   // Handle notification delete
@@ -68,21 +82,21 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
     }
     
     try {
-      const response = await fetch(
-        `/api/websites/${websiteId}/notifications/${notificationId}`,
-        { method: 'DELETE' }
-      );
+      setDeletingIds(prev => new Set(prev).add(notificationId));
       
-      if (!response.ok) {
-        throw new Error('Failed to delete notification');
-      }
+      await deleteNotification(notificationId);
       
-      // Remove deleted notification from state
-      setNotifications(prev => 
-        prev.filter(notification => notification.id !== notificationId)
-      );
+      // Refresh the notifications list
+      refreshNotifications();
     } catch (err: any) {
-      alert(err.message || 'Failed to delete notification');
+      console.error('Failed to delete notification:', err);
+      alert('Failed to delete notification. Please try again.');
+    } finally {
+      setDeletingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(notificationId);
+        return newSet;
+      });
     }
   }
   
@@ -96,6 +110,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
   }
   
   // Show error state
+  const error = notificationsError || fetchError || deleteError;
   if (error) {
     return (
       <div className="alert alert-error shadow-lg">
@@ -103,7 +118,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span>{error}</span>
+          <span>{error.toString()}</span>
         </div>
       </div>
     );
@@ -147,131 +162,53 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6">
-          {notifications.map((notification) => (
-            <div key={notification.id} className="card bg-base-100 shadow-lg">
-              <div className="card-body">
-                <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h2 className="card-title">{notification.name}</h2>
-                      {notification.status === 'active' && (
-                        <div className="badge badge-success gap-1">
-                          <span className="w-2 h-2 rounded-full bg-success-content"></span>
-                          Active
-                        </div>
-                      )}
-                      {notification.status === 'draft' && (
-                        <div className="badge badge-warning gap-1">
-                          <span className="w-2 h-2 rounded-full bg-warning-content"></span>
-                          Draft
-                        </div>
-                      )}
-                      {notification.status === 'inactive' && (
-                        <div className="badge badge-error gap-1">
-                          <span className="w-2 h-2 rounded-full bg-error-content"></span>
-                          Inactive
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="badge badge-outline mb-2">
-                      {notification.type === 'purchase' ? 'Purchase' : 
-                       notification.type === 'signup' ? 'Sign Up' : 'Custom'}
-                    </div>
-
-                    <p className="text-base-content/80 mb-2">
-                      {notification.type === 'purchase' && notification.productName && (
-                        <span>Someone purchased {notification.productName}</span>
-                      )}
-                      {notification.type === 'signup' && (
-                        <span>Someone signed up</span>
-                      )}
-                      {notification.message && (
-                        <span> {notification.message}</span>
-                      )}
-                    </p>
-
-                    <div className="flex items-center gap-2 text-xs text-base-content/60 mb-2">
-                      <span>Created {notification.createdAt ? timeAgo(notification.createdAt) : 'recently'}</span>
-                      <span>•</span>
-                      <span className="capitalize">
-                        {notification.location === 'global' ? 'All pages' : 'Specific pages'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
+        <div className="overflow-x-auto">
+          <table className="table w-full">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Message</th>
+                <th>Impressions</th>
+                <th>Clicks</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {notifications.map((notification) => (
+                <tr key={notification._id}>
+                  <td className="font-medium">{notification.title}</td>
+                  <td className="max-w-xs truncate">{notification.message}</td>
+                  <td>{notification.impressions}</td>
+                  <td>{notification.clicks}</td>
+                  <td>
+                    <span className={`badge ${notification.status === 'active' ? 'badge-success' : 'badge-ghost'}`}>
+                      {notification.status}
+                    </span>
+                  </td>
+                  <td>{timeAgo(new Date(notification.createdAt))}</td>
+                  <td className="flex gap-2">
                     <Link 
-                      href={`/dashboard/websites/${websiteId}/notifications/${notification.id}`} 
-                      className="btn btn-sm btn-outline"
+                      href={`/dashboard/websites/${websiteId}/notifications/${notification._id}/edit`}
+                      className="btn btn-xs btn-outline"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-1">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      View
-                    </Link>
-                    <Link 
-                      href={`/dashboard/websites/${websiteId}/notifications/${notification.id}/edit`} 
-                      className="btn btn-sm btn-outline"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-1">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                      </svg>
                       Edit
                     </Link>
                     <button 
-                      className="btn btn-sm btn-outline btn-error"
-                      onClick={() => handleDelete(notification.id)}
+                      onClick={() => handleDelete(notification._id)}
+                      className="btn btn-xs btn-error btn-outline"
+                      disabled={deletingIds.has(notification._id)}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-1">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                      </svg>
-                      Delete
+                      {deletingIds.has(notification._id) ? (
+                        <span className="loading loading-spinner loading-xs"></span>
+                      ) : 'Delete'}
                     </button>
-                  </div>
-                </div>
-                
-                {/* Preview of the notification */}
-                <div className="collapse collapse-plus bg-base-200 rounded-box mt-4">
-                  <input type="checkbox" className="peer" /> 
-                  <div className="collapse-title text-sm font-medium">
-                    Preview Notification
-                  </div>
-                  <div className="collapse-content">
-                    <div className="flex items-center mt-2">
-                      <div className="avatar">
-                        <div className="w-10 h-10 rounded-full bg-base-300">
-                          {notification.image ? (
-                            <img src={notification.image} alt="Avatar" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-xl font-bold">
-                              {notification.name.substring(0, 1)}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="ml-3">
-                        <div className="font-semibold text-sm">
-                          {notification.type === 'purchase' && notification.productName && (
-                            <span>Someone purchased {notification.productName}</span>
-                          )}
-                          {notification.type === 'signup' && (
-                            <span>Someone signed up</span>
-                          )}
-                          {notification.message && (
-                            <span> {notification.message}</span>
-                          )}
-                        </div>
-                        <div className="text-xs text-base-content/60">just now</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import User from '@/app/lib/models/user';
+import { getAllUsers } from '@/app/lib/services/user.service';
+import { handleApiError } from '@/app/lib/utils/error';
 
 // IMPORTANT: Remove this in production - this is for debugging only!
 export async function GET() {
   try {
-    await connectToDatabase();
-    
-    // Get all users
-    const users = await User.find({}).lean();
+    // Get all users via service
+    const users = await getAllUsers();
     
     // Sanitize the result for security (mask passwords)
     const sanitizedUsers = users.map(user => {
@@ -37,9 +35,10 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Error retrieving users:', error);
+    const apiError = handleApiError(error);
     return NextResponse.json(
-      { success: false, message: 'Failed to retrieve users' },
-      { status: 500 }
+      { success: false, message: apiError.message },
+      { status: apiError.statusCode }
     );
   }
 } 

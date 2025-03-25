@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/db';
-import Website from '@/app/lib/models/website';
+import { getWebsiteById } from '@/app/lib/services';
 import { isValidObjectId } from '@/app/lib/server-utils';
+import { handleApiError } from '@/app/lib/utils/error';
 
 /**
  * POST /api/pageview
@@ -30,12 +30,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Connect to database
-    await connectToDatabase();
-
-    // Find website by ID
-    const website = await Website.findOne({ _id: websiteId, status: { $in: ['active', 'verified'] } });
-    if (!website) {
+    // Find website by ID using service
+    const website = await getWebsiteById(websiteId);
+    if (!website || !['active', 'verified'].includes(website.status)) {
       return NextResponse.json(
         { error: 'Website not found or inactive' },
         { status: 404 }
@@ -51,9 +48,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error tracking pageview:', error);
+    const apiError = handleApiError(error);
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
+      { error: apiError.message },
+      { status: apiError.statusCode }
     );
   }
 }
