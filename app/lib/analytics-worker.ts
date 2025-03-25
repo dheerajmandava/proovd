@@ -6,7 +6,7 @@
  */
 
 import mongoose from 'mongoose';
-import { connectToDatabase } from './db';
+import { connectToDatabase } from './database/connection';
 import Website from './models/website';
 import Notification from './models/notification';
 import Metric from './models/metric';
