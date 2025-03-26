@@ -11,7 +11,8 @@ import {
   CreditCardIcon,
   QuestionMarkCircleIcon,
   GlobeAltIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 import WebsiteSelector from './WebsiteSelector';
 
@@ -49,6 +50,12 @@ export default function Sidebar() {
         ? `/dashboard/websites/${activeWebsiteId}/analytics` 
         : '/dashboard/analytics', 
       icon: ChartBarIcon 
+    },
+    { 
+      name: 'Events', 
+      href: '/dashboard/events/list', 
+      icon: ClockIcon,
+      badge: 'New'
     },
     { name: 'Billing', href: '/dashboard/billing', icon: CreditCardIcon },
     { name: 'Help', href: '/dashboard/help', icon: QuestionMarkCircleIcon },
@@ -99,8 +106,8 @@ export default function Sidebar() {
                       aria-hidden="true"
                     />
                     {item.name}
-                    {item.name === 'Websites' && (
-                      <span className="badge badge-sm badge-primary">New</span>
+                    {item.badge && (
+                      <span className="badge badge-sm badge-primary">{item.badge}</span>
                     )}
                   </Link>
                 </li>

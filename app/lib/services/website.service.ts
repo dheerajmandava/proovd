@@ -270,16 +270,19 @@ export async function deleteWebsite(id: string): Promise<boolean> {
 }
 
 /**
- * Get a website by API key
- * @param apiKey Website API key
- * @returns Website data or null if not found
+ * Get a website by its API key
  */
-export async function getWebsiteByApiKey(apiKey: string): Promise<any> {
+export async function getWebsiteByApiKey(apiKey: string): Promise<WebsiteWithAnalytics | null> {
   if (!apiKey) return null;
   
-  await connectToDatabase();
-  const website = await Website.findOne({ apiKey, status: 'active' }).lean();
-  return website;
+  try {
+    await connectToDatabase();
+    const website = await Website.findOne({ apiKey }).lean();
+    return website ? convertToWebsiteWithAnalytics(website) : null;
+  } catch (error) {
+    console.error('Error fetching website by API key:', error);
+    return null;
+  }
 }
 
 /**

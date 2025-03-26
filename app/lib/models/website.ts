@@ -9,6 +9,7 @@ export interface WebsiteDocument extends Document {
   domain: string;
   userId: mongoose.Types.ObjectId;
   status: string;
+  apiKey?: string;
   settings: {
     position: string;
     delay: number;
@@ -67,6 +68,11 @@ const websiteSchema = new Schema(
       type: Schema.Types.ObjectId,
       required: [true, 'User ID is required'],
       ref: 'User',
+    },
+    apiKey: {
+      type: String,
+      index: true,
+      sparse: true,
     },
     status: {
       type: String,
