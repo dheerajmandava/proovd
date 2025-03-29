@@ -166,3 +166,41 @@ For your app to connect to AppSync, add these environment variables in the Ampli
 - **Simplified Deployment**: Works seamlessly with Amplify's serverless architecture
 - **Reduced Maintenance**: No need to manage WebSocket server infrastructure
 - **Cost-Effective**: Pay only for what you use with serverless architecture
+
+### Troubleshooting AppSync Connections
+
+If you're experiencing issues with the AppSync connection, follow these steps:
+
+1. **Verify Environment Variables**:
+   - Ensure all AppSync environment variables are properly set in your `.env.local` file locally and in Amplify console for production:
+     ```
+     NEXT_PUBLIC_AWS_REGION=us-east-1
+     NEXT_PUBLIC_APPSYNC_ENDPOINT=https://your-endpoint.appsync-api.region.amazonaws.com/graphql
+     NEXT_PUBLIC_APPSYNC_API_KEY=your-api-key
+     ```
+   - For Amplify deployments, also ensure these are mirrored as `AWS_REGION`, `APPSYNC_ENDPOINT`, and `APPSYNC_API_KEY`
+
+2. **Check Lambda Function Environment**:
+   - Verify MongoDB connection details are correctly passed to Lambda functions:
+     ```
+     MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net/database
+     MONGODB_DB=proovd
+     ```
+   - Check CloudWatch logs for any connection errors
+
+3. **Debugging Client Issues**:
+   - Open browser developer tools and check for errors in the console
+   - Look for network requests to the AppSync endpoint and verify they're being sent correctly
+   - Enable ProovdPulse debug logs by adding `debug: true` to the widget configuration
+
+4. **Testing AppSync API Directly**:
+   - Use the AWS AppSync console to test mutations and queries directly
+   - Verify that your schema is correctly deployed using the Schema page in AppSync console
+
+5. **Common Issues and Solutions**:
+   - **Null responses**: Check Lambda function logs for MongoDB connection issues
+   - **CORS errors**: Ensure your API allows requests from your domain
+   - **Authentication errors**: Verify your API key is valid and not expired
+   - **Missing data**: Check that your GraphQL operations match the schema
+
+If problems persist, check the CloudWatch logs for your Lambda functions and the API Gateway logs for more detailed error information.

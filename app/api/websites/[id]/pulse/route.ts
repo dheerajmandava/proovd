@@ -12,6 +12,7 @@ import { ipLocationService } from '@/app/lib/services/ip-location.service';
 import { activeUsersTracker } from '@/app/lib/active-users';
 import crypto from 'crypto';
 import Website from '@/app/lib/models/website';
+import { parse } from 'url';
 
 // Validate request schema - Make it more flexible to match what the client sends
 const pulseRequestSchema = z.object({
@@ -70,62 +71,126 @@ function getOrCreateSessionId(clientId?: string): string {
  * GET /api/websites/[id]/pulse
  * Get engagement data for a website
  */
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  console.log('Received GET request for Pulse API with ID:', params.id);
+  
   try {
-    // Ensure database connection
-    await connectToDatabase();
+    const { searchParams } = new URL(req.url);
+    const origin = searchParams.get('origin') || '*';
     
-    // Get website ID from params
-    const websiteId = params.id;
+    // Log the environment variables 
+    console.log('AppSync Configuration Check:', {
+      endpointSet: !!process.env.NEXT_PUBLIC_APPSYNC_ENDPOINT,
+      apiKeySet: !!process.env.NEXT_PUBLIC_APPSYNC_API_KEY,
+      regionSet: !!process.env.NEXT_PUBLIC_AWS_REGION
+    });
     
-    // Get website from database
-    const website = await Website.findById(websiteId);
+    // Connect to database
+    console.log('Connecting to database...');
+    const { db } = await connectToDatabase();
+    
+    // Get the website data
+    console.log('Finding website with ID:', params.id);
+    const website = await Website.findById(params.id);
     
     if (!website) {
-      return new NextResponse(JSON.stringify({ success: false, error: 'Website not found' }), { 
+      console.error('Website not found with ID:', params.id);
+      return NextResponse.json({ error: 'Website not found' }, { 
         status: 404,
         headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         },
       });
     }
     
-    // Get AppSync information from environment variables
-    const config = {
-      region: process.env.NEXT_PUBLIC_AWS_REGION,
-      endpoint: process.env.NEXT_PUBLIC_APPSYNC_ENDPOINT,
-      apiKey: process.env.NEXT_PUBLIC_APPSYNC_API_KEY
+    console.log('Website found:', {
+      id: website._id.toString(),
+      domain: website.domain,
+      pulseEnabled: website.settings?.pulse?.enabled
+    });
+    
+    // Check if ProovdPulse is enabled for this website
+    if (!website.settings?.pulse?.enabled) {
+      console.error('ProovdPulse not enabled for website:', params.id);
+      return NextResponse.json({ error: 'ProovdPulse not enabled for this website' }, { 
+        status: 403,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+      });
+    }
+    
+    // Get AppSync configuration
+    const appsyncEndpoint = process.env.NEXT_PUBLIC_APPSYNC_ENDPOINT;
+    const appsyncApiKey = process.env.NEXT_PUBLIC_APPSYNC_API_KEY;
+    const awsRegion = process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1';
+    
+    // Validate AppSync configuration
+    if (!appsyncEndpoint || !appsyncApiKey) {
+      console.error('Missing AppSync configuration:', {
+        endpointSet: !!appsyncEndpoint,
+        apiKeySet: !!appsyncApiKey
+      });
+      return NextResponse.json({ error: 'Server configuration error' }, { 
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+      });
+    }
+    
+    // Return the widget script with the website configuration
+    const websiteConfig = {
+      id: website._id.toString(),
+      settings: website.settings.pulse,
+      appsyncEndpoint,
+      appsyncApiKey,
+      region: awsRegion
     };
     
-    return NextResponse.json({
-      success: true,
-      data: {
-        appsync: config,
-        websiteId
+    console.log('Returning widget configuration with AppSync details');
+    
+    return NextResponse.json(
+      { 
+        websiteConfig,
+        status: 'success' 
       },
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
+      {
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Content-Type': 'application/json',
+        },
+      }
+    );
   } catch (error) {
-    console.error('Error handling ProovdPulse request:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Internal server error',
-    }, {
-      status: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
+    console.error('Error in ProovdPulse API:', error);
+    
+    const { searchParams } = new URL(req.url);
+    const origin = searchParams.get('origin') || '*';
+    
+    return NextResponse.json(
+      { error: 'Internal server error', message: error.message },
+      {
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+      }
+    );
   }
 }
 
@@ -224,13 +289,17 @@ export async function POST(
 /**
  * OPTIONS handler for CORS preflight requests
  */
-export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export async function OPTIONS(req: NextRequest) {
+  return NextResponse.json(
+    {},
+    {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+      },
+    }
+  );
 } 

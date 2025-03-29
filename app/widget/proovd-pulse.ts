@@ -339,8 +339,31 @@ export class ProovdPulse {
       // Update internal metrics
       this.updateMetrics();
       
+      if (!API) {
+        console.error('ProovdPulse: API not initialized');
+        return;
+      }
+      
+      if (!this.clientId || !this.options.websiteId) {
+        console.error('ProovdPulse: Missing clientId or websiteId', {
+          clientId: this.clientId,
+          websiteId: this.options.websiteId
+        });
+        return;
+      }
+      
+      console.log('ProovdPulse: Sending metrics to AppSync', {
+        clientId: this.clientId,
+        websiteId: this.options.websiteId,
+        metrics: {
+          scrollPercentage: this.metrics.scrollPercentage,
+          timeOnPage: this.metrics.timeOnPage,
+          clickCount: this.metrics.clickCount
+        }
+      });
+      
       // Send updated metrics to AppSync
-      await API.graphql(
+      const response = await API.graphql(
         graphqlOperation(
           queries.updateUserActivity,
           {
@@ -354,8 +377,15 @@ export class ProovdPulse {
           }
         )
       );
+      
+      console.log('ProovdPulse: UpdateUserActivity response:', response);
     } catch (error) {
-      console.error('Error updating engagement data:', error);
+      console.error('ProovdPulse: Error updating engagement data:', error);
+      // Retry after a delay if it's a network issue
+      if (error.message && (error.message.includes('Network') || error.message.includes('Failed to fetch'))) {
+        console.log('ProovdPulse: Will retry after delay');
+        setTimeout(() => this.updateEngagementData(), 30000); // Retry after 30 seconds
+      }
     }
   }
   
@@ -366,8 +396,26 @@ export class ProovdPulse {
     try {
       console.log('ProovdPulse: Pageview tracked');
       
+      if (!API) {
+        console.error('ProovdPulse: API not initialized');
+        return;
+      }
+      
+      if (!this.clientId || !this.options.websiteId) {
+        console.error('ProovdPulse: Missing clientId or websiteId', {
+          clientId: this.clientId,
+          websiteId: this.options.websiteId
+        });
+        return;
+      }
+      
+      console.log('ProovdPulse: Sending initial pageview to AppSync', {
+        clientId: this.clientId,
+        websiteId: this.options.websiteId
+      });
+      
       // Send initial metrics to AppSync
-      await API.graphql(
+      const response = await API.graphql(
         graphqlOperation(
           queries.updateUserActivity,
           {
@@ -381,8 +429,16 @@ export class ProovdPulse {
           }
         )
       );
+      
+      console.log('ProovdPulse: Initial trackPageview response:', response);
     } catch (error) {
-      console.error('Error tracking pageview:', error);
+      console.error('ProovdPulse: Error tracking pageview:', error);
+      
+      // Retry after a delay if it's a network issue
+      if (error.message && (error.message.includes('Network') || error.message.includes('Failed to fetch'))) {
+        console.log('ProovdPulse: Will retry pageview after delay');
+        setTimeout(() => this.trackPageview(), 10000); // Retry after 10 seconds
+      }
     }
   }
   

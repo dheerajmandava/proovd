@@ -1,12 +1,20 @@
 {
-  "lambdaFunction": "updateUserActivityResolver",
-  "permissions": {
-    "api": {
-      "proovd": ["Mutation"]
+  "lambdaFunction": {
+    "permissions": {
+      "storage": {
+        "allowAccessToAllResources": true,
+        "allowedGraphQlMutations": ["updateUserActivity"]
+      }
+    },
+    "environmentVariables": {
+      "MONGODB_URI": {
+        "type": "parameter",
+        "description": "MongoDB connection string"
+      },
+      "MONGODB_DB": {
+        "type": "parameter",
+        "description": "MongoDB database name"
+      }
     }
-  },
-  "environmentMap": {
-    "MONGODB_URI": "${env.MONGODB_URI}",
-    "MONGODB_DB": "${env.MONGODB_DB}"
   }
 } 
