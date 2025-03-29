@@ -21,6 +21,14 @@ export interface WebsiteDocument extends Document {
     initialDelay: number;
     loop: boolean;
     customStyles: string;
+    pulse?: {
+      enabled: boolean;
+      position: string;
+      theme: string;
+      showActiveUsers: boolean;
+      showEngagementMetrics: boolean;
+      showHeatmap: boolean;
+    };
     [key: string]: any;
   };
   verification?: {
@@ -122,6 +130,34 @@ const websiteSchema = new Schema(
       customStyles: {
         type: String,
         default: '',
+      },
+      pulse: {
+        enabled: {
+          type: Boolean,
+          default: true,
+        },
+        position: {
+          type: String,
+          enum: ['bottom-left', 'bottom-right', 'top-left', 'top-right'],
+          default: 'bottom-right',
+        },
+        theme: {
+          type: String,
+          enum: ['light', 'dark', 'auto'],
+          default: 'auto',
+        },
+        showActiveUsers: {
+          type: Boolean,
+          default: true,
+        },
+        showEngagementMetrics: {
+          type: Boolean,
+          default: true,
+        },
+        showHeatmap: {
+          type: Boolean,
+          default: false,
+        },
       },
     },
     allowedDomains: {
@@ -379,7 +415,15 @@ websiteSchema.methods.toResponse = function() {
     randomize: this.settings.randomize || false,
     initialDelay: this.settings.initialDelay || 5,
     loop: this.settings.loop || false,
-    customStyles: this.settings.customStyles || ''
+    customStyles: this.settings.customStyles || '',
+    pulse: this.settings.pulse || {
+      enabled: true,
+      position: 'bottom-right',
+      theme: 'auto',
+      showActiveUsers: true,
+      showEngagementMetrics: true,
+      showHeatmap: false,
+    },
   } : {};
   
   const dailyStats = Array.isArray(this.analytics?.dailyStats) ? 

@@ -59,7 +59,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       
       // Load required libraries
       Promise.all([
-        loadScript('https://cdn.jsdelivr.net/npm/aws-amplify@6.14.1/dist/cjs/index.min.js'),
+        loadScript('https://cdn.jsdelivr.net/npm/aws-amplify@6.13.4/dist/aws-amplify.min.js'),
         loadScript('https://cdn.jsdelivr.net/npm/lit-html@2.7.5/lit-html.min.js'),
         loadScript('https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js')
       ]).then(() => {
@@ -77,17 +77,67 @@ export async function GET(request: Request, { params }: { params: { id: string }
           aws_appsync_apiKey: "${appsyncApiKey}"
         });
         
+        // GraphQL operations
+        const queries = {
+          getWebsiteStats: \`
+            query GetWebsiteStats($id: ID!) {
+              getWebsiteStats(id: $id) {
+                id
+                activeUsers
+                usersByCountry
+                usersByCity
+                avgTimeOnPage
+                avgScrollPercentage
+                totalClicks
+              }
+            }
+          \`,
+          
+          onActiveUserChange: \`
+            subscription OnActiveUserChange($websiteId: ID!) {
+              onActiveUserChange(websiteId: $websiteId) {
+                id
+                activeUsers
+                usersByCountry
+                usersByCity
+                avgTimeOnPage
+                avgScrollPercentage
+                totalClicks
+              }
+            }
+          \`,
+          
+          updateUserActivity: \`
+            mutation UpdateUserActivity(
+              $clientId: String!
+              $websiteId: ID!
+              $metrics: MetricsInput
+            ) {
+              updateUserActivity(
+                clientId: $clientId
+                websiteId: $websiteId
+                metrics: $metrics
+              ) {
+                id
+                clientId
+                websiteId
+                lastActive
+              }
+            }
+          \`
+        };
+        
         // Initialize ProovdPulse functionality
         window.ProovdPulse = class {
           constructor(options) {
             this.options = {
               websiteId: '${websiteId}',
               apiKey: '${website.apiKey || ''}',
-              position: 'bottom-right',
-              theme: 'auto',
-              showHeatmap: false, // Default to NOT showing heatmap to end users
-              showActiveUsers: true,
-              showEngagementMetrics: true,
+              position: '${website.settings?.pulse?.position || 'bottom-right'}',
+              theme: '${website.settings?.pulse?.theme || 'auto'}',
+              showHeatmap: ${website.settings?.pulse?.showHeatmap === false ? 'false' : 'true'},
+              showActiveUsers: ${website.settings?.pulse?.showActiveUsers === false ? 'false' : 'true'},
+              showEngagementMetrics: ${website.settings?.pulse?.showEngagementMetrics === false ? 'false' : 'true'},
               ...options
             };
             
@@ -109,10 +159,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
             // Create container
             this.createContainer();
             
-            // Initialize all features - but ONLY track clicks, don't show heatmap to users
+            // Setup event listeners
             this.initDomObserver();
             
-            // Only initialize the visible widgets - the heatmap is only for data collection
+            // Initialize widgets based on settings
             if (this.options.showActiveUsers) {
               this.initActiveUsers();
             }
@@ -162,15 +212,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
            */
           subscribeToActiveUsers() {
             try {
-              const { API, graphqlOperation } = window.aws_amplify;
-              
               this.subscription = API.graphql(
                 graphqlOperation(
-                  \`subscription OnActiveUserChange($websiteId: ID!) {
-                    onActiveUserChange(websiteId: $websiteId) {
-                      activeUsers
-                    }
-                  }\`,
+                  queries.onActiveUserChange,
                   { websiteId: this.options.websiteId }
                 )
               ).subscribe({
@@ -201,23 +245,13 @@ export async function GET(request: Request, { params }: { params: { id: string }
            */
           async reportActivity() {
             try {
-              const { API, graphqlOperation } = window.aws_amplify;
+              // Update time on page
+              const elapsed = Math.floor((new Date().getTime() - this.startTime.getTime()) / 1000);
+              this.metrics.timeOnPage = elapsed;
               
               await API.graphql(
                 graphqlOperation(
-                  \`mutation UpdateUserActivity(
-                    $clientId: String!
-                    $websiteId: ID!
-                    $metrics: MetricsInput
-                  ) {
-                    updateUserActivity(
-                      clientId: $clientId
-                      websiteId: $websiteId
-                      metrics: $metrics
-                    ) {
-                      id
-                    }
-                  }\`,
+                  queries.updateUserActivity,
                   { 
                     clientId: this.clientId,
                     websiteId: this.options.websiteId,

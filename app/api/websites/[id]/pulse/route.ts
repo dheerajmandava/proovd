@@ -11,6 +11,7 @@ import { authOptions } from '@/auth';
 import { ipLocationService } from '@/app/lib/services/ip-location.service';
 import { activeUsersTracker } from '@/app/lib/active-users';
 import crypto from 'crypto';
+import Website from '@/app/lib/models/website';
 
 // Validate request schema - Make it more flexible to match what the client sends
 const pulseRequestSchema = z.object({
@@ -69,78 +70,62 @@ function getOrCreateSessionId(clientId?: string): string {
  * GET /api/websites/[id]/pulse
  * Get engagement data for a website
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  // Allow CORS preflight
-  if (request.method === 'OPTIONS') {
-    return setCorsHeaders(new NextResponse(null, { status: 200 }));
-  }
-
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    // Ensure database connection
+    await connectToDatabase();
+    
     // Get website ID from params
     const websiteId = params.id;
     
-    // Get URL parameters
-    const url = new URL(request.url);
-    const pageUrl = url.searchParams.get('pageUrl');
-    const clientId = url.searchParams.get('clientId') || '';
+    // Get website from database
+    const website = await Website.findById(websiteId);
     
-    // Get active users count from the tracker
-    const activeUsersCount = activeUsersTracker.getActiveUsers(websiteId);
-    
-    // Track this user's session if client ID is provided
-    if (clientId) {
-      const sessionId = getOrCreateSessionId(clientId);
-      const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
-      const userAgent = request.headers.get('user-agent') || '';
-      
-      // Try to get location data
-      let locationData = null;
-      try {
-        locationData = await ipLocationService.getLocationData(ip.split(',')[0].trim());
-      } catch (error) {
-        console.error('Error getting location data:', error);
-      }
-      
-      // Track the session
-      activeUsersTracker.trackSession({
-        id: sessionId,
-        websiteId,
-        url: pageUrl || url.toString(),
-        referrer: request.headers.get('referer') || undefined,
-        ipAddress: ip.split(',')[0].trim(),
-        userAgent,
-        location: locationData ? {
-          country: locationData.country,
-          city: locationData.city,
-          latitude: locationData.latitude,
-          longitude: locationData.longitude
-        } : undefined
+    if (!website) {
+      return new NextResponse(JSON.stringify({ success: false, error: 'Website not found' }), { 
+        status: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
       });
     }
     
-    // Get engagement data
-    const engagementData = {
-      activeUsers: activeUsersCount,
-      viewCount: Math.floor(Math.random() * 500) + 50, // Still randomizing this for now
-      avgTimeOnPage: Math.floor(Math.random() * 180) + 30, // Still randomizing this for now
-      focusAreas: [],
-      trend: Math.random() > 0.5 ? 'up' : 'down'
+    // Get AppSync information from environment variables
+    const config = {
+      region: process.env.NEXT_PUBLIC_AWS_REGION,
+      endpoint: process.env.NEXT_PUBLIC_APPSYNC_ENDPOINT,
+      apiKey: process.env.NEXT_PUBLIC_APPSYNC_API_KEY
     };
     
-    // Return response with CORS headers
-    return setCorsHeaders(NextResponse.json({
+    return NextResponse.json({
       success: true,
-      data: engagementData
-    }));
+      data: {
+        appsync: config,
+        websiteId
+      },
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
   } catch (error) {
-    console.error('Error getting engagement data:', error);
-    return setCorsHeaders(NextResponse.json(
-      { success: false, error: 'Failed to get engagement data' },
-      { status: 500 }
-    ));
+    console.error('Error handling ProovdPulse request:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error',
+    }, {
+      status: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
   }
 }
 
@@ -239,6 +224,13 @@ export async function POST(
 /**
  * OPTIONS handler for CORS preflight requests
  */
-export async function OPTIONS(request: Request) {
-  return setCorsHeaders(new NextResponse(null, { status: 200 }));
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 } 

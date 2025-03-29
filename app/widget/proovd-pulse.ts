@@ -9,7 +9,11 @@ import { styleMap } from 'lit-html/directives/style-map.js';
 import tippy, { Instance as TippyInstance } from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 
+// Import AWS Amplify for AppSync integration
+import { Amplify, API, graphqlOperation } from 'aws-amplify';
+
 import { DOMAnalyzer, HeatmapData } from '../lib/dom-analyzer/dom-analyzer';
+import * as queries from '../graphql/queries';
 
 // Fix for importing types
 // import type { Notification } from './widget';
@@ -24,6 +28,11 @@ export interface ProovdPulseOptions {
   showActiveUsers?: boolean;
   showEngagementMetrics?: boolean;
   customCSS?: string;
+  appSyncConfig?: {
+    region: string;
+    endpoint: string;
+    apiKey: string;
+  };
 }
 
 interface EngagementData {
@@ -33,6 +42,8 @@ interface EngagementData {
   scrollPercentage: number;
   focusAreas: Array<{ selector: string; intensity: number }>;
   trend: 'up' | 'down' | 'stable';
+  usersByCountry?: Record<string, number>;
+  usersByCity?: Record<string, number>;
 }
 
 export class ProovdPulse {
@@ -51,10 +62,19 @@ export class ProovdPulse {
     avgTimeOnPage: 0,
     scrollPercentage: 0,
     focusAreas: [],
-    trend: 'stable'
+    trend: 'stable',
+    usersByCountry: {},
+    usersByCity: {}
   };
   private updateInterval: any = null;
   private ipData: any = null;
+  private subscription: any = null;
+  private metrics = {
+    scrollPercentage: 0,
+    timeOnPage: 0,
+    clickCount: 0
+  };
+  private startTime = new Date();
   
   constructor(options: ProovdPulseOptions) {
     // Set default options
@@ -68,6 +88,11 @@ export class ProovdPulse {
       showActiveUsers: options.showActiveUsers !== undefined ? options.showActiveUsers : true,
       showEngagementMetrics: options.showEngagementMetrics !== undefined ? options.showEngagementMetrics : true,
       customCSS: options.customCSS || '',
+      appSyncConfig: options.appSyncConfig || {
+        region: 'us-east-1', // Default region
+        endpoint: '', // Will be filled from script attributes
+        apiKey: '', // Will be filled from script attributes
+      }
     };
     
     // Only initialize for the percentage of users defined in sampleRate
@@ -88,8 +113,37 @@ export class ProovdPulse {
     // Add CSS styles
     this.addStyles();
     
+    // Get AppSync configuration from script attributes
+    this.configureAmplify();
+    
     // Initialize the widget
     this.init();
+  }
+  
+  /**
+   * Configure AWS Amplify with AppSync settings
+   */
+  private configureAmplify(): void {
+    // Try to get AppSync config from script attributes
+    const script = document.currentScript as HTMLScriptElement;
+    if (script) {
+      const endpoint = script.getAttribute('data-appsync-endpoint');
+      const apiKey = script.getAttribute('data-appsync-api-key');
+      const region = script.getAttribute('data-appsync-region');
+      
+      if (endpoint) this.options.appSyncConfig.endpoint = endpoint;
+      if (apiKey) this.options.appSyncConfig.apiKey = apiKey;
+      if (region) this.options.appSyncConfig.region = region;
+    }
+    
+    // Configure Amplify
+    Amplify.configure({
+      aws_project_region: this.options.appSyncConfig.region,
+      aws_appsync_graphqlEndpoint: this.options.appSyncConfig.endpoint,
+      aws_appsync_region: this.options.appSyncConfig.region,
+      aws_appsync_authenticationType: 'API_KEY',
+      aws_appsync_apiKey: this.options.appSyncConfig.apiKey
+    });
   }
   
   /**
@@ -114,6 +168,9 @@ export class ProovdPulse {
       // Track initial pageview
       this.trackPageview();
       
+      // Subscribe to real-time updates
+      this.subscribeToActiveUsers();
+      
       // Widget is now active
       this.isActive = true;
       
@@ -127,6 +184,78 @@ export class ProovdPulse {
   }
   
   /**
+   * Subscribe to active users updates
+   */
+  private subscribeToActiveUsers(): void {
+    try {
+      this.subscription = API.graphql(
+        graphqlOperation(
+          queries.onActiveUserChange,
+          { websiteId: this.options.websiteId }
+        )
+      ).subscribe({
+        next: (result: any) => {
+          const data = result.value.data.onActiveUserChange;
+          if (data) {
+            this.engagementData.activeUsers = data.activeUsers;
+            
+            // Update country and city stats if available
+            if (data.usersByCountry) {
+              try {
+                this.engagementData.usersByCountry = JSON.parse(data.usersByCountry);
+              } catch (e) {
+                console.error('Error parsing usersByCountry:', e);
+              }
+            }
+            
+            if (data.usersByCity) {
+              try {
+                this.engagementData.usersByCity = JSON.parse(data.usersByCity);
+              } catch (e) {
+                console.error('Error parsing usersByCity:', e);
+              }
+            }
+            
+            // Update average metrics
+            if (data.avgTimeOnPage) {
+              this.engagementData.avgTimeOnPage = data.avgTimeOnPage;
+            }
+            
+            // Render widget with updated data
+            this.renderWidget();
+          }
+        },
+        error: (error: any) => {
+          console.error('Subscription error:', error);
+        }
+      });
+      
+      // Handle visibility changes
+      document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
+    } catch (error) {
+      console.error('Error setting up subscription:', error);
+    }
+  }
+  
+  /**
+   * Handle visibility change
+   */
+  private handleVisibilityChange(): void {
+    if (document.visibilityState === 'visible') {
+      // Page is visible again, reconnect if needed
+      if (!this.subscription) {
+        this.subscribeToActiveUsers();
+      }
+    } else {
+      // Page is hidden, cleanup subscription
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+        this.subscription = null;
+      }
+    }
+  }
+  
+  /**
    * Start periodic updates
    */
   private startUpdates(): void {
@@ -135,13 +264,126 @@ export class ProovdPulse {
       this.updateEngagementData();
     }, 30000);
     
-    // Listen for visibility changes to pause/resume updates
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        // Page is visible again, update data
-        this.updateEngagementData();
+    // Track scroll position
+    window.addEventListener('scroll', () => {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = document.documentElement.clientHeight;
+      
+      this.metrics.scrollPercentage = Math.round((scrollTop / (scrollHeight - clientHeight)) * 100);
+    }, { passive: true });
+    
+    // Track clicks
+    document.addEventListener('click', () => {
+      this.metrics.clickCount++;
+    }, true);
+  }
+  
+  /**
+   * Update engagement metrics
+   */
+  private updateMetrics(): void {
+    // Update time on page
+    const elapsed = Math.floor((new Date().getTime() - this.startTime.getTime()) / 1000);
+    this.metrics.timeOnPage = elapsed;
+  }
+  
+  /**
+   * Fetch engagement data from AppSync
+   */
+  private async fetchEngagementData(): Promise<void> {
+    try {
+      const result = await API.graphql(
+        graphqlOperation(
+          queries.getWebsiteStats,
+          { id: this.options.websiteId }
+        )
+      );
+      
+      const data = (result as any).data.getWebsiteStats;
+      
+      if (data) {
+        this.engagementData.activeUsers = data.activeUsers;
+        this.engagementData.avgTimeOnPage = data.avgTimeOnPage || 0;
+        
+        // Parse JSON fields
+        if (data.usersByCountry) {
+          try {
+            this.engagementData.usersByCountry = JSON.parse(data.usersByCountry);
+          } catch (e) {
+            console.error('Error parsing usersByCountry:', e);
+          }
+        }
+        
+        if (data.usersByCity) {
+          try {
+            this.engagementData.usersByCity = JSON.parse(data.usersByCity);
+          } catch (e) {
+            console.error('Error parsing usersByCity:', e);
+          }
+        }
+        
+        // Render widget with new data
+        this.renderWidget();
       }
-    });
+    } catch (error) {
+      console.error('Error fetching engagement data:', error);
+    }
+  }
+  
+  /**
+   * Update engagement data and send metrics
+   */
+  private async updateEngagementData(): Promise<void> {
+    try {
+      // Update internal metrics
+      this.updateMetrics();
+      
+      // Send updated metrics to AppSync
+      await API.graphql(
+        graphqlOperation(
+          queries.updateUserActivity,
+          {
+            clientId: this.clientId,
+            websiteId: this.options.websiteId,
+            metrics: {
+              scrollPercentage: this.metrics.scrollPercentage,
+              timeOnPage: this.metrics.timeOnPage,
+              clickCount: this.metrics.clickCount
+            }
+          }
+        )
+      );
+    } catch (error) {
+      console.error('Error updating engagement data:', error);
+    }
+  }
+  
+  /**
+   * Track pageview
+   */
+  private async trackPageview(): Promise<void> {
+    try {
+      console.log('ProovdPulse: Pageview tracked');
+      
+      // Send initial metrics to AppSync
+      await API.graphql(
+        graphqlOperation(
+          queries.updateUserActivity,
+          {
+            clientId: this.clientId,
+            websiteId: this.options.websiteId,
+            metrics: {
+              scrollPercentage: 0,
+              timeOnPage: 0,
+              clickCount: 0
+            }
+          }
+        )
+      );
+    } catch (error) {
+      console.error('Error tracking pageview:', error);
+    }
   }
   
   /**
@@ -537,83 +779,6 @@ export class ProovdPulse {
   }
   
   /**
-   * Update engagement data
-   */
-  private async updateEngagementData(): Promise<void> {
-    try {
-      // Fetch updated data from server
-      await this.fetchEngagementData();
-      
-      // Update the widget
-      this.renderWidget();
-    } catch (error) {
-      console.error('Error updating engagement data:', error);
-    }
-  }
-  
-  /**
-   * Fetch engagement data from the server
-   */
-  private async fetchEngagementData(): Promise<void> {
-    try {
-      const metrics = this.domAnalyzer.getEngagementMetrics();
-      
-      // Simulate API call for now
-      const randomActiveUsers = Math.floor(Math.random() * 20) + 5;
-      
-      this.engagementData = {
-        activeUsers: randomActiveUsers,
-        viewCount: Math.floor(Math.random() * 200) + 50,
-        avgTimeOnPage: Math.floor(Math.random() * 180) + 30,
-        scrollPercentage: metrics.scrollPercentage || 0,
-        focusAreas: [],
-        trend: Math.random() > 0.5 ? 'up' : 'down'
-      };
-    } catch (error) {
-      console.error('Error fetching engagement data:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * Track a pageview
-   */
-  private async trackPageview(): Promise<void> {
-    try {
-      const url = `${this.apiUrl}/api/events/view`;
-      
-      const data = {
-        apiKey: this.options.apiKey,
-        websiteId: this.options.websiteId,
-        sessionId: this.sessionId,
-        clientId: this.clientId,
-        url: this.currentUrl,
-        title: document.title,
-        referrer: document.referrer
-      };
-      
-      // Send the tracking request
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data),
-        // Non-blocking request
-        keepalive: true
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error tracking pageview: ${response.status}`);
-      }
-      
-      console.log('ProovdPulse: Pageview tracked');
-    } catch (error) {
-      console.error('Error tracking pageview:', error);
-    }
-  }
-  
-  /**
    * Get or create a session ID
    */
   private getSessionId(): string {
@@ -732,26 +897,33 @@ export class ProovdPulse {
    * Public API: Destroy widget and clean up
    */
   public destroy(): void {
-    // Stop DOM analyzer
-    this.domAnalyzer.stop();
+    // Clean up DOM analyzer
+    if (this.domAnalyzer) {
+      this.domAnalyzer.stop();
+    }
     
     // Clear update interval
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
     }
     
-    // Destroy tooltips
-    this.tooltips.forEach(instance => {
-      instance.destroy();
-    });
+    // Unsubscribe from real-time updates
+    if (this.subscription) {
+      this.subscription.unsubscribe();
+    }
+    
+    // Remove visibility event listener
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
     
     // Remove container
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
     }
     
-    // Widget is no longer active
-    this.isActive = false;
+    // Clear tooltips
+    this.tooltips.forEach((tooltip) => {
+      tooltip.destroy();
+    });
     
     console.log('ProovdPulse: Widget destroyed');
   }
