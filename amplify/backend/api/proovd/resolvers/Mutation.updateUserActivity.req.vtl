@@ -1,0 +1,9 @@
+## Forward request to Lambda
+{
+  "version": "2018-05-29",
+  "operation": "Invoke",
+  "payload": {
+    "field": "updateUserActivity",
+    "arguments": $utils.toJson($context.arguments)
+  }
+} 
