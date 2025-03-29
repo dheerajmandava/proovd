@@ -59,7 +59,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       
       // Load required libraries
       Promise.all([
-        loadScript('https://cdn.jsdelivr.net/npm/aws-amplify@6.13.4/dist/aws-amplify.min.js'),
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/aws-amplify/4.3.8/aws-amplify.min.js'),
         loadScript('https://cdn.jsdelivr.net/npm/lit-html@2.7.5/lit-html.min.js'),
         loadScript('https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js')
       ]).then(() => {
@@ -67,7 +67,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         loadCSS('https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy.css');
         
         // Initialize Amplify
-        const { Amplify, API, graphqlOperation } = window.aws_amplify;
+        const { Amplify, API, graphqlOperation } = window.AWS.Amplify;
         
         Amplify.configure({
           aws_project_region: "${region}",
@@ -212,12 +212,10 @@ export async function GET(request: Request, { params }: { params: { id: string }
            */
           subscribeToActiveUsers() {
             try {
-              this.subscription = API.graphql(
-                graphqlOperation(
-                  queries.onActiveUserChange,
-                  { websiteId: this.options.websiteId }
-                )
-              ).subscribe({
+              this.subscription = API.graphql({
+                query: queries.onActiveUserChange,
+                variables: { websiteId: this.options.websiteId }
+              }).subscribe({
                 next: (response) => {
                   const data = response.value.data.onActiveUserChange;
                   if (data) {
@@ -249,20 +247,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
               const elapsed = Math.floor((new Date().getTime() - this.startTime.getTime()) / 1000);
               this.metrics.timeOnPage = elapsed;
               
-              await API.graphql(
-                graphqlOperation(
-                  queries.updateUserActivity,
-                  { 
-                    clientId: this.clientId,
-                    websiteId: this.options.websiteId,
-                    metrics: {
-                      scrollPercentage: this.metrics.scrollPercentage,
-                      timeOnPage: this.metrics.timeOnPage,
-                      clickCount: this.metrics.clickCount
-                    }
+              await API.graphql({
+                query: queries.updateUserActivity,
+                variables: { 
+                  clientId: this.clientId,
+                  websiteId: this.options.websiteId,
+                  metrics: {
+                    scrollPercentage: this.metrics.scrollPercentage,
+                    timeOnPage: this.metrics.timeOnPage,
+                    clickCount: this.metrics.clickCount
                   }
-                )
-              );
+                }
+              });
             } catch (error) {
               console.error('Error reporting activity:', error);
             }
