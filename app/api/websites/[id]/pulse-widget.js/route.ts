@@ -643,6 +643,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
       });
     })();`;
     
+    // When returning widget configuration, include debug: true
+    const websiteConfig = {
+      id: website._id.toString(),
+      settings: website.settings.pulse,
+      appsyncEndpoint,
+      appsyncApiKey,
+      region: awsRegion,
+      debug: true // Enable debug mode by default to help troubleshooting
+    };
+
+    console.log('Returning widget configuration with AppSync details and debug mode enabled');
+
     // Return the script with proper content type and CORS headers
     return new NextResponse(widgetScript, {
       headers: {

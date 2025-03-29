@@ -154,10 +154,11 @@ export async function GET(
       settings: website.settings.pulse,
       appsyncEndpoint,
       appsyncApiKey,
-      region: awsRegion
+      region: awsRegion,
+      debug: true // Enable debug mode by default for troubleshooting
     };
     
-    console.log('Returning widget configuration with AppSync details');
+    console.log('Returning widget configuration with AppSync details and debug mode enabled');
     
     return NextResponse.json(
       { 

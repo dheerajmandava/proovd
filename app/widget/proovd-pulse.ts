@@ -33,6 +33,7 @@ export interface ProovdPulseOptions {
     endpoint: string;
     apiKey: string;
   };
+  debug?: boolean;
 }
 
 interface EngagementData {
@@ -75,259 +76,208 @@ export class ProovdPulse {
     clickCount: 0
   };
   private startTime = new Date();
+  private debug: boolean = false;
   
   constructor(options: ProovdPulseOptions) {
-    // Set default options
+    // Default options
     this.options = {
-      websiteId: options.websiteId,
-      apiKey: options.apiKey || '',
-      position: options.position || 'bottom-right',
-      theme: options.theme || 'auto',
-      sampleRate: options.sampleRate || 1.0, // Default to tracking all users
-      showHeatmap: options.showHeatmap !== undefined ? options.showHeatmap : true,
-      showActiveUsers: options.showActiveUsers !== undefined ? options.showActiveUsers : true,
-      showEngagementMetrics: options.showEngagementMetrics !== undefined ? options.showEngagementMetrics : true,
-      customCSS: options.customCSS || '',
-      appSyncConfig: options.appSyncConfig || {
-        region: 'us-east-1', // Default region
-        endpoint: '', // Will be filled from script attributes
-        apiKey: '', // Will be filled from script attributes
-      }
+      websiteId: '',
+      position: 'bottom-right',
+      theme: 'auto',
+      showActiveUsers: true,
+      showEngagementMetrics: true,
+      showHeatmap: false,
+      debug: false,
+      ...options
     };
     
-    // Only initialize for the percentage of users defined in sampleRate
-    if (Math.random() > this.options.sampleRate) {
-      console.log('ProovdPulse: User not in sample group, widget disabled');
-      return;
-    }
+    this.debug = !!this.options.debug;
     
-    // Generate and save session/client IDs
-    this.sessionId = this.getSessionId();
+    // Debug initialization
+    this.logDebug('ProovdPulse initializing with options:', this.options);
+    
+    // Client ID for tracking
     this.clientId = this.getClientId();
+    this.logDebug('Client ID:', this.clientId);
     
-    // Create DOM analyzer
-    this.domAnalyzer = new DOMAnalyzer();
-    
-    console.log('ProovdPulse: Initialized with options:', this.options);
-    
-    // Add CSS styles
-    this.addStyles();
-    
-    // Get AppSync configuration from script attributes
-    this.configureAmplify();
-    
-    // Initialize the widget
-    this.init();
+    // Start tracking
+    this.initialize();
   }
   
   /**
-   * Configure AWS Amplify with AppSync settings
+   * Log debug messages if debug mode is enabled
    */
-  private configureAmplify(): void {
-    // Try to get AppSync config from script attributes
-    const script = document.currentScript as HTMLScriptElement;
-    if (script) {
-      const endpoint = script.getAttribute('data-appsync-endpoint');
-      const apiKey = script.getAttribute('data-appsync-api-key');
-      const region = script.getAttribute('data-appsync-region');
+  private logDebug(...args: any[]): void {
+    if (this.debug) {
+      console.log('%cProovdPulse Debug:', 'background: #6366f1; color: white; padding: 2px 4px; border-radius: 2px;', ...args);
+    }
+  }
+  
+  /**
+   * Log errors with more visibility
+   */
+  private logError(...args: any[]): void {
+    console.error('%cProovdPulse Error:', 'background: #ef4444; color: white; padding: 2px 4px; border-radius: 2px;', ...args);
+  }
+  
+  /**
+   * Initialize AWS Amplify
+   */
+  private async initAmplify(): Promise<void> {
+    this.logDebug('Initializing AWS Amplify with configuration:', {
+      endpoint: this.options.appSyncConfig?.endpoint ? this.options.appSyncConfig.endpoint.substring(0, 15) + '...' : 'missing',
+      apiKey: this.options.appSyncConfig?.apiKey ? '***' + (this.options.appSyncConfig.apiKey.substring(this.options.appSyncConfig.apiKey.length - 5)) : 'missing',
+      region: this.options.appSyncConfig?.region || 'us-east-1'
+    });
+    
+    if (!this.options.appSyncConfig?.endpoint || !this.options.appSyncConfig?.apiKey) {
+      this.logError('Missing AppSync configuration', {
+        endpoint: !!this.options.appSyncConfig?.endpoint,
+        apiKey: !!this.options.appSyncConfig?.apiKey
+      });
       
-      if (endpoint) this.options.appSyncConfig.endpoint = endpoint;
-      if (apiKey) this.options.appSyncConfig.apiKey = apiKey;
-      if (region) this.options.appSyncConfig.region = region;
+      // Update UI to show connection error
+      this.updateUserCountDisplay('Error: Configuration missing');
+      throw new Error('Missing AppSync configuration');
     }
     
-    // Configure Amplify
-    Amplify.configure({
-      aws_project_region: this.options.appSyncConfig.region,
-      aws_appsync_graphqlEndpoint: this.options.appSyncConfig.endpoint,
-      aws_appsync_region: this.options.appSyncConfig.region,
-      aws_appsync_authenticationType: 'API_KEY',
-      aws_appsync_apiKey: this.options.appSyncConfig.apiKey
-    });
+    try {
+      // Configure AWS Amplify
+      Amplify.configure({
+        aws_project_region: this.options.appSyncConfig.region || 'us-east-1',
+        aws_appsync_graphqlEndpoint: this.options.appSyncConfig.endpoint,
+        aws_appsync_region: this.options.appSyncConfig.region || 'us-east-1',
+        aws_appsync_authenticationType: 'API_KEY',
+        aws_appsync_apiKey: this.options.appSyncConfig.apiKey,
+        Analytics: {
+          disabled: true
+        }
+      });
+      
+      this.logDebug('Amplify initialized successfully');
+    } catch (error) {
+      this.logError('Error initializing Amplify:', error);
+      
+      // Update UI to show connection error
+      this.updateUserCountDisplay('Connection Error');
+      throw error;
+    }
   }
   
   /**
-   * Initialize the widget
+   * Initialize widget
    */
-  private async init(): Promise<void> {
+  private async initialize(): Promise<void> {
     try {
-      console.log('ProovdPulse: Initializing widget...');
+      this.logDebug('Starting initialization...');
       
-      // Create container
+      // Initialize AWS Amplify for AppSync
+      await this.initAmplify();
+      
+      // Create widget container
       this.createContainer();
       
-      // Fetch initial data
-      await this.fetchEngagementData();
+      // Add styles
+      this.addStyles();
       
-      // Start DOM analyzer
-      this.domAnalyzer.start();
+      // Subscribe to active users
+      if (this.options.showActiveUsers) {
+        this.logDebug('Setting up active users subscription');
+        await this.subscribeToActiveUsers();
+      }
       
-      // Start periodic updates
-      this.startUpdates();
+      // Initialize engagement metrics
+      if (this.options.showEngagementMetrics) {
+        this.logDebug('Setting up engagement metrics');
+        this.initializeEngagementMetrics();
+      }
       
-      // Track initial pageview
-      this.trackPageview();
+      // Initialize heatmap
+      if (this.options.showHeatmap) {
+        this.logDebug('Setting up heatmap');
+        this.initializeHeatmap();
+      }
       
-      // Subscribe to real-time updates
-      this.subscribeToActiveUsers();
+      // Initialize DOM observer
+      this.initDomObserver();
       
-      // Widget is now active
-      this.isActive = true;
+      // Track pageview
+      await this.trackPageview();
       
-      // Dispatch event that widget is loaded
-      this.dispatchEvent('proovdPulseLoaded', { clientId: this.clientId });
+      // Set up periodic updates
+      this.setupPeriodicUpdates();
       
+      this.logDebug('Initialization completed successfully');
     } catch (error) {
-      console.error('ProovdPulse initialization error:', error);
-      this.dispatchEvent('proovdPulseError', { message: (error as Error).message });
+      this.logError('Error initializing ProovdPulse:', error);
+      
+      // Show error in the widget
+      this.updateUserCountDisplay('Connection Error');
     }
   }
   
   /**
-   * Subscribe to active users updates
+   * Subscribe to active users
    */
-  private subscribeToActiveUsers(): void {
+  private async subscribeToActiveUsers(): Promise<void> {
     try {
-      this.subscription = API.graphql(
+      if (!this.options.websiteId) {
+        this.logError('Missing websiteId for subscription');
+        return;
+      }
+      
+      this.logDebug('Subscribing to active users for websiteId:', this.options.websiteId);
+      
+      // Subscribe to changes in active users
+      const subscription = API.graphql(
         graphqlOperation(
           queries.onActiveUserChange,
           { websiteId: this.options.websiteId }
         )
-      ).subscribe({
-        next: (result: any) => {
-          const data = result.value.data.onActiveUserChange;
-          if (data) {
-            this.engagementData.activeUsers = data.activeUsers;
-            
-            // Update country and city stats if available
-            if (data.usersByCountry) {
-              try {
-                this.engagementData.usersByCountry = JSON.parse(data.usersByCountry);
-              } catch (e) {
-                console.error('Error parsing usersByCountry:', e);
-              }
-            }
-            
-            if (data.usersByCity) {
-              try {
-                this.engagementData.usersByCity = JSON.parse(data.usersByCity);
-              } catch (e) {
-                console.error('Error parsing usersByCity:', e);
-              }
-            }
-            
-            // Update average metrics
-            if (data.avgTimeOnPage) {
-              this.engagementData.avgTimeOnPage = data.avgTimeOnPage;
-            }
-            
-            // Render widget with updated data
-            this.renderWidget();
-          }
-        },
-        error: (error: any) => {
-          console.error('Subscription error:', error);
-        }
-      });
-      
-      // Handle visibility changes
-      document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
-    } catch (error) {
-      console.error('Error setting up subscription:', error);
-    }
-  }
-  
-  /**
-   * Handle visibility change
-   */
-  private handleVisibilityChange(): void {
-    if (document.visibilityState === 'visible') {
-      // Page is visible again, reconnect if needed
-      if (!this.subscription) {
-        this.subscribeToActiveUsers();
-      }
-    } else {
-      // Page is hidden, cleanup subscription
-      if (this.subscription) {
-        this.subscription.unsubscribe();
-        this.subscription = null;
-      }
-    }
-  }
-  
-  /**
-   * Start periodic updates
-   */
-  private startUpdates(): void {
-    // Update engagement data every 30 seconds
-    this.updateInterval = setInterval(() => {
-      this.updateEngagementData();
-    }, 30000);
-    
-    // Track scroll position
-    window.addEventListener('scroll', () => {
-      const scrollTop = window.scrollY || document.documentElement.scrollTop;
-      const scrollHeight = document.documentElement.scrollHeight;
-      const clientHeight = document.documentElement.clientHeight;
-      
-      this.metrics.scrollPercentage = Math.round((scrollTop / (scrollHeight - clientHeight)) * 100);
-    }, { passive: true });
-    
-    // Track clicks
-    document.addEventListener('click', () => {
-      this.metrics.clickCount++;
-    }, true);
-  }
-  
-  /**
-   * Update engagement metrics
-   */
-  private updateMetrics(): void {
-    // Update time on page
-    const elapsed = Math.floor((new Date().getTime() - this.startTime.getTime()) / 1000);
-    this.metrics.timeOnPage = elapsed;
-  }
-  
-  /**
-   * Fetch engagement data from AppSync
-   */
-  private async fetchEngagementData(): Promise<void> {
-    try {
-      const result = await API.graphql(
-        graphqlOperation(
-          queries.getWebsiteStats,
-          { id: this.options.websiteId }
-        )
       );
       
-      const data = (result as any).data.getWebsiteStats;
-      
-      if (data) {
-        this.engagementData.activeUsers = data.activeUsers;
-        this.engagementData.avgTimeOnPage = data.avgTimeOnPage || 0;
-        
-        // Parse JSON fields
-        if (data.usersByCountry) {
-          try {
-            this.engagementData.usersByCountry = JSON.parse(data.usersByCountry);
-          } catch (e) {
-            console.error('Error parsing usersByCountry:', e);
+      if ('subscribe' in subscription) {
+        this.subscription = subscription.subscribe({
+          next: (data: any) => {
+            this.logDebug('Received subscription update:', data);
+            
+            const payload = data.value.data.onActiveUserChange;
+            if (payload) {
+              this.updateStats(payload);
+            } else {
+              this.logDebug('Subscription payload was empty or undefined');
+            }
+          },
+          error: (error: any) => {
+            this.logError('Subscription error:', error);
+            
+            // Update UI to show subscription error
+            this.updateUserCountDisplay('Live updates disconnected');
           }
-        }
+        });
         
-        if (data.usersByCity) {
-          try {
-            this.engagementData.usersByCity = JSON.parse(data.usersByCity);
-          } catch (e) {
-            console.error('Error parsing usersByCity:', e);
-          }
-        }
-        
-        // Render widget with new data
-        this.renderWidget();
+        this.logDebug('Subscription set up successfully');
+      } else {
+        this.logError('Subscription object does not have a subscribe method');
       }
     } catch (error) {
-      console.error('Error fetching engagement data:', error);
+      this.logError('Error setting up subscription:', error);
+      
+      // Update UI to show subscription error
+      this.updateUserCountDisplay('Live updates unavailable');
+    }
+  }
+  
+  /**
+   * Update user count display with custom message
+   */
+  private updateUserCountDisplay(message: string): void {
+    if (this.container) {
+      const userCountElement = this.container.querySelector('.proovd-pulse-active-users .proovd-pulse-metric-value');
+      if (userCountElement) {
+        userCountElement.textContent = message;
+        userCountElement.style.color = '#ef4444'; // Error color
+      }
     }
   }
   
@@ -340,26 +290,28 @@ export class ProovdPulse {
       this.updateMetrics();
       
       if (!API) {
-        console.error('ProovdPulse: API not initialized');
+        this.logError('API not initialized');
         return;
       }
       
       if (!this.clientId || !this.options.websiteId) {
-        console.error('ProovdPulse: Missing clientId or websiteId', {
+        this.logError('Missing clientId or websiteId', {
           clientId: this.clientId,
           websiteId: this.options.websiteId
         });
         return;
       }
       
-      console.log('ProovdPulse: Sending metrics to AppSync', {
+      const metricsData = {
+        scrollPercentage: this.metrics.scrollPercentage,
+        timeOnPage: this.metrics.timeOnPage,
+        clickCount: this.metrics.clickCount
+      };
+      
+      this.logDebug('Sending metrics to AppSync:', {
         clientId: this.clientId,
         websiteId: this.options.websiteId,
-        metrics: {
-          scrollPercentage: this.metrics.scrollPercentage,
-          timeOnPage: this.metrics.timeOnPage,
-          clickCount: this.metrics.clickCount
-        }
+        metrics: metricsData
       });
       
       // Send updated metrics to AppSync
@@ -369,21 +321,23 @@ export class ProovdPulse {
           {
             clientId: this.clientId,
             websiteId: this.options.websiteId,
-            metrics: {
-              scrollPercentage: this.metrics.scrollPercentage,
-              timeOnPage: this.metrics.timeOnPage,
-              clickCount: this.metrics.clickCount
-            }
+            metrics: metricsData
           }
         )
       );
       
-      console.log('ProovdPulse: UpdateUserActivity response:', response);
+      this.logDebug('updateUserActivity response:', response);
+      
+      // Check response for errors or null values
+      if (response && response.data && response.data.updateUserActivity === null) {
+        this.logError('updateUserActivity returned null. Possible server-side error.');
+      }
     } catch (error) {
-      console.error('ProovdPulse: Error updating engagement data:', error);
+      this.logError('Error updating engagement data:', error);
+      
       // Retry after a delay if it's a network issue
       if (error.message && (error.message.includes('Network') || error.message.includes('Failed to fetch'))) {
-        console.log('ProovdPulse: Will retry after delay');
+        this.logDebug('Will retry after delay');
         setTimeout(() => this.updateEngagementData(), 30000); // Retry after 30 seconds
       }
     }
@@ -394,22 +348,22 @@ export class ProovdPulse {
    */
   private async trackPageview(): Promise<void> {
     try {
-      console.log('ProovdPulse: Pageview tracked');
+      this.logDebug('Tracking pageview');
       
       if (!API) {
-        console.error('ProovdPulse: API not initialized');
+        this.logError('API not initialized');
         return;
       }
       
       if (!this.clientId || !this.options.websiteId) {
-        console.error('ProovdPulse: Missing clientId or websiteId', {
+        this.logError('Missing clientId or websiteId', {
           clientId: this.clientId,
           websiteId: this.options.websiteId
         });
         return;
       }
       
-      console.log('ProovdPulse: Sending initial pageview to AppSync', {
+      this.logDebug('Sending initial pageview to AppSync:', {
         clientId: this.clientId,
         websiteId: this.options.websiteId
       });
@@ -430,13 +384,22 @@ export class ProovdPulse {
         )
       );
       
-      console.log('ProovdPulse: Initial trackPageview response:', response);
+      this.logDebug('Initial trackPageview response:', response);
+      
+      // Check response for errors or null values
+      if (response && response.data && response.data.updateUserActivity === null) {
+        this.logError('trackPageview returned null. Possible server-side error.');
+        this.updateUserCountDisplay('Data connection issue');
+      }
     } catch (error) {
-      console.error('ProovdPulse: Error tracking pageview:', error);
+      this.logError('Error tracking pageview:', error);
+      
+      // Update UI to show error
+      this.updateUserCountDisplay('Connection issue');
       
       // Retry after a delay if it's a network issue
       if (error.message && (error.message.includes('Network') || error.message.includes('Failed to fetch'))) {
-        console.log('ProovdPulse: Will retry pageview after delay');
+        this.logDebug('Will retry pageview after delay');
         setTimeout(() => this.trackPageview(), 10000); // Retry after 10 seconds
       }
     }
