@@ -62,6 +62,12 @@ export async function GET(
     return NextResponse.json({
       success: true,
       data: engagementData
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
     });
   } catch (error) {
     console.error('Error getting engagement data:', error);
@@ -130,6 +136,12 @@ export async function POST(
     return NextResponse.json({
       success: true,
       quotaUsage: ipLocationService.getQuotaUsage()
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
     });
   } catch (error) {
     console.error('Error recording engagement data:', error);
@@ -138,4 +150,16 @@ export async function POST(
       { status: 500 }
     );
   }
+}
+
+// Add CORS preflight handler
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 } 
