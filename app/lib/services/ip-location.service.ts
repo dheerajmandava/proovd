@@ -1,11 +1,11 @@
 /**
- * IPLocation Service
- * Integrates with IPLocate.io API to provide geolocation data for IPs
- * Implements caching and request throttling to stay within quota limits
+ * IP Location Service
+ * Uses iplocate.io to get geographic data for IP addresses
  */
 
-// Types for IPLocate response
-export interface GeoData {
+import { createCache } from '@/app/lib/cache';
+
+interface LocationData {
   ip: string;
   country: string;
   country_code: string;
@@ -17,101 +17,75 @@ export interface GeoData {
   postal_code: string;
   org: string;
   asn: string;
-  subdivision: string;
-  is_vpn: boolean;
 }
 
-export class IPLocationService {
-  private cache: Map<string, GeoData> = new Map();
+class IPLocationService {
+  private API_KEY = 'aasasas123FVC12231'; // Use the API key provided
+  private API_URL = 'https://www.iplocate.io/api/lookup';
+  private cache: Map<string, LocationData>;
   private requestCount: number = 0;
-  private requestCountResetDate: Date = new Date();
-  private maxDailyRequests: number = 950; // Keeping a safety margin from 1000
-  private apiKey: string;
-  
-  constructor(apiKey: string = '') {
-    this.apiKey = apiKey || process.env.IPLOCATE_API_KEY || '';
-    this.resetCounterIfNewDay();
+  private dailyQuota: number = 1000; // Default daily quota
+
+  constructor() {
+    // Create a cache with 24-hour TTL
+    this.cache = createCache<LocationData>(24 * 60 * 60 * 1000);
+    
+    // Reset request count daily
+    setInterval(() => {
+      this.requestCount = 0;
+    }, 24 * 60 * 60 * 1000);
   }
-  
+
   /**
    * Get location data for an IP address
-   * Returns cached data if available, otherwise fetches from API
    */
-  async getLocationData(ip: string): Promise<GeoData | null> {
-    this.resetCounterIfNewDay();
-    
-    // Return from cache if available
+  async getLocationData(ip: string): Promise<LocationData | null> {
+    // Check quota
+    if (this.requestCount >= this.dailyQuota) {
+      console.warn('IP location API daily quota exceeded');
+      return null;
+    }
+
+    // Check cache first
     if (this.cache.has(ip)) {
       return this.cache.get(ip) || null;
     }
-    
-    // Check if we've reached the daily quota
-    if (this.requestCount >= this.maxDailyRequests) {
-      console.warn('IPLocate daily quota limit reached. Using cached data only.');
-      return null;
-    }
-    
+
     try {
-      // Build the API URL with or without API key
-      let apiUrl = `https://www.iplocate.io/api/lookup/${ip}`;
-      if (this.apiKey) {
-        apiUrl += `?apikey=${this.apiKey}`;
-      }
-      
-      const response = await fetch(apiUrl);
+      // Make API call
+      const url = `${this.API_URL}`;
+      const response = await fetch(url);
       
       if (!response.ok) {
-        throw new Error(`IPLocate API error: ${response.status}`);
+        throw new Error(`Failed to get location data: ${response.status} ${response.statusText}`);
       }
       
-      const data = await response.json() as GeoData;
+      const data = await response.json() as LocationData;
       
-      // Increment counter and cache the result
+      // Increment request count
       this.requestCount++;
+      
+      // Cache result
       this.cache.set(ip, data);
       
       return data;
     } catch (error) {
-      console.error('Error fetching IP location data:', error);
+      console.error('Error getting location data:', error);
       return null;
     }
   }
-  
-  /**
-   * Reset request counter if it's a new day
-   */
-  private resetCounterIfNewDay(): void {
-    const today = new Date();
-    if (today.toDateString() !== this.requestCountResetDate.toDateString()) {
-      this.requestCount = 0;
-      this.requestCountResetDate = today;
-    }
-  }
-  
+
   /**
    * Get current quota usage
    */
-  getQuotaUsage(): { used: number, remaining: number, resetsIn: string } {
-    this.resetCounterIfNewDay();
-    const remaining = this.maxDailyRequests - this.requestCount;
-    
-    // Calculate time until reset
-    const now = new Date();
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
-    
-    const msUntilReset = tomorrow.getTime() - now.getTime();
-    const hoursUntilReset = Math.floor(msUntilReset / (1000 * 60 * 60));
-    const minutesUntilReset = Math.floor((msUntilReset % (1000 * 60 * 60)) / (1000 * 60));
-    
+  getQuotaUsage(): { current: number, limit: number, percentage: number } {
     return {
-      used: this.requestCount,
-      remaining,
-      resetsIn: `${hoursUntilReset}h ${minutesUntilReset}m`
+      current: this.requestCount,
+      limit: this.dailyQuota,
+      percentage: Math.round((this.requestCount / this.dailyQuota) * 100)
     };
   }
 }
 
-// Export singleton instance
+// Export a singleton instance
 export const ipLocationService = new IPLocationService(); 
