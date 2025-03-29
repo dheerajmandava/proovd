@@ -1,17 +1,10 @@
 version: 1
-backend:
-  phases:
-    build:
-      commands:
-        - '# Execute Amplify CLI with the helper script'
-        - amplifyPush --simple
 frontend:
   phases:
     preBuild:
       commands:
         - npm ci --cache .npm --prefer-offline
-        - '# Install AWS Amplify CLI'
-        - npm install -g @aws-amplify/cli
+
     build:
       commands:
         - echo "NEXTAUTH_SECRET=$NEXTAUTH_SECRET" >> .env
