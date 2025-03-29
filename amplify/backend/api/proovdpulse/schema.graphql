@@ -1,0 +1,71 @@
+type Website @model {
+  id: ID!
+  name: String!
+  domain: String!
+  ownerId: String!
+}
+
+type UserSession @model 
+  @auth(rules: [{ allow: public, operations: [create, read] }]) {
+  id: ID!
+  clientId: String!
+  websiteId: ID!
+  ipAddress: String
+  userAgent: String
+  location: LocationData
+  lastActive: AWSTimestamp!
+  metrics: Metrics
+}
+
+type Metrics {
+  scrollPercentage: Int
+  timeOnPage: Int
+  clickCount: Int
+}
+
+type LocationData {
+  country: String
+  country_code: String
+  city: String
+  region: String
+}
+
+type WebsiteStats @model
+  @auth(rules: [{ allow: public, operations: [read] }]) {
+  id: ID! # This will be the website ID
+  activeUsers: Int!
+  usersByCountry: AWSJSON
+  usersByCity: AWSJSON
+  avgTimeOnPage: Float
+  avgScrollPercentage: Float
+  totalClicks: Int
+}
+
+type Subscription {
+  onActiveUserChange(websiteId: ID!): WebsiteStats
+    @aws_subscribe(mutations: ["updateWebsiteStats"])
+}
+
+type Mutation {
+  updateUserActivity(
+    clientId: String!,
+    websiteId: ID!,
+    metrics: MetricsInput
+  ): UserSession
+  
+  updateWebsiteStats(
+    id: ID!,
+    activeUsers: Int,
+    usersByCountry: AWSJSON,
+    usersByCity: AWSJSON,
+    avgTimeOnPage: Float,
+    avgScrollPercentage: Float,
+    totalClicks: Int
+  ): WebsiteStats
+}
+
+input MetricsInput {
+  scrollPercentage: Int
+  timeOnPage: Int
+  clickCount: Int
+} 

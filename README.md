@@ -85,3 +85,84 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## ProovdPulse Real-Time Implementation with AWS AppSync
+
+ProovdPulse now uses AWS AppSync for real-time user engagement tracking. This implementation replaces the custom WebSocket server approach with a fully managed, serverless solution that works seamlessly with AWS Amplify deployments.
+
+### Setting Up AWS AppSync and Amplify
+
+1. **Initialize Amplify in your project**:
+
+```bash
+# Install Amplify CLI
+npm install -g @aws-amplify/cli
+
+# Initialize Amplify in your project
+amplify init
+```
+
+Follow the prompts to configure your project, connecting it to your AWS account.
+
+2. **Add GraphQL API to your project**:
+
+```bash
+amplify add api
+```
+
+Select GraphQL when prompted, and use the following settings:
+- API name: `proovdpulse`
+- Authorization type: Choose API key for simplicity or Amazon Cognito for better security
+- Schema: Use the schema from `amplify/backend/api/proovdpulse/schema.graphql`
+
+3. **Add Lambda functions**:
+
+```bash
+amplify add function
+```
+
+Create two functions:
+- `updateWebsiteStats`: For API resolvers to update stats
+- `periodicStatsUpdate`: To periodically update stats for all websites
+
+Use the provided code in:
+- `amplify/backend/function/updateWebsiteStats/src/index.js`
+- `amplify/backend/function/periodicStatsUpdate/src/index.js`
+
+4. **Deploy Amplify backend**:
+
+```bash
+amplify push
+```
+
+This will deploy your GraphQL API and Lambda functions to AWS.
+
+5. **Configure environment variables in AWS Amplify Console**:
+
+For your app to connect to AppSync, add these environment variables in the Amplify Console:
+- `NEXT_PUBLIC_AWS_REGION`: Your AWS region (e.g., `us-east-1`)
+- `NEXT_PUBLIC_APPSYNC_ENDPOINT`: The GraphQL endpoint from AppSync
+- `NEXT_PUBLIC_APPSYNC_API_KEY`: The API key from AppSync
+
+### How It Works
+
+1. **Real-time User Tracking**:
+   - The ProovdPulse widget uses AWS AppSync subscriptions to receive real-time updates
+   - User activity is reported via GraphQL mutations
+   - A Lambda function processes this data to calculate engagement metrics
+
+2. **Periodic Updates**:
+   - A scheduled Lambda function updates stats for all websites every minute
+   - This ensures stats remain accurate even with fluctuating user activity
+
+3. **Website Dashboard**:
+   - The dashboard interface connects to the same AppSync API
+   - It subscribes to real-time updates for the specific website being viewed
+
+### Benefits Over Custom WebSocket Implementation
+
+- **Scalability**: Automatically scales to handle thousands of concurrent users
+- **Reliability**: Fully managed service with high availability
+- **Simplified Deployment**: Works seamlessly with Amplify's serverless architecture
+- **Reduced Maintenance**: No need to manage WebSocket server infrastructure
+- **Cost-Effective**: Pay only for what you use with serverless architecture

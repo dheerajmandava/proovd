@@ -1,0 +1,57 @@
+version: 1
+backend:
+  phases:
+    build:
+      commands:
+        - '# Execute Amplify CLI with the helper script'
+        - amplifyPush --simple
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci --cache .npm --prefer-offline
+        - '# Install AWS Amplify CLI'
+        - npm install -g @aws-amplify/cli
+    build:
+      commands:
+        - echo "NEXTAUTH_SECRET=$NEXTAUTH_SECRET" >> .env
+        - echo "NEXTAUTH_URL=$NEXTAUTH_URL" >> .env
+        - echo "MONGODB_URI=$MONGODB_URI" >> .env
+        - echo "MONGODB_DB=$MONGODB_DB" >> .env
+        - echo "NEXT_PUBLIC_AWS_REGION=$AWS_REGION" >> .env
+        - echo "NEXT_PUBLIC_APPSYNC_ENDPOINT=$APPSYNC_ENDPOINT" >> .env
+        - echo "NEXT_PUBLIC_APPSYNC_API_KEY=$APPSYNC_API_KEY" >> .env
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*
+  customHeaders:
+    - pattern: '**/*.js'
+      headers:
+        - key: 'Cache-Control'
+          value: 'public, max-age=31536000, immutable'
+    - pattern: '**/*.css'
+      headers:
+        - key: 'Cache-Control'
+          value: 'public, max-age=31536000, immutable'
+    - pattern: '**/*.png'
+      headers:
+        - key: 'Cache-Control'
+          value: 'public, max-age=86400'
+    - pattern: '**/*.jpg'
+      headers:
+        - key: 'Cache-Control'
+          value: 'public, max-age=86400'
+    - pattern: '**/*.svg'
+      headers:
+        - key: 'Cache-Control'
+          value: 'public, max-age=86400'
+    - pattern: '/api/**/*'
+      headers:
+        - key: 'Cache-Control'
+          value: 'no-cache, no-store, must-revalidate' 
