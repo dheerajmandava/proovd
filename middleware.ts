@@ -110,5 +110,9 @@ export const config = {
      * - favicon.ico (favicon file)
      */
     '/((?!_next/static|_next/image|favicon.ico).*)',
+    // Public API routes
+    '/api/websites/:id/widget.js',
+    '/api/websites/:id/pulse-widget.js',
+    '/api/pageview',
   ],
 } 

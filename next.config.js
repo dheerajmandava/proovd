@@ -28,6 +28,24 @@ const nextConfig = {
         ],
         destination: '/cdn/:path*',
       },
+      // CDN paths for widget scripts
+      {
+        source: '/api/websites/:id/widget.js',
+        destination: '/api/websites/:id/widget.js',
+      },
+      {
+        source: '/api/websites/:id/pulse-widget.js',
+        destination: '/api/websites/:id/pulse-widget.js',
+      },
+      // CDN paths
+      {
+        source: '/cdn/w/:id.js',
+        destination: '/api/cdn/w/:id',
+      },
+      {
+        source: '/cdn/w/:id/pulse.js',
+        destination: '/public/cdn/w/pulse/loader.js',
+      },
     ];
   },
   // Make sure the CDN directory is accessible as static files

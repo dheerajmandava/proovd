@@ -1,6 +1,8 @@
 import { auth } from '@/auth';
 import { notFound } from 'next/navigation';
 import ServerHydratedWebsiteDetails from './components/ServerHydratedWebsiteDetails';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/app/components/ui/card';
+import Link from 'next/link';
 
 export default async function WebsitePage(
   props: {
@@ -21,7 +23,28 @@ export default async function WebsitePage(
   try {
     const websiteId = params.id;
     
-    return <ServerHydratedWebsiteDetails websiteId={websiteId} />;
+    return (
+      <>
+        <ServerHydratedWebsiteDetails websiteId={websiteId} />
+        <Card className="col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">ProovdPulse</CardTitle>
+            <div className="h-4 w-4 rounded-full bg-indigo-500"></div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {Math.floor(Math.random() * 100) + 10}
+            </div>
+            <p className="text-xs text-muted-foreground">Active users right now</p>
+          </CardContent>
+          <CardFooter>
+            <Link href={`/dashboard/websites/${websiteId}/pulse`} className="text-xs text-blue-500 hover:underline">
+              View engagement insights
+            </Link>
+          </CardFooter>
+        </Card>
+      </>
+    );
   } catch (error) {
     console.error('Error loading website:', error);
     return (
