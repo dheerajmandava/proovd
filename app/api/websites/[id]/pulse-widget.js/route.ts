@@ -59,7 +59,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       
       // Load required libraries
       Promise.all([
-        loadScript('https://cdn.jsdelivr.net/npm/aws-amplify@5.3.3/dist/aws-amplify.min.js'),
+        loadScript('https://cdn.jsdelivr.net/npm/aws-amplify@6.14.1/dist/cjs/index.min.js'),
         loadScript('https://cdn.jsdelivr.net/npm/lit-html@2.7.5/lit-html.min.js'),
         loadScript('https://cdn.jsdelivr.net/npm/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js')
       ]).then(() => {
