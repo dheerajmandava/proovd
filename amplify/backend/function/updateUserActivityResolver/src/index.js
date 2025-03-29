@@ -66,115 +66,94 @@ exports.handler = async (event) => {
       };
     }
     
-    // Test MongoDB environment variables
-    console.log('MongoDB Environment Variables:', {
-      uriSet: !!process.env.MONGODB_URI,
-      dbSet: !!process.env.MONGODB_DB,
-      uriLength: process.env.MONGODB_URI ? process.env.MONGODB_URI.length : 0,
-      dbName: process.env.MONGODB_DB
-    });
-    
     // Connect to MongoDB
     console.log('Connecting to MongoDB...');
+    const { db } = await connectToDatabase();
+    console.log('Connected to MongoDB');
     
-    try {
-      const { db } = await connectToDatabase();
-      console.log('Connected to MongoDB');
-      
-      // Verify we can access collections
-      console.log('Verifying collections...');
-      const collections = await db.listCollections().toArray();
-      console.log('Available collections:', collections.map(c => c.name));
-      
-      // Get the UserSessions collection
-      const userSessionsCollection = db.collection('usersessions');
-      console.log('Accessing usersessions collection');
-      
-      // Get current timestamp
-      const now = new Date();
-      
-      // Try to find an existing session
-      console.log('Finding existing session for:', { clientId, websiteId });
-      let session = await userSessionsCollection.findOne({
+    // Get the UserSessions collection
+    const userSessionsCollection = db.collection('usersessions');
+    console.log('Accessing usersessions collection');
+    
+    // Get current timestamp
+    const now = new Date();
+    
+    // Try to find an existing session
+    console.log('Finding existing session for:', { clientId, websiteId });
+    let session = await userSessionsCollection.findOne({
+      clientId,
+      websiteId
+    });
+    
+    console.log('Existing session found:', !!session);
+    
+    // If no session exists, create a new one
+    if (!session) {
+      console.log('Creating new session');
+      const newSession = {
         clientId,
-        websiteId
-      });
+        websiteId,
+        firstActive: now,
+        lastActive: now,
+        metrics: metrics || {
+          scrollPercentage: 0,
+          timeOnPage: 0,
+          clickCount: 0
+        },
+        isActive: true
+      };
       
-      console.log('Existing session found:', !!session);
+      console.log('New session data:', newSession);
+      const result = await userSessionsCollection.insertOne(newSession);
+      console.log('Session created with ID:', result.insertedId);
       
-      // If no session exists, create a new one
-      if (!session) {
-        console.log('Creating new session');
-        const newSession = {
-          clientId,
-          websiteId,
-          firstActive: now,
-          lastActive: now,
-          metrics: metrics || {
-            scrollPercentage: 0,
-            timeOnPage: 0,
-            clickCount: 0
-          },
-          isActive: true
-        };
-        
-        console.log('New session data:', newSession);
-        const result = await userSessionsCollection.insertOne(newSession);
-        console.log('Session created with ID:', result.insertedId);
-        
-        session = {
-          ...newSession,
-          id: result.insertedId.toString()
-        };
-      } else {
-        // Update the existing session
-        console.log('Updating existing session:', session._id);
-        const updates = {
-          lastActive: now,
-          isActive: true
-        };
-        
-        // If metrics were provided, update them
-        if (metrics) {
-          updates.metrics = metrics;
-        }
-        
-        console.log('Updates to apply:', updates);
-        
-        await userSessionsCollection.updateOne(
-          { _id: new ObjectId(session._id) },
-          { $set: updates }
-        );
-        
-        console.log('Session updated successfully');
-        
-        session = {
-          ...session,
-          ...updates,
-          id: session._id.toString()
-        };
+      session = {
+        ...newSession,
+        id: result.insertedId.toString()
+      };
+    } else {
+      // Update the existing session
+      console.log('Updating existing session:', session._id);
+      const updates = {
+        lastActive: now,
+        isActive: true
+      };
+      
+      // If metrics were provided, update them
+      if (metrics) {
+        updates.metrics = metrics;
       }
       
-      // After updating/creating the session, update the website stats
-      console.log('Updating website stats for websiteId:', websiteId);
-      await updateWebsiteStats(db, websiteId);
+      console.log('Updates to apply:', updates);
       
-      // Return the session data
-      const response = {
-        id: session.id || session._id.toString(),
-        clientId: session.clientId,
-        websiteId: session.websiteId,
-        lastActive: session.lastActive
-      };
+      await userSessionsCollection.updateOne(
+        { _id: new ObjectId(session._id) },
+        { $set: updates }
+      );
       
-      console.log('Returning response:', response);
-      return response;
-    } catch (dbError) {
-      console.error('MongoDB connection or query failed:', dbError);
-      return {
-        error: `Database connection failed: ${dbError.message}`
+      console.log('Session updated successfully');
+      
+      session = {
+        ...session,
+        ...updates,
+        id: session._id.toString()
       };
     }
+    
+    // After updating/creating the session, update the website stats
+    console.log('Updating website stats for websiteId:', websiteId);
+    await updateWebsiteStats(db, websiteId);
+    
+    // Return the session data
+    const response = {
+      id: session.id || session._id.toString(),
+      clientId: session.clientId,
+      websiteId: session.websiteId,
+      lastActive: session.lastActive
+    };
+    
+    console.log('Returning response:', response);
+    return response;
   } catch (error) {
     console.error('Error in updateUserActivity resolver:', error);
     
