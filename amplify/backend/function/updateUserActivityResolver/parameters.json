@@ -1,4 +1,0 @@
-{
-  "MONGODB_URI": "mongodb+srv://test:test@cluster0.qh719.mongodb.net/proovd?retryWrites=true&w=majority&appName=Cluster0&socketTimeoutMS=30000&connectTimeoutMS=30000&serverSelectionTimeoutMS=15000",
-  "MONGODB_DB": "proovd"
-}

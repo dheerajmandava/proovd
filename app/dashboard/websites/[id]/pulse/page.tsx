@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/app/components/ui/button';
@@ -47,6 +47,131 @@ interface WebsiteStats {
   avgTimeOnPage: number;
   avgScrollPercentage: number;
   totalClicks: number;
+}
+
+// Add a new component for the live ProovdPulse widget
+function LiveProovdPulseWidget({ websiteId, position, theme }: { 
+  websiteId: string;
+  position: string;
+  theme: string;
+}) {
+  const widgetRef = useRef<HTMLDivElement>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function getAuthToken() {
+      try {
+        const response = await fetch(`/api/pulse-auth?websiteId=${websiteId}`);
+        if (!response.ok) {
+          throw new Error('Failed to get authentication token');
+        }
+        const data = await response.json();
+        setToken(data.token);
+      } catch (error: any) {
+        console.error('Error getting token:', error);
+        setError(error.message || 'Failed to get authentication token');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    getAuthToken();
+  }, [websiteId]);
+
+  useEffect(() => {
+    // This is where we would initialize the ProovdPulse widget
+    // In a real dashboard, we would load the script from CDN and initialize
+    // For now, we'll just simulate the widget appearance
+
+    if (!widgetRef.current || !token) return;
+
+    const widgetContainer = widgetRef.current;
+    widgetContainer.innerHTML = ''; // Clear any previous widget
+    
+    const widgetDiv = document.createElement('div');
+    widgetDiv.className = 'proovd-pulse-demo-widget';
+    widgetDiv.style.position = 'relative';
+    widgetDiv.style.display = 'flex';
+    widgetDiv.style.alignItems = 'center';
+    widgetDiv.style.padding = '8px 12px';
+    widgetDiv.style.backgroundColor = theme === 'dark' ? '#1f2937' : '#ffffff';
+    widgetDiv.style.color = theme === 'dark' ? '#e5e7eb' : '#111827';
+    widgetDiv.style.borderRadius = '8px';
+    widgetDiv.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+    widgetDiv.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    widgetDiv.style.fontSize = '14px';
+    widgetDiv.style.width = 'fit-content';
+    
+    // Create pulse indicator
+    const pulseIndicator = document.createElement('div');
+    pulseIndicator.style.width = '10px';
+    pulseIndicator.style.height = '10px';
+    pulseIndicator.style.borderRadius = '50%';
+    pulseIndicator.style.backgroundColor = '#4338ca';
+    pulseIndicator.style.marginRight = '8px';
+    pulseIndicator.style.position = 'relative';
+    
+    // Add pulse animation
+    const pulse = document.createElement('div');
+    pulse.style.position = 'absolute';
+    pulse.style.width = '100%';
+    pulse.style.height = '100%';
+    pulse.style.borderRadius = '50%';
+    pulse.style.backgroundColor = '#4338ca';
+    pulse.style.opacity = '0.6';
+    pulse.style.animation = 'proovdPulseLive 1.5s infinite';
+    
+    // Add animation style
+    const style = document.createElement('style');
+    style.innerHTML = `
+      @keyframes proovdPulseLive {
+        0% {
+          transform: scale(1);
+          opacity: 0.6;
+        }
+        100% {
+          transform: scale(2.5);
+          opacity: 0;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    pulseIndicator.appendChild(pulse);
+    
+    // Create count element
+    const countElement = document.createElement('div');
+    countElement.textContent = '1 active user';
+    
+    widgetDiv.appendChild(pulseIndicator);
+    widgetDiv.appendChild(countElement);
+    
+    widgetContainer.appendChild(widgetDiv);
+    
+    return () => {
+      // Clean up
+      if (style.parentNode) {
+        style.parentNode.removeChild(style);
+      }
+    };
+  }, [token, position, theme]);
+
+  if (loading) {
+    return <div className="h-16 w-32 animate-pulse rounded-md bg-gray-200"></div>;
+  }
+
+  if (error) {
+    return <div className="text-sm text-red-500">{error}</div>;
+  }
+
+  return (
+    <div className="border-rounded mt-4 p-4 border border-dashed border-gray-300">
+      <p className="mb-2 text-sm text-gray-500">Live Widget Preview:</p>
+      <div ref={widgetRef} className="min-h-8"></div>
+    </div>
+  );
 }
 
 export default function PulseDashboard() {
@@ -134,13 +259,32 @@ export default function PulseDashboard() {
   
   // Copy widget code to clipboard
   const copyWidgetCode = () => {
-    const code = `<script 
-  async 
-  src="${window.location.origin}/api/websites/${id}/pulse-widget.js"
-  data-appsync-endpoint="${process.env.NEXT_PUBLIC_APPSYNC_ENDPOINT}"
-  data-appsync-api-key="${process.env.NEXT_PUBLIC_APPSYNC_API_KEY}"
-  data-appsync-region="${process.env.NEXT_PUBLIC_AWS_REGION}"
-></script>`;
+    const code = `<script src="https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js"></script>
+<script type="module">
+  import { ProovdPulse } from 'https://cdn.proovd.in/pulse-widget/proovd-pulse.js';
+  
+  // Initialize ProovdPulse
+  document.addEventListener('DOMContentLoaded', async () => {
+    try {
+      // Get auth token from your backend
+      const response = await fetch('${window.location.origin}/api/pulse-auth?websiteId=${id}');
+      const { token } = await response.json();
+      
+      // Initialize with authentication token
+      window.proovdPulse = new ProovdPulse({
+        websiteId: '${id}',
+        serverUrl: 'wss://socket.proovd.in',
+        authToken: token,
+        position: '${websiteData.settings?.pulse?.position || 'bottom-right'}',
+        theme: '${websiteData.settings?.pulse?.theme || 'light'}'
+      });
+      
+      await window.proovdPulse.init();
+    } catch (error) {
+      console.error('Failed to initialize ProovdPulse:', error);
+    }
+  });
+</script>`;
     navigator.clipboard.writeText(code);
     alert('Widget code copied to clipboard');
   };
@@ -304,8 +448,16 @@ export default function PulseDashboard() {
                 </div>
               </div>
               
-              <div className="mt-6 flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => setSettingsOpen(false)}>Cancel</Button>
+              <div className="mt-6">
+                <h3 className="text-md font-medium">Widget Preview</h3>
+                <LiveProovdPulseWidget 
+                  websiteId={id as string} 
+                  position={websiteData.settings?.pulse?.position || 'bottom-right'} 
+                  theme={websiteData.settings?.pulse?.theme || 'light'}
+                />
+              </div>
+              
+              <div className="mt-6 flex justify-end">
                 <Button type="submit">Save Settings</Button>
               </div>
             </form>

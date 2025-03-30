@@ -3,220 +3,214 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ProovdPulse Widget Test</title>
+  <title>ProovdPulse Test Widget</title>
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
+    .container {
       max-width: 800px;
       margin: 0 auto;
-      padding: 20px;
+      padding: 2rem;
+    }
+    header {
+      margin-bottom: 2rem;
     }
     h1 {
-      color: #333;
-      border-bottom: 1px solid #eee;
-      padding-bottom: 10px;
-    }
-    p {
-      margin-bottom: 20px;
-    }
-    code {
-      background: #f4f4f4;
-      padding: 2px 5px;
-      border-radius: 3px;
+      color: #4338ca;
     }
     .content {
-      min-height: 1500px;
-      padding-bottom: 300px;
+      min-height: 200vh; /* Make the page scrollable */
+    }
+    .actions {
+      margin-top: 2rem;
+      padding: 1rem;
+      background-color: #f9fafb;
+      border-radius: 8px;
     }
     button {
-      background: #0070f3;
+      background-color: #4338ca;
       color: white;
       border: none;
-      padding: 10px 15px;
-      border-radius: 5px;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
       cursor: pointer;
-      font-size: 16px;
-      margin-right: 10px;
+      font-size: 14px;
+      transition: background-color 0.2s;
     }
     button:hover {
-      background: #0051a8;
+      background-color: #3730a3;
     }
-    .debug {
-      margin-top: 20px;
-      padding: 15px;
-      background: #f8f8f8;
-      border-radius: 5px;
-      border: 1px solid #ddd;
+    .card {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
-    #logs {
-      max-height: 200px;
-      overflow-y: auto;
-      background: #333;
-      color: #fff;
-      padding: 10px;
-      border-radius: 5px;
+    .logs {
+      margin-top: 2rem;
+      background-color: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem;
+      border-radius: 8px;
       font-family: monospace;
-      margin-top: 10px;
+      height: 200px;
+      overflow-y: auto;
     }
     .log-entry {
-      margin-bottom: 5px;
-      border-bottom: 1px solid #444;
-      padding-bottom: 5px;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 0.5rem;
     }
-    .log-time {
-      color: #aaa;
-      font-size: 0.8em;
+    .timestamp {
+      color: #94a3b8;
+      font-size: 0.8rem;
+      margin-right: 0.5rem;
     }
   </style>
 </head>
 <body>
-  <h1>ProovdPulse Widget Test Page</h1>
-  
-  <p>This page is for testing the ProovdPulse widget implementation. Scroll down, click buttons, and interact with the page to generate activity data.</p>
-  
-  <div class="debug">
-    <h3>Debug Controls</h3>
-    <button id="trigger-activity">Trigger Activity Report</button>
-    <button id="fetch-stats">Fetch Stats</button>
-    <button id="clear-logs">Clear Logs</button>
+  <div class="container">
+    <header>
+      <h1>ProovdPulse Test Widget</h1>
+      <p>This page demonstrates the ProovdPulse real-time visitor tracking widget.</p>
+    </header>
     
-    <div>
-      <h4>Console Logs:</h4>
-      <div id="logs"></div>
+    <div class="content">
+      <div class="card">
+        <h2>About ProovdPulse</h2>
+        <p>ProovdPulse is a real-time website visitor tracking widget that shows how many people are actively viewing your website and tracks engagement metrics.</p>
+      </div>
+      
+      <div class="card">
+        <h2>Engagement Metrics</h2>
+        <p>ProovdPulse tracks the following metrics:</p>
+        <ul>
+          <li>Active users</li>
+          <li>Click count</li>
+          <li>Scroll percentage</li>
+          <li>Time on page</li>
+        </ul>
+      </div>
+      
+      <div class="actions">
+        <h3>Actions</h3>
+        <button id="triggerActivity">Trigger Activity Report</button>
+        <button id="resetWidget">Reset Widget</button>
+      </div>
+      
+      <div class="logs">
+        <div id="log-container"></div>
+      </div>
     </div>
   </div>
-  
-  <div class="content">
-    <h2>Sample Content</h2>
-    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam auctor, nisl eget ultricies tincidunt, nunc nisl aliquam nisl, eget aliquam nunc nisl eget nunc. Nullam auctor, nisl eget ultricies tincidunt, nunc nisl aliquam nisl, eget aliquam nunc nisl eget nunc.</p>
-    
-    <h2>Interaction Area</h2>
-    <p>Click these buttons to generate click events:</p>
-    <button class="test-button">Click Me!</button>
-    <button class="test-button">And Me!</button>
-    <button class="test-button">Me Too!</button>
-    
-    <h2>Scroll down to test scroll tracking</h2>
-    <p>Keep scrolling to generate scroll percentage data...</p>
-    
-    <!-- Repeat content to make page scrollable -->
-    <div id="repeat-content"></div>
-  </div>
 
-  <!-- AWS Amplify -->
-  <script src="https://cdn.jsdelivr.net/npm/aws-amplify@5.0.4/dist/aws-amplify.min.js"></script>
-  
-  <!-- Import widget script -->
-  <script src="/widget/proovd-pulse.js" 
-    data-website-id="67e0e2226fd6e457ee2d2549"
-    data-appsync-endpoint="ENTER_YOUR_APPSYNC_ENDPOINT_HERE"
-    data-appsync-api-key="ENTER_YOUR_APPSYNC_API_KEY_HERE"
-    data-appsync-region="ENTER_YOUR_AWS_REGION_HERE"></script>
-  
-  <script>
-    // Generate repeated content
-    const repeatContent = document.getElementById('repeat-content');
-    for (let i = 0; i < 10; i++) {
-      const section = document.createElement('div');
-      section.innerHTML = `
-        <h3>Section ${i+1}</h3>
-        <p>More content to scroll through. This helps test the scroll tracking functionality of the ProovdPulse widget.</p>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam auctor, nisl eget ultricies tincidunt, nunc nisl aliquam nisl, eget aliquam nunc nisl eget nunc.</p>
-      `;
-      repeatContent.appendChild(section);
+  <!-- ProovdPulse Widget -->
+  <script src="https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js"></script>
+  <script type="module">
+    import { ProovdPulse } from '../dist/pulse-widget/proovd-pulse.js';
+
+    // Log function
+    function log(message) {
+      const container = document.getElementById('log-container');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      
+      const timestamp = document.createElement('span');
+      timestamp.className = 'timestamp';
+      timestamp.textContent = new Date().toLocaleTimeString();
+      
+      const content = document.createElement('span');
+      content.textContent = message;
+      
+      entry.appendChild(timestamp);
+      entry.appendChild(content);
+      container.appendChild(entry);
+      
+      // Scroll to bottom
+      container.scrollTop = container.scrollHeight;
     }
-    
-    // Capture console logs
-    const logs = document.getElementById('logs');
-    
-    function addLog(message) {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString();
-      
-      const logEntry = document.createElement('div');
-      logEntry.className = 'log-entry';
-      
-      const timeSpan = document.createElement('span');
-      timeSpan.className = 'log-time';
-      timeSpan.textContent = `[${timeStr}] `;
-      
-      logEntry.appendChild(timeSpan);
-      logEntry.appendChild(document.createTextNode(message));
-      
-      logs.appendChild(logEntry);
-      logs.scrollTop = logs.scrollHeight;
-    }
-    
-    // Override console methods
+
+    // Override console.log for the widget
     const originalConsoleLog = console.log;
-    const originalConsoleError = console.error;
-    const originalConsoleWarn = console.warn;
-    
     console.log = function() {
       originalConsoleLog.apply(console, arguments);
-      
-      // Only log ProovdPulse messages
-      if (arguments[0] && typeof arguments[0] === 'string' && arguments[0].includes('ProovdPulse')) {
-        addLog(Array.from(arguments).join(' '));
+      // Log all messages to make debugging easier
+      if (arguments[0]) {
+        log(typeof arguments[0] === 'string' ? arguments[0] : JSON.stringify(arguments[0]));
       }
     };
-    
-    console.error = function() {
-      originalConsoleError.apply(console, arguments);
+
+    // Get the websiteId from URL parameters or use a default
+    const urlParams = new URLSearchParams(window.location.search);
+    const websiteId = urlParams.get('websiteId') || '67e0e2226fd66457ee2d254d';
+
+    // Initialize the widget
+    document.addEventListener('DOMContentLoaded', async () => {
+      log(`Initializing ProovdPulse with websiteId: ${websiteId}`);
       
-      // Only log ProovdPulse messages
-      if (arguments[0] && typeof arguments[0] === 'string' && arguments[0].includes('ProovdPulse')) {
-        addLog(`ERROR: ${Array.from(arguments).join(' ')}`);
-      }
-    };
-    
-    console.warn = function() {
-      originalConsoleWarn.apply(console, arguments);
-      
-      // Only log ProovdPulse messages
-      if (arguments[0] && typeof arguments[0] === 'string' && arguments[0].includes('ProovdPulse')) {
-        addLog(`WARN: ${Array.from(arguments).join(' ')}`);
-      }
-    };
-    
-    // Setup debug controls
-    document.getElementById('trigger-activity').addEventListener('click', function() {
-      const pulseWidget = window.ProovdPulse;
-      if (pulseWidget) {
-        addLog('Manually triggering activity report...');
+      try {
+        console.log("Creating ProovdPulse instance");
+        window.proovdPulse = new ProovdPulse({
+          websiteId: websiteId,
+          serverUrl: 'ws://localhost:3001',
+          container: 'body',
+          position: 'bottom-right',
+          showPulse: true,
+          pulseColor: '#4338ca'
+        });
         
-        const metrics = {
-          scrollPercentage: Math.round(Math.random() * 100),
-          timeOnPage: Math.round(Math.random() * 60) + 30,
-          clickCount: Math.round(Math.random() * 5) + 1
-        };
+        console.log("Calling init() method");
+        await window.proovdPulse.init();
+        log('ProovdPulse initialized successfully');
         
-        pulseWidget.reportActivity(metrics);
-      } else {
-        addLog('ERROR: ProovdPulse widget not initialized!');
+        // Log socket state
+        const socketClient = window.proovdPulse?.socketClient;
+        if (socketClient) {
+          log(`Socket connection active: ${socketClient.isActive()}`);
+          socketClient.on('connect', (data) => log(`Socket connected: ${JSON.stringify(data)}`));
+          socketClient.on('disconnect', (data) => log(`Socket disconnected: ${JSON.stringify(data)}`));
+          socketClient.on('error', (data) => log(`Socket error: ${JSON.stringify(data)}`));
+          socketClient.on('stats', (data) => log(`Stats received: ${JSON.stringify(data)}`));
+        }
+      } catch (error) {
+        log(`Error initializing ProovdPulse: ${error.message}`);
+        console.error(error);
       }
-    });
-    
-    document.getElementById('fetch-stats').addEventListener('click', function() {
-      const pulseWidget = window.ProovdPulse;
-      if (pulseWidget) {
-        addLog('Manually fetching website stats...');
-        pulseWidget.fetchWebsiteStats();
-      } else {
-        addLog('ERROR: ProovdPulse widget not initialized!');
-      }
-    });
-    
-    document.getElementById('clear-logs').addEventListener('click', function() {
-      logs.innerHTML = '';
-      addLog('Logs cleared');
-    });
-    
-    // Track test button clicks
-    document.querySelectorAll('.test-button').forEach(button => {
-      button.addEventListener('click', function() {
-        addLog(`Button clicked: "${this.textContent}"`);
+      
+      // Button event listeners
+      document.getElementById('triggerActivity').addEventListener('click', () => {
+        log('Triggering activity report manually');
+        if (window.proovdPulse) {
+          try {
+            // Access private method via this workaround
+            window.proovdPulse['reportActivity']?.();
+          } catch (e) {
+            log(`Error reporting activity: ${e.message}`);
+          }
+        }
+      });
+      
+      document.getElementById('resetWidget').addEventListener('click', () => {
+        log('Resetting widget');
+        if (window.proovdPulse) {
+          window.proovdPulse.destroy();
+          setTimeout(async () => {
+            window.proovdPulse = new ProovdPulse({
+              websiteId: websiteId,
+              serverUrl: 'ws://localhost:3001',
+              container: 'body',
+              position: 'bottom-right'
+            });
+            await window.proovdPulse.init();
+            log('ProovdPulse reset complete');
+          }, 1000);
+        }
       });
     });
   </script>
