@@ -21,7 +21,7 @@ ProovdPulse provides live user tracking, visitor engagement metrics, and real-ti
 Add the following script to your website's HTML:
 
 ```html
-<script src="https://proovd.in/api/websites/YOUR_WEBSITE_ID/pulse-widget.js" async></script>
+<script src="https://www.proovd.in/api/websites/YOUR_WEBSITE_ID/pulse-widget.js" async></script>
 ```
 
 Replace `YOUR_WEBSITE_ID` with your unique ProovdPulse website ID.

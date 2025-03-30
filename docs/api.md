@@ -9,7 +9,7 @@ All API requests to website resources are made using the website ID which is inc
 Example:
 
 ```bash
-curl -X GET "https://proovd.in/api/websites/YOUR_WEBSITE_ID/notifications/show"
+curl -X GET "https://www.proovd.in/api/websites/YOUR_WEBSITE_ID/notifications/show"
 ```
  
 ## Rate Limits

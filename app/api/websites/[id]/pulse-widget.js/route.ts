@@ -742,6 +742,78 @@ class ProovdPulse {
 
 // Expose ProovdPulse to global scope
 window.ProovdPulse = ProovdPulse;
+
+// Function to fetch authentication token
+async function fetchAuthToken(websiteId, clientId) {
+  try {
+    const response = await fetch(\`https://www.proovd.in/api/websites/\${websiteId}/pulse-auth\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ clientId })
+    });
+    
+    if (!response.ok) {
+      throw new Error(\`HTTP error: \${response.status}\`);
+    }
+    
+    const data = await response.json();
+    return data.token;
+  } catch (error) {
+    console.error('Error fetching authentication token:', error);
+    throw error;
+  }
+}
+
+// Auto-initialize the widget
+document.addEventListener('DOMContentLoaded', async function() {
+  try {
+    console.log('Auto-initializing ProovdPulse');
+    
+    // Generate a client ID
+    const clientId = 'client-' + Math.random().toString(36).substring(2, 10);
+    
+    // Website ID from the script URL
+    const websiteId = '${params.id}';
+    
+    // First try to fetch the auth token
+    try {
+      console.log('Fetching authentication token...');
+      const token = await fetchAuthToken(websiteId, clientId);
+      console.log('Authentication token received');
+      
+      // Initialize with the token
+      const pulse = new ProovdPulse({
+        websiteId: websiteId,
+        token: token,
+        debug: true
+      });
+      
+      pulse.init().then(() => {
+        console.log('ProovdPulse auto-initialization successful with auth token');
+      }).catch(err => {
+        console.error('ProovdPulse initialization failed even with token:', err);
+      });
+    } catch (tokenError) {
+      console.warn('Failed to get authentication token, trying without:', tokenError);
+      
+      // Fall back to initialize without token
+      const pulse = new ProovdPulse({
+        websiteId: websiteId,
+        debug: true
+      });
+      
+      pulse.init().then(() => {
+        console.log('ProovdPulse initialized without authentication token');
+      }).catch(err => {
+        console.error('ProovdPulse initialization failed:', err);
+      });
+    }
+  } catch (error) {
+    console.error('Error in ProovdPulse auto-initialization:', error);
+  }
+});
 `;
 
     return new NextResponse(script, { 

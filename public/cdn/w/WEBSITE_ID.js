@@ -20,7 +20,7 @@
   
   // Create the actual widget script element
   const widgetScript = document.createElement('script');
-  widgetScript.src = `https://proovd.in/api/websites/${websiteId}/widget.js`;
+  widgetScript.src = `https://www.proovd.in/api/websites/${websiteId}/widget.js`;
   
   // Append to document
   document.body.appendChild(widgetScript);
