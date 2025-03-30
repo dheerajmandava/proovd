@@ -8,5 +8,10 @@
   $util.error($ctx.result.error)
 #end
 
+## If result is null, provide a meaningful error
+#if($ctx.result == null)
+  $util.error("Lambda resolver did not return a valid response. Check Lambda function logs.")
+#end
+
 ## Otherwise, return the result
 $util.toJson($ctx.result) 

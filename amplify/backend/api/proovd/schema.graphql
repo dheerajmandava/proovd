@@ -17,16 +17,19 @@ type Website @model {
   ownerId: String!
 }
 
-type UserSession @model 
-  @auth(rules: [{ allow: public, operations: [create, read] }]) {
+type UserSession {
   id: ID!
   clientId: String!
   websiteId: ID!
   ipAddress: String
   userAgent: String
   location: LocationData
-  lastActive: AWSDateTime
+  firstActive: AWSDateTime
+  lastActive: Int!
+  isActive: Boolean
   metrics: Metrics
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
 }
 
 type Metrics {
@@ -42,15 +45,16 @@ type LocationData {
   region: String
 }
 
-type WebsiteStats @model
-  @auth(rules: [{ allow: public, operations: [read] }]) {
-  id: ID! # This will be the website ID
+type WebsiteStats {
+  id: ID!
   activeUsers: Int!
   usersByCountry: String
   usersByCity: String
   avgTimeOnPage: Int
   avgScrollPercentage: Int
   totalClicks: Int
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
 }
 
 type Subscription {
@@ -60,8 +64,8 @@ type Subscription {
 
 type Mutation {
   updateUserActivity(
-    clientId: String!,
-    websiteId: ID!,
+    clientId: String!
+    websiteId: ID!
     metrics: MetricsInput
   ): UserSession
   

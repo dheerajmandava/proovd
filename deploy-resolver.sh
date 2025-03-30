@@ -6,16 +6,26 @@ if [ -f .env.local ]; then
   export $(cat .env.local | grep -v '#' | sed 's/\r$//' | xargs)
 fi
 
-# Navigate to the project root
-cd "$(dirname "$0")"
+# Check for required environment variables
+if [ -z "$MONGODB_URI" ] || [ -z "$MONGODB_DB" ]; then
+  echo "ERROR: MongoDB environment variables missing!"
+  echo "Please ensure MONGODB_URI and MONGODB_DB are set in your .env.local file."
+  exit 1
+fi
 
-# Install dependencies for the Lambda function
+if [ -z "$NEXT_PUBLIC_APPSYNC_ENDPOINT" ] || [ -z "$NEXT_PUBLIC_APPSYNC_API_KEY" ]; then
+  echo "ERROR: AppSync environment variables missing!"
+  echo "Please ensure NEXT_PUBLIC_APPSYNC_ENDPOINT and NEXT_PUBLIC_APPSYNC_API_KEY are set in your .env.local file."
+  exit 1
+fi
+
+# Install dependencies in the Lambda function directory
 echo "Installing Lambda dependencies..."
 cd amplify/backend/function/updateUserActivityResolver
 npm install
-cd -
+cd ../../../..
 
-# Deploy the API and function
+# Deploy AppSync API and Lambda resolver
 echo "Deploying AppSync API and Lambda resolver..."
 
 # Create parameter file with actual environment variables
@@ -26,24 +36,16 @@ cat > amplify/backend/function/updateUserActivityResolver/parameters.json << EOF
 }
 EOF
 
-# Check if environment variables are set
-if [ -z "$MONGODB_URI" ] || [ -z "$MONGODB_DB" ]; then
-  echo "ERROR: MongoDB environment variables are not set properly!"
-  echo "Please ensure MONGODB_URI and MONGODB_DB are defined in your environment or .env.local file."
-  exit 1
-fi
+# Display configuration
+echo "=== Configuration Summary ==="
+echo "MongoDB Database: $MONGODB_DB"
+echo "AppSync Region: ${NEXT_PUBLIC_AWS_REGION:-ap-south-1}"
+echo "MongoDB URI: ${MONGODB_URI:0:25}... (truncated for security)"
+echo "========================"
 
-# Log AppSync configuration
-echo "Checking AppSync Configuration:"
-if [ -z "$APPSYNC_ENDPOINT" ] || [ -z "$APPSYNC_API_KEY" ]; then
-  echo "WARNING: AppSync environment variables are not set properly!"
-  echo "Please ensure APPSYNC_ENDPOINT and APPSYNC_API_KEY are defined in your environment or .env.local file."
-fi
+# Run the Amplify push with environment variables
+echo "Running amplify push with environment variables..."
+MONGODB_URI="$MONGODB_URI" MONGODB_DB="$MONGODB_DB" amplify push --yes
 
-# Run the deployment commands using AWS CLI or amplify CLI
-echo "Deploying with amplify CLI..."
-
-# Amplify push command would go here
-# e.g., amplify push --yes
-
-echo "Deployment completed." 
+echo "Deployment completed! Check CloudWatch logs for Lambda function execution details."
+echo "AppSync API Endpoint: $NEXT_PUBLIC_APPSYNC_ENDPOINT" 

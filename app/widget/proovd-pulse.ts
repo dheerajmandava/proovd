@@ -75,6 +75,7 @@ export class ProovdPulse {
     clickCount: 0
   };
   private startTime = new Date();
+  private updateTimer: any = null;
   
   constructor(options: ProovdPulseOptions) {
     // Set default options
@@ -363,22 +364,37 @@ export class ProovdPulse {
       });
       
       // Send updated metrics to AppSync
-      const response = await API.graphql(
-        graphqlOperation(
-          queries.updateUserActivity,
-          {
-            clientId: this.clientId,
-            websiteId: this.options.websiteId,
-            metrics: {
-              scrollPercentage: this.metrics.scrollPercentage,
-              timeOnPage: this.metrics.timeOnPage,
-              clickCount: this.metrics.clickCount
-            }
+      const response = await API.graphql({
+        query: queries.updateUserActivity,
+        variables: {
+          clientId: this.clientId,
+          websiteId: this.options.websiteId,
+          metrics: {
+            scrollPercentage: this.metrics.scrollPercentage,
+            timeOnPage: this.metrics.timeOnPage,
+            clickCount: this.metrics.clickCount
           }
-        )
-      );
+        }
+      });
       
-      console.log('ProovdPulse: UpdateUserActivity response:', response);
+      // Check for errors or null response
+      if (response?.errors) {
+        console.error('ProovdPulse: GraphQL errors:', response.errors);
+        return;
+      }
+      
+      const data = response?.data?.updateUserActivity;
+      if (!data) {
+        console.error('ProovdPulse: Null response from updateUserActivity');
+        // Force refresh of metrics data
+        setTimeout(() => this.fetchActiveUsers(), 5000);
+        return;
+      }
+      
+      console.log('ProovdPulse: UpdateUserActivity success:', data);
+      
+      // Schedule the next update
+      this.scheduleNextUpdate();
     } catch (error) {
       console.error('ProovdPulse: Error updating engagement data:', error);
       // Retry after a delay if it's a network issue
@@ -387,6 +403,21 @@ export class ProovdPulse {
         setTimeout(() => this.updateEngagementData(), 30000); // Retry after 30 seconds
       }
     }
+  }
+  
+  /**
+   * Schedule the next metrics update
+   */
+  private scheduleNextUpdate(): void {
+    // Clear any existing timer
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer);
+    }
+    
+    // Set a new timer for the next update (every minute)
+    this.updateTimer = setTimeout(() => {
+      this.updateEngagementData();
+    }, 60000); // Update every minute
   }
   
   /**
@@ -415,22 +446,38 @@ export class ProovdPulse {
       });
       
       // Send initial metrics to AppSync
-      const response = await API.graphql(
-        graphqlOperation(
-          queries.updateUserActivity,
-          {
-            clientId: this.clientId,
-            websiteId: this.options.websiteId,
-            metrics: {
-              scrollPercentage: 0,
-              timeOnPage: 0,
-              clickCount: 0
-            }
+      const response = await API.graphql({
+        query: queries.updateUserActivity,
+        variables: {
+          clientId: this.clientId,
+          websiteId: this.options.websiteId,
+          metrics: {
+            scrollPercentage: 0,
+            timeOnPage: 0,
+            clickCount: 0
           }
-        )
-      );
+        }
+      });
       
-      console.log('ProovdPulse: Initial trackPageview response:', response);
+      // Check for errors or null response
+      if (response?.errors) {
+        console.error('ProovdPulse: GraphQL errors:', response.errors);
+        return;
+      }
+      
+      const data = response?.data?.updateUserActivity;
+      if (!data) {
+        console.error('ProovdPulse: Null response from trackPageview');
+        return;
+      }
+      
+      console.log('ProovdPulse: Initial trackPageview success:', data);
+      
+      // Begin fetching active users
+      this.fetchActiveUsers();
+      
+      // Schedule updates
+      this.scheduleNextUpdate();
     } catch (error) {
       console.error('ProovdPulse: Error tracking pageview:', error);
       
@@ -438,6 +485,116 @@ export class ProovdPulse {
       if (error.message && (error.message.includes('Network') || error.message.includes('Failed to fetch'))) {
         console.log('ProovdPulse: Will retry pageview after delay');
         setTimeout(() => this.trackPageview(), 10000); // Retry after 10 seconds
+      }
+    }
+  }
+  
+  /**
+   * Fetch active users and metrics from AppSync
+   */
+  private async fetchActiveUsers(): Promise<void> {
+    try {
+      if (!API) {
+        console.error('ProovdPulse: API not initialized for fetchActiveUsers');
+        return;
+      }
+      
+      console.log('ProovdPulse: Fetching website stats');
+      
+      const response = await API.graphql({
+        query: queries.getWebsiteStats,
+        variables: {
+          id: this.options.websiteId
+        }
+      });
+      
+      // Check for errors or null response
+      if (response?.errors) {
+        console.error('ProovdPulse: GraphQL errors in fetchActiveUsers:', response.errors);
+        return;
+      }
+      
+      const data = response?.data?.getWebsiteStats;
+      if (!data) {
+        console.error('ProovdPulse: Null response from getWebsiteStats');
+        return;
+      }
+      
+      console.log('ProovdPulse: Received website stats:', data);
+      
+      // Update metrics display with the fetched data
+      this.updateMetricsDisplay(data);
+      
+      // Set up subscription for real-time updates if not already set up
+      if (!this.subscription) {
+        this.setupSubscription();
+      }
+    } catch (error) {
+      console.error('ProovdPulse: Error fetching active users:', error);
+      
+      // Retry after a delay
+      setTimeout(() => this.fetchActiveUsers(), 30000); // Retry after 30 seconds
+    }
+  }
+  
+  /**
+   * Set up real-time subscription for active users
+   */
+  private setupSubscription(): void {
+    try {
+      console.log('ProovdPulse: Setting up subscription');
+      
+      this.subscription = API.graphql({
+        query: queries.onActiveUserChange,
+        variables: {
+          websiteId: this.options.websiteId
+        }
+      }).subscribe({
+        next: (result) => {
+          const data = result?.data?.onActiveUserChange;
+          if (data) {
+            console.log('ProovdPulse: Subscription update:', data);
+            this.updateMetricsDisplay(data);
+          }
+        },
+        error: (error) => {
+          console.error('ProovdPulse: Subscription error:', error);
+          
+          // Attempt to reconnect after a delay
+          setTimeout(() => {
+            this.subscription = null;
+            this.setupSubscription();
+          }, 30000);
+        }
+      });
+    } catch (error) {
+      console.error('ProovdPulse: Error setting up subscription:', error);
+    }
+  }
+  
+  /**
+   * Update metrics display with data from API
+   */
+  private updateMetricsDisplay(data: any): void {
+    if (!data) return;
+    
+    // Update active users count if element exists
+    if (this.userCountElement) {
+      this.userCountElement.innerText = data.activeUsers.toString();
+    }
+    
+    // Update other metrics if they exist
+    if (this.options.showEngagementMetrics) {
+      if (this.timeElement) {
+        this.timeElement.innerText = `${data.avgTimeOnPage || 0}s`;
+      }
+      
+      if (this.scrollElement) {
+        this.scrollElement.innerText = `${data.avgScrollPercentage || 0}%`;
+      }
+      
+      if (this.clicksElement) {
+        this.clicksElement.innerText = `${data.totalClicks || 0}`;
       }
     }
   }

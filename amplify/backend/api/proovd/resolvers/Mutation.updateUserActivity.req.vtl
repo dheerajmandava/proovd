@@ -1,9 +1,14 @@
-## Forward request to Lambda
+## Forward request to Lambda with detailed context
 {
   "version": "2018-05-29",
   "operation": "Invoke",
   "payload": {
     "field": "updateUserActivity",
-    "arguments": $utils.toJson($context.arguments)
+    "arguments": $utils.toJson($context.arguments),
+    "identity": {
+      "sourceIp": "$context.identity.sourceIp",
+      "userAgent": "$context.request.headers.User-Agent"
+    },
+    "timestamp": $utils.toJson($utils.time.nowISO8601())
   }
 } 

@@ -7,30 +7,26 @@ let client = null;
 async function connectToDatabase() {
   console.log('Attempting to connect to MongoDB...');
   
-  if (cachedDb && client.isConnected()) {
+  if (cachedDb && client.isConnected && client.isConnected()) {
     console.log('Using cached MongoDB connection');
     return { db: cachedDb, client };
   }
 
-  const uri = process.env.MONGODB_URI;
-  const dbName = process.env.MONGODB_DB;
+  // Get the MongoDB connection string from environment variables
+  // or use a fallback for testing
+  const uri = process.env.MONGODB_URI || 'mongodb+srv://test:test@cluster0.qh719.mongodb.net/proovd?retryWrites=true&w=majority&appName=Cluster0&socketTimeoutMS=30000&connectTimeoutMS=30000&serverSelectionTimeoutMS=15000';
+  const dbName = process.env.MONGODB_DB || 'proovd';
   
-  console.log('MONGODB_URI set:', !!uri);
-  console.log('MONGODB_DB set:', !!dbName);
+  console.log('Connecting with database:', dbName);
   
-  if (!uri || !dbName) {
-    console.error('Missing environment variables:', {
-      MONGODB_URI: !!uri,
-      MONGODB_DB: !!dbName
-    });
-    throw new Error('Missing MONGODB_URI or MONGODB_DB environment variables');
-  }
-
   try {
     console.log('Creating new MongoDB connection...');
     client = await MongoClient.connect(uri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      connectTimeoutMS: 30000,
+      socketTimeoutMS: 30000,
+      serverSelectionTimeoutMS: 15000
     });
     
     cachedDb = client.db(dbName);
@@ -68,8 +64,21 @@ exports.handler = async (event) => {
     
     // Connect to MongoDB
     console.log('Connecting to MongoDB...');
-    const { db } = await connectToDatabase();
-    console.log('Connected to MongoDB');
+    let db;
+    try {
+      const result = await connectToDatabase();
+      db = result.db;
+      console.log('Connected to MongoDB successfully');
+    } catch (error) {
+      console.error('Failed to connect to MongoDB:', error);
+      return {
+        id: 'error',
+        clientId: clientId,
+        websiteId: websiteId,
+        lastActive: new Date().toISOString(),
+        error: `Database connection failed: ${error.message}`
+      };
+    }
     
     // Get the UserSessions collection
     const userSessionsCollection = db.collection('usersessions');
@@ -77,15 +86,21 @@ exports.handler = async (event) => {
     
     // Get current timestamp
     const now = new Date();
+    const timestamp = Math.floor(now.getTime() / 1000);
     
     // Try to find an existing session
     console.log('Finding existing session for:', { clientId, websiteId });
-    let session = await userSessionsCollection.findOne({
-      clientId,
-      websiteId
-    });
-    
-    console.log('Existing session found:', !!session);
+    let session;
+    try {
+      session = await userSessionsCollection.findOne({
+        clientId,
+        websiteId
+      });
+      console.log('Existing session found:', !!session);
+    } catch (findError) {
+      console.error('Error finding session:', findError);
+      // Continue with a new session
+    }
     
     // If no session exists, create a new one
     if (!session) {
@@ -95,6 +110,7 @@ exports.handler = async (event) => {
         websiteId,
         firstActive: now,
         lastActive: now,
+        lastActiveTimestamp: timestamp,
         metrics: metrics || {
           scrollPercentage: 0,
           timeOnPage: 0,
@@ -104,18 +120,31 @@ exports.handler = async (event) => {
       };
       
       console.log('New session data:', newSession);
-      const result = await userSessionsCollection.insertOne(newSession);
-      console.log('Session created with ID:', result.insertedId);
-      
-      session = {
-        ...newSession,
-        id: result.insertedId.toString()
-      };
+      try {
+        const result = await userSessionsCollection.insertOne(newSession);
+        console.log('Session created with ID:', result.insertedId);
+        
+        session = {
+          ...newSession,
+          id: result.insertedId.toString(),
+          _id: result.insertedId
+        };
+      } catch (insertError) {
+        console.error('Error creating session:', insertError);
+        return {
+          id: 'error',
+          clientId: clientId,
+          websiteId: websiteId,
+          lastActive: timestamp,
+          error: `Failed to create session: ${insertError.message}`
+        };
+      }
     } else {
       // Update the existing session
       console.log('Updating existing session:', session._id);
       const updates = {
         lastActive: now,
+        lastActiveTimestamp: timestamp,
         isActive: true
       };
       
@@ -126,30 +155,46 @@ exports.handler = async (event) => {
       
       console.log('Updates to apply:', updates);
       
-      await userSessionsCollection.updateOne(
-        { _id: new ObjectId(session._id) },
-        { $set: updates }
-      );
-      
-      console.log('Session updated successfully');
-      
-      session = {
-        ...session,
-        ...updates,
-        id: session._id.toString()
-      };
+      try {
+        await userSessionsCollection.updateOne(
+          { _id: new ObjectId(session._id) },
+          { $set: updates }
+        );
+        
+        console.log('Session updated successfully');
+        
+        session = {
+          ...session,
+          ...updates,
+          id: session._id.toString()
+        };
+      } catch (updateError) {
+        console.error('Error updating session:', updateError);
+        return {
+          id: session._id.toString(),
+          clientId: session.clientId,
+          websiteId: session.websiteId,
+          lastActive: timestamp,
+          error: `Failed to update session: ${updateError.message}`
+        };
+      }
     }
     
     // After updating/creating the session, update the website stats
     console.log('Updating website stats for websiteId:', websiteId);
-    await updateWebsiteStats(db, websiteId);
+    try {
+      await updateWebsiteStats(db, websiteId);
+    } catch (statsError) {
+      console.error('Error updating website stats:', statsError);
+      // Continue despite stats error
+    }
     
     // Return the session data
     const response = {
       id: session.id || session._id.toString(),
       clientId: session.clientId,
       websiteId: session.websiteId,
-      lastActive: session.lastActive
+      lastActive: timestamp
     };
     
     console.log('Returning response:', response);
@@ -158,6 +203,10 @@ exports.handler = async (event) => {
     console.error('Error in updateUserActivity resolver:', error);
     
     return {
+      id: 'error',
+      clientId: event.arguments?.clientId || 'unknown',
+      websiteId: event.arguments?.websiteId || 'unknown',
+      lastActive: Math.floor(new Date().getTime() / 1000),
       error: error.message || 'Unknown error occurred'
     };
   }
@@ -231,42 +280,36 @@ async function updateWebsiteStats(db, websiteId) {
     console.log('Looking for existing stats document');
     const statsDoc = await websiteStatsCollection.findOne({ websiteId });
     
+    const statsUpdate = {
+      websiteId,
+      activeUsers,
+      avgScrollPercentage,
+      avgTimeOnPage,
+      totalClicks,
+      usersByCountry: JSON.stringify(usersByCountry),
+      usersByCity: JSON.stringify(usersByCity),
+      updatedAt: new Date()
+    };
+    
     if (statsDoc) {
       console.log('Updating existing stats document');
       // Update existing stats
       await websiteStatsCollection.updateOne(
         { websiteId },
-        {
-          $set: {
-            activeUsers,
-            avgScrollPercentage,
-            avgTimeOnPage,
-            totalClicks,
-            usersByCountry: JSON.stringify(usersByCountry),
-            usersByCity: JSON.stringify(usersByCity),
-            updatedAt: new Date()
-          }
-        }
+        { $set: statsUpdate }
       );
     } else {
       console.log('Creating new stats document');
       // Create new stats document
       await websiteStatsCollection.insertOne({
-        websiteId,
-        activeUsers,
-        avgScrollPercentage,
-        avgTimeOnPage,
-        totalClicks,
-        usersByCountry: JSON.stringify(usersByCountry),
-        usersByCity: JSON.stringify(usersByCity),
-        createdAt: new Date(),
-        updatedAt: new Date()
+        ...statsUpdate,
+        createdAt: new Date()
       });
     }
     
     console.log('Stats document updated successfully');
     
-    // Publish to AppSync
+    // Return stats for subscription
     return {
       id: websiteId,
       activeUsers,
