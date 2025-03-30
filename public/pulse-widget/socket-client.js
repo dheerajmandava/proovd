@@ -1,12 +1,12 @@
 /**
  * ProovdPulse WebSocket Client
  * Handles communication with the ProovdPulse WebSocket server
+ * Production-ready with secure connections and authentication
  */
 export class PulseSocketClient {
-    constructor(clientId, websiteId, serverUrl) {
+    constructor(clientId, websiteId, serverUrl, options = {}) {
         this.socket = null;
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
         this.reconnectTimeout = null;
         this.handlers = {
             stats: [],
@@ -15,9 +15,24 @@ export class PulseSocketClient {
             error: []
         };
         this.isConnected = false;
-        this.clientId = clientId;
-        this.websiteId = websiteId;
-        this.serverUrl = serverUrl;
+        this.pingInterval = null;
+        this.lastPongTime = 0;
+        // Determine if we should use secure protocol based on server URL or explicit option
+        const useSecure = options.secure !== undefined
+            ? options.secure
+            : (typeof window !== 'undefined' && window.location.protocol === 'https:' || serverUrl.startsWith('wss://'));
+        this.options = {
+            clientId,
+            websiteId,
+            serverUrl: this.normalizeServerUrl(serverUrl, useSecure),
+            authToken: options.authToken,
+            secure: useSecure,
+            reconnectMaxAttempts: options.reconnectMaxAttempts || 10,
+            reconnectBaseDelay: options.reconnectBaseDelay || 1000,
+            reconnectMaxDelay: options.reconnectMaxDelay || 30000,
+            debug: options.debug || false
+        };
+        this.log('Initialized with options:', this.options);
     }
     /**
      * Connect to the WebSocket server
@@ -25,16 +40,25 @@ export class PulseSocketClient {
     connect() {
         return new Promise((resolve, reject) => {
             try {
-                this.socket = new WebSocket(this.serverUrl);
+                this.log('Connecting to WebSocket server:', this.options.serverUrl);
+                // Add auth token to URL if provided
+                let url = this.options.serverUrl;
+                if (this.options.authToken) {
+                    const separator = url.includes('?') ? '&' : '?';
+                    url = `${url}${separator}token=${encodeURIComponent(this.options.authToken)}`;
+                }
+                this.socket = new WebSocket(url);
                 this.socket.onopen = () => {
-                    console.log('ProovdPulse: Connected to WebSocket server');
+                    this.log('Connected to WebSocket server');
                     this.isConnected = true;
                     this.reconnectAttempts = 0;
                     // Send join message
                     this.sendMessage('join', {
-                        clientId: this.clientId,
-                        websiteId: this.websiteId
+                        clientId: this.options.clientId,
+                        websiteId: this.options.websiteId
                     });
+                    // Start ping interval for keep-alive
+                    this.startPingInterval();
                     // Notify handlers
                     this.notifyHandlers('connect', { connected: true });
                     resolve();
@@ -45,26 +69,33 @@ export class PulseSocketClient {
                         if (data.type === 'stats') {
                             this.notifyHandlers('stats', data);
                         }
+                        else if (data.type === 'pong') {
+                            this.lastPongTime = Date.now();
+                            this.log('Received pong from server');
+                        }
                     }
                     catch (error) {
-                        console.error('ProovdPulse: Error parsing message', error);
+                        this.log('Error parsing message', error);
                     }
                 };
-                this.socket.onclose = () => {
-                    console.log('ProovdPulse: Connection closed');
+                this.socket.onclose = (event) => {
+                    this.log(`Connection closed: ${event.code} ${event.reason}`);
                     this.isConnected = false;
-                    this.notifyHandlers('disconnect', { connected: false });
-                    // Try to reconnect
-                    this.attemptReconnect();
+                    this.stopPingInterval();
+                    this.notifyHandlers('disconnect', { connected: false, code: event.code, reason: event.reason });
+                    // Try to reconnect if not closed deliberately
+                    if (event.code !== 1000) {
+                        this.attemptReconnect();
+                    }
                 };
                 this.socket.onerror = (error) => {
-                    console.error('ProovdPulse: WebSocket error', error);
+                    this.log('WebSocket error', error);
                     this.notifyHandlers('error', { error });
                     reject(error);
                 };
             }
             catch (error) {
-                console.error('ProovdPulse: Failed to connect', error);
+                this.log('Failed to connect', error);
                 this.notifyHandlers('error', { error });
                 reject(error);
             }
@@ -75,10 +106,46 @@ export class PulseSocketClient {
      */
     sendActivity(metrics) {
         this.sendMessage('activity', {
-            clientId: this.clientId,
-            websiteId: this.websiteId,
+            clientId: this.options.clientId,
+            websiteId: this.options.websiteId,
             metrics
         });
+    }
+    /**
+     * Send a ping to keep the connection alive
+     */
+    sendPing() {
+        this.sendMessage('ping', {
+            clientId: this.options.clientId,
+            timestamp: Date.now()
+        });
+    }
+    /**
+     * Start the ping interval
+     */
+    startPingInterval() {
+        this.stopPingInterval();
+        this.lastPongTime = Date.now();
+        this.pingInterval = setInterval(() => {
+            if (this.isActive()) {
+                this.sendPing();
+                // Check if we received a pong recently
+                const now = Date.now();
+                if (now - this.lastPongTime > 60000) {
+                    this.log('No pong received for 60 seconds, reconnecting...');
+                    this.reconnect();
+                }
+            }
+        }, 30000); // 30 seconds
+    }
+    /**
+     * Stop the ping interval
+     */
+    stopPingInterval() {
+        if (this.pingInterval !== null) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
     }
     /**
      * Send a leave message and close the connection
@@ -86,15 +153,32 @@ export class PulseSocketClient {
     disconnect() {
         if (this.socket && this.isConnected) {
             this.sendMessage('leave', {
-                clientId: this.clientId,
-                websiteId: this.websiteId
+                clientId: this.options.clientId,
+                websiteId: this.options.websiteId
             });
-            this.socket.close();
+            this.socket.close(1000);
         }
+        this.stopPingInterval();
         if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout);
             this.reconnectTimeout = null;
         }
+    }
+    /**
+     * Force a reconnection
+     */
+    reconnect() {
+        if (this.socket) {
+            this.socket.close(1001);
+        }
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+        }
+        this.reconnectTimeout = setTimeout(() => {
+            this.connect().catch(error => {
+                this.log('Reconnect failed', error);
+            });
+        }, 100);
     }
     /**
      * Register a handler for a specific message type
@@ -132,11 +216,11 @@ export class PulseSocketClient {
                 }));
             }
             catch (error) {
-                console.error('ProovdPulse: Error sending message', error);
+                this.log('Error sending message', error);
             }
         }
         else {
-            console.warn('ProovdPulse: Cannot send message, not connected');
+            this.log('Cannot send message, not connected');
         }
     }
     /**
@@ -149,26 +233,50 @@ export class PulseSocketClient {
                     handler(data);
                 }
                 catch (error) {
-                    console.error(`ProovdPulse: Error in ${type} handler`, error);
+                    this.log(`Error in ${type} handler`, error);
                 }
             });
         }
     }
     /**
-     * Attempt to reconnect to the server
+     * Attempt to reconnect to the server with exponential backoff
      */
     attemptReconnect() {
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('ProovdPulse: Max reconnect attempts reached');
+        const maxAttempts = this.options.reconnectMaxAttempts || 10;
+        if (this.reconnectAttempts >= maxAttempts) {
+            this.log('Max reconnect attempts reached');
             return;
         }
         this.reconnectAttempts++;
-        const delay = Math.min(1000 * this.reconnectAttempts, 5000); // Exponential backoff up to 5 seconds
-        console.log(`ProovdPulse: Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+        const baseDelay = this.options.reconnectBaseDelay || 1000;
+        const maxDelay = this.options.reconnectMaxDelay || 30000;
+        const delay = Math.min(baseDelay * Math.pow(1.5, this.reconnectAttempts - 1), maxDelay);
+        this.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
         this.reconnectTimeout = setTimeout(() => {
             this.connect().catch(error => {
-                console.error('ProovdPulse: Reconnect failed', error);
+                this.log('Reconnect failed', error);
             });
         }, delay);
+    }
+    /**
+     * Normalize the server URL to use the correct protocol
+     */
+    normalizeServerUrl(url, secure) {
+        // Already has the correct protocol
+        if ((secure && url.startsWith('wss://')) || (!secure && url.startsWith('ws://'))) {
+            return url;
+        }
+        // Strip any existing protocol
+        const strippedUrl = url.replace(/^(wss?:\/\/|https?:\/\/)/, '');
+        // Add the appropriate protocol
+        return secure ? `wss://${strippedUrl}` : `ws://${strippedUrl}`;
+    }
+    /**
+     * Log messages if debug is enabled
+     */
+    log(message, ...args) {
+        if (this.options.debug) {
+            console.log(`ProovdPulse Socket: ${message}`, ...args);
+        }
     }
 }

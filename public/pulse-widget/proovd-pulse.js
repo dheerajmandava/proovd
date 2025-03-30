@@ -1,6 +1,7 @@
 /**
  * ProovdPulse Widget
  * Real-time website visitor tracking and engagement metrics
+ * Production-ready version with secure connections and advanced options
  */
 import { PulseSocketClient } from './socket-client';
 import { PulseUI } from './pulse-ui';
@@ -23,8 +24,33 @@ export class ProovdPulse {
         if (!this.options.clientId) {
             this.options.clientId = this.getClientId();
         }
+        // Determine environment
+        this.isProduction = typeof window !== 'undefined'
+            ? window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1')
+            : false;
+        // Set default server URL based on environment
+        if (!this.options.serverUrl) {
+            this.options.serverUrl = this.isProduction
+                ? 'wss://socket.proovd.in'
+                : 'ws://localhost:3001';
+        }
+        else if (this.isProduction && this.options.serverUrl === 'ws://localhost:3001') {
+            this.options.serverUrl = 'wss://socket.proovd.in';
+        }
+        // Set secure option based on environment
+        if (this.options.secure === undefined) {
+            this.options.secure = this.isProduction;
+        }
+        this.log('Initializing with options:', this.options);
         // Create socket client
-        this.socketClient = new PulseSocketClient(this.options.clientId, this.options.websiteId, this.options.serverUrl);
+        this.socketClient = new PulseSocketClient(this.options.clientId, this.options.websiteId, this.options.serverUrl, {
+            authToken: this.options.authToken,
+            secure: this.options.secure,
+            debug: this.options.debug,
+            reconnectMaxAttempts: this.options.reconnectMaxAttempts,
+            reconnectBaseDelay: this.options.reconnectBaseDelay,
+            reconnectMaxDelay: this.options.reconnectMaxDelay
+        });
         // Create UI component
         this.ui = new PulseUI(options);
         // Handle stats updates
@@ -32,6 +58,16 @@ export class ProovdPulse {
             if (data.websiteId === this.options.websiteId) {
                 this.ui.updateUserCount(data.activeUsers || 0);
             }
+        });
+        // Handle connection events
+        this.socketClient.on('connect', () => {
+            this.log('Connected to ProovdPulse server');
+        });
+        this.socketClient.on('disconnect', (data) => {
+            this.log('Disconnected from ProovdPulse server', data);
+        });
+        this.socketClient.on('error', (data) => {
+            this.log('Error connecting to ProovdPulse server', data);
         });
     }
     /**
@@ -45,7 +81,7 @@ export class ProovdPulse {
             await this.socketClient.connect();
             // Start tracking activity
             this.startTracking();
-            console.log('ProovdPulse: Initialized successfully');
+            this.log('Initialized successfully');
         }
         catch (error) {
             console.error('ProovdPulse: Failed to initialize', error);
@@ -126,7 +162,7 @@ export class ProovdPulse {
         this.socketClient.disconnect();
         // Unmount UI
         this.ui.unmount();
-        console.log('ProovdPulse: Destroyed');
+        this.log('Destroyed');
     }
     /**
      * Get or create a client ID
@@ -141,5 +177,13 @@ export class ProovdPulse {
         const newId = uuidv4();
         localStorage.setItem('proovdPulseClientId', newId);
         return newId;
+    }
+    /**
+     * Log messages if debug is enabled
+     */
+    log(message, ...args) {
+        if (this.options.debug) {
+            console.log(`ProovdPulse: ${message}`, ...args);
+        }
     }
 }

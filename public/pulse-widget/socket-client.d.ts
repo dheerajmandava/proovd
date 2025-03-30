@@ -1,24 +1,35 @@
 /**
  * ProovdPulse WebSocket Client
  * Handles communication with the ProovdPulse WebSocket server
+ * Production-ready with secure connections and authentication
  */
 interface PulseMetrics {
     clickCount: number;
     scrollPercentage: number;
     timeOnPage: number;
 }
+interface PulseOptions {
+    clientId: string;
+    websiteId: string;
+    serverUrl: string;
+    authToken?: string;
+    secure?: boolean;
+    reconnectMaxAttempts?: number;
+    reconnectBaseDelay?: number;
+    reconnectMaxDelay?: number;
+    debug?: boolean;
+}
 type MessageHandler = (data: any) => void;
 export declare class PulseSocketClient {
     private socket;
-    private clientId;
-    private websiteId;
-    private serverUrl;
+    private options;
     private reconnectAttempts;
-    private maxReconnectAttempts;
     private reconnectTimeout;
     private handlers;
     private isConnected;
-    constructor(clientId: string, websiteId: string, serverUrl: string);
+    private pingInterval;
+    private lastPongTime;
+    constructor(clientId: string, websiteId: string, serverUrl: string, options?: Partial<PulseOptions>);
     /**
      * Connect to the WebSocket server
      */
@@ -28,9 +39,25 @@ export declare class PulseSocketClient {
      */
     sendActivity(metrics: PulseMetrics): void;
     /**
+     * Send a ping to keep the connection alive
+     */
+    private sendPing;
+    /**
+     * Start the ping interval
+     */
+    private startPingInterval;
+    /**
+     * Stop the ping interval
+     */
+    private stopPingInterval;
+    /**
      * Send a leave message and close the connection
      */
     disconnect(): void;
+    /**
+     * Force a reconnection
+     */
+    reconnect(): void;
     /**
      * Register a handler for a specific message type
      */
@@ -52,8 +79,16 @@ export declare class PulseSocketClient {
      */
     private notifyHandlers;
     /**
-     * Attempt to reconnect to the server
+     * Attempt to reconnect to the server with exponential backoff
      */
     private attemptReconnect;
+    /**
+     * Normalize the server URL to use the correct protocol
+     */
+    private normalizeServerUrl;
+    /**
+     * Log messages if debug is enabled
+     */
+    private log;
 }
 export {};

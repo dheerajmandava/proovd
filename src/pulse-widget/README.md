@@ -1,151 +1,184 @@
 # ProovdPulse Widget
 
-Real-time website visitor tracking and engagement widget.
+A real-time website visitor tracking and analytics widget for any website.
+
+## Overview
+
+ProovdPulse provides live user tracking, visitor engagement metrics, and real-time analytics directly on your website. The widget displays active visitor counts and communicates with the ProovdPulse WebSocket server to track user interactions.
 
 ## Features
 
-- Real-time active user count display
-- Click tracking
-- Scroll depth tracking
-- Time on page metrics
-- WebSocket communication for real-time updates
-- Customizable UI with multiple position options
-- Production-ready with secure connections
-- Authentication support for secure environments
+- **Live Active Users Counter** - Show how many people are currently viewing your website
+- **Real-time Analytics** - Track clicks, scroll depth, and time on page
+- **Beautiful UI** - Sleek, customizable widget that fits any website design
+- **Lightweight** - Minimal impact on page load times
+- **Privacy-compliant** - No cookies required, GDPR-friendly
 
-## Usage
+## Installation
 
-### Basic Usage
+### Option 1: Direct Script Tag
 
-Add the ProovdPulse widget to your website by including the script and initializing it:
+Add the following script to your website's HTML:
 
 ```html
-<!-- Include the UUID library (required dependency) -->
-<script src="https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js"></script>
-
-<!-- Include the ProovdPulse widget -->
-<script type="module">
-  import { ProovdPulse } from './path/to/proovd-pulse.js';
-  
-  document.addEventListener('DOMContentLoaded', async () => {
-    window.proovdPulse = new ProovdPulse({
-      websiteId: 'your-website-id',
-      serverUrl: 'wss://socket.proovd.in',
-      container: 'body',
-      position: 'bottom-right'
-    });
-    
-    await window.proovdPulse.init();
-  });
-</script>
+<script src="https://proovd.in/api/websites/YOUR_WEBSITE_ID/pulse-widget.js" async></script>
 ```
 
-### Configuration Options
+Replace `YOUR_WEBSITE_ID` with your unique ProovdPulse website ID.
 
-The ProovdPulse widget accepts the following configuration options:
+### Option 2: NPM Installation
 
-```javascript
-const options = {
-  // Required options
-  websiteId: 'your-website-id',  // Unique identifier for your website
-  serverUrl: 'wss://socket.proovd.in',  // WebSocket server URL
-  
-  // UI options
-  container: 'body',  // CSS selector for the container element
-  position: 'bottom-right',  // Widget position: 'top-left', 'top-right', 'bottom-left', 'bottom-right'
-  showPulse: true,  // Whether to show the pulse animation
-  pulseColor: '#4338ca',  // Color of the pulse indicator
-  theme: 'light',  // Widget theme: 'light' or 'dark'
-  textColor: '#111827',  // Text color
-  backgroundColor: '#ffffff',  // Background color
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',  // Font family
-  fontSize: '14px',  // Font size
-  borderRadius: '8px',  // Border radius
-  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',  // Box shadow
-  zIndex: 9999,  // CSS z-index
-  
-  // Advanced options
-  clientId: 'optional-client-id',  // Optional client ID (generated if not provided)
-  authToken: 'jwt-token',  // JWT token for authentication in production
-  secure: true,  // Use secure WebSocket connection (wss://)
-  debug: false,  // Enable debug logging
-  reconnectMaxAttempts: 10,  // Maximum reconnection attempts
-  reconnectBaseDelay: 1000,  // Base delay for reconnection in ms
-  reconnectMaxDelay: 30000   // Maximum delay for reconnection in ms
-};
+Install the package:
+
+```bash
+npm install proovd-pulse
 ```
 
-### Production Deployment
-
-For production use, we recommend the following configuration:
+Import and initialize in your application:
 
 ```javascript
-window.proovdPulse = new ProovdPulse({
-  websiteId: 'your-website-id',
-  serverUrl: 'wss://socket.proovd.in',
-  authToken: 'your-jwt-token', // Obtain from your ProovdPulse admin
-  secure: true,
-  position: 'bottom-right',
-  debug: false
+import { ProovdPulse } from 'proovd-pulse';
+
+const pulse = new ProovdPulse({
+  websiteId: 'YOUR_WEBSITE_ID',
+  // Additional options...
+});
+
+pulse.init();
+```
+
+## Configuration Options
+
+You can customize ProovdPulse with the following options:
+
+```javascript
+const pulse = new ProovdPulse({
+  // Required
+  websiteId: 'YOUR_WEBSITE_ID',
+  
+  // Optional
+  serverUrl: 'wss://socket.proovd.in', // WebSocket server URL
+  authToken: 'YOUR_AUTH_TOKEN',        // Authentication token
+  clientId: 'CUSTOM_CLIENT_ID',        // Custom client ID (generated if not provided)
+  
+  // Widget Appearance
+  widgetPosition: 'bottom-right',      // 'bottom-right', 'bottom-left', 'top-right', 'top-left'
+  widgetColors: {
+    background: '#1e293b',             // Widget background color
+    text: '#ffffff',                   // Widget text color
+    pulse: '#3b82f6'                   // Pulse indicator color
+  },
+  customText: {
+    activeUserLabel: 'Active Users',   // Label for active users
+    pulseLabel: 'ProovdPulse'          // Widget label
+  },
+  hideWidgetOnMobile: true,            // Hide widget on mobile devices
+  
+  // Advanced Options
+  debug: false,                        // Enable debug logging
+  secure: true,                        // Force secure WebSocket connection
+  reconnectMaxAttempts: 10,            // Max connection retry attempts
+  reconnectBaseDelay: 1000,            // Base delay between reconnection attempts (ms)
+  reconnectMaxDelay: 30000             // Maximum delay between reconnection attempts (ms)
 });
 ```
 
-You can host the widget files on your own CDN or use the ProovdPulse CDN:
+## API Reference
 
-```html
-<script src="https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js"></script>
-<script type="module">
-  import { ProovdPulse } from 'https://cdn.proovd.in/pulse-widget/proovd-pulse.js';
-  
-  // Initialize as shown above
-</script>
-```
+### Methods
 
-### Cleanup
+#### `init()`
 
-Always clean up the widget when it's no longer needed:
+Initialize the widget and start tracking.
 
 ```javascript
-// Clean up when component unmounts
-window.proovdPulse.destroy();
+pulse.init();
 ```
 
-## Development
+#### `destroy()`
 
-To develop the ProovdPulse widget:
+Stop tracking and remove the widget.
 
-1. Edit the files in the `src/pulse-widget` directory
-2. Build the widget using TypeScript:
+```javascript
+pulse.destroy();
+```
+
+### Events
+
+ProovdPulse uses the WebSocket connection to communicate with the server and update the widget display. Events are handled internally, but you can access the internal socket client for custom handling if needed.
+
+## Building From Source
+
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
    ```
-   npx tsc -p src/pulse-widget/tsconfig.json
+3. Build the widget:
+   ```bash
+   npm run build:pulse
    ```
-3. Test it by opening `app/test-widget.html` in a browser
 
-## WebSocket Server
+The compiled files will be available in the `dist/pulse-widget` directory.
 
-The ProovdPulse widget requires the ProovdPulse WebSocket server to be running. In development, the server runs at `ws://localhost:3001`. In production, use the secure WebSocket server at `wss://socket.proovd.in`.
+## Integration With Next.js
 
-See the [WebSocket Server Deployment Guide](../../proovd-socket-server/DEPLOYMENT.md) for instructions on setting up your own server instance.
+ProovdPulse is designed to work seamlessly with Next.js applications. For server components, the widget is loaded dynamically on the client side to avoid hydration issues.
 
-## Authentication
+Example usage in a Next.js app:
 
-For production environments, the widget uses JWT authentication. To obtain a token:
+```jsx
+'use client';
 
-1. Contact your ProovdPulse administrator
-2. Request a JWT token for your website ID
-3. Include the token in your widget configuration
+import { useEffect } from 'react';
+import { ProovdPulse } from 'proovd-pulse';
 
-Tokens are typically valid for one year and can be rotated as needed for security.
+export default function PulseWidget({ websiteId }) {
+  useEffect(() => {
+    // Initialize widget on client side
+    const pulse = new ProovdPulse({
+      websiteId,
+      debug: process.env.NODE_ENV === 'development'
+    });
+    
+    pulse.init();
+    
+    // Clean up on unmount
+    return () => pulse.destroy();
+  }, [websiteId]);
+  
+  return null; // Widget renders itself
+}
+```
 
-## Browser Compatibility
+## Troubleshooting
 
-The ProovdPulse widget is compatible with all modern browsers:
+### Common Issues
 
-- Chrome (latest 2 versions)
-- Firefox (latest 2 versions)
-- Safari (latest 2 versions)
-- Edge (latest 2 versions)
+- **Widget not showing**: Check if your website ID is correct and the script is loading properly
+- **No active users shown**: Ensure the WebSocket server is running and accessible
+- **Connection errors**: Check network connectivity and firewall settings
+
+### Debug Mode
+
+Enable debug mode to see detailed logs in the console:
+
+```javascript
+const pulse = new ProovdPulse({
+  websiteId: 'YOUR_WEBSITE_ID',
+  debug: true
+});
+```
+
+## Security and Privacy
+
+ProovdPulse is designed with privacy in mind:
+
+- No cookies are used for tracking
+- No personal information is collected
+- All communication is secure via WebSocket over TLS
+- No impact on website performance or SEO
 
 ## License
 
-© Proovd. All rights reserved.
+This project is licensed under the MIT License.

@@ -78,6 +78,10 @@ class ProovdPulse {
     this.reconnectInterval = 3000;
     this.messageQueue = [];
     this.pingInterval = null;
+    this.debug = config.debug || false;
+    
+    // Log init
+    this.log('Initializing ProovdPulse with config:', config);
     
     // Detect browser info
     this.detectBrowser();
@@ -102,6 +106,7 @@ class ProovdPulse {
         pulseLabel: config.customText?.pulseLabel || 'Proovd Pulse',
       },
       hideWidgetOnMobile: config.hideWidgetOnMobile !== undefined ? config.hideWidgetOnMobile : true,
+      debug: config.debug || false
     };
   }
 
@@ -112,7 +117,7 @@ class ProovdPulse {
     if (this.initialized) return;
     
     try {
-      console.log('ProovdPulse: Initializing widget...');
+      this.log('Initializing widget...');
       
       // Connect to WebSocket server
       await this.connect();
@@ -129,9 +134,13 @@ class ProovdPulse {
       }
       
       this.initialized = true;
-      console.log('ProovdPulse initialized successfully');
+      this.log('ProovdPulse initialized successfully');
     } catch (error) {
       console.error('Failed to initialize ProovdPulse:', error);
+      // Try creating the widget anyway, even if connection failed
+      if (!this.isInIframe()) {
+        this.createWidget();
+      }
     }
   }
   
@@ -146,14 +155,22 @@ class ProovdPulse {
     return new Promise((resolve, reject) => {
       try {
         const url = this.getSocketUrl();
+        this.log('Connecting to WebSocket server:', url);
         
         this.socket = new WebSocket(url);
         
         // Connection opened
         this.socket.addEventListener('open', () => {
-          console.log('ProovdPulse: Connected to WebSocket server');
+          this.log('Connected to WebSocket server');
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          
+          // Send join message
+          this.sendMessage({
+            type: 'join',
+            clientId: this.sessionId,
+            websiteId: this.config.websiteId
+          });
           
           // Set up ping interval to keep connection alive
           this.setupPingInterval();
@@ -161,13 +178,23 @@ class ProovdPulse {
           // Process any queued messages
           this.processQueue();
           
+          // Update widget if it exists
+          if (this.widgetElement) {
+            this.updateWidgetConnectionStatus(true);
+          }
+          
           resolve();
         });
         
         // Connection error
         this.socket.addEventListener('error', (event) => {
-          console.error('ProovdPulse: WebSocket connection error:', event);
+          this.log('WebSocket connection error:', event);
           this.isConnected = false;
+          
+          // Update widget if it exists
+          if (this.widgetElement) {
+            this.updateWidgetConnectionStatus(false);
+          }
           
           if (this.reconnectAttempts === 0) {
             reject(new Error('WebSocket connection error'));
@@ -176,17 +203,22 @@ class ProovdPulse {
         
         // Connection closed
         this.socket.addEventListener('close', () => {
-          console.log('ProovdPulse: WebSocket connection closed');
+          this.log('WebSocket connection closed');
           this.isConnected = false;
           this.clearPingInterval();
+          
+          // Update widget if it exists
+          if (this.widgetElement) {
+            this.updateWidgetConnectionStatus(false);
+          }
           
           // Attempt to reconnect
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
             setTimeout(() => {
-              console.log(\`ProovdPulse: Attempting to reconnect (\${this.reconnectAttempts}/\${this.maxReconnectAttempts})...\`);
+              this.log(\`Attempting to reconnect (\${this.reconnectAttempts}/\${this.maxReconnectAttempts})...\`);
               this.connect().catch(() => {
-                console.error('ProovdPulse: Reconnection attempt failed');
+                this.log('Reconnection attempt failed');
               });
             }, this.reconnectInterval * this.reconnectAttempts);
           }
@@ -196,26 +228,88 @@ class ProovdPulse {
         this.socket.addEventListener('message', (event) => {
           try {
             const data = JSON.parse(event.data);
+            this.log('Received message:', data);
             
             // Handle active users update
-            if (data.type === 'activeUsers' && data.count !== undefined) {
-              this.activeUsersCount = data.count;
-              this.updateWidgetCount(data.count);
+            if (data.type === 'stats' && data.activeUsers !== undefined && data.websiteId === this.config.websiteId) {
+              this.activeUsersCount = data.activeUsers || 0;
+              this.updateWidgetCount(this.activeUsersCount);
+              this.log('Updated active users count:', this.activeUsersCount);
             }
             
             // Handle server pong
             if (data.type === 'pong') {
-              console.log('ProovdPulse: Received pong from server');
+              this.log('Received pong from server');
             }
           } catch (error) {
-            console.error('ProovdPulse: Error parsing message:', error);
+            this.log('Error parsing message:', error);
           }
         });
       } catch (error) {
-        console.error('ProovdPulse: Error connecting to WebSocket server:', error);
+        this.log('Error connecting to WebSocket server:', error);
         reject(error);
       }
     });
+  }
+  
+  /**
+   * Send a message to the server
+   */
+  sendMessage(message) {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      this.log('Socket not connected, queueing message:', message);
+      this.messageQueue.push(message);
+      return;
+    }
+    
+    try {
+      const messageString = JSON.stringify(message);
+      this.socket.send(messageString);
+      this.log('Sent message:', message);
+    } catch (error) {
+      this.log('Error sending message:', error);
+    }
+  }
+  
+  /**
+   * Process queued messages
+   */
+  processQueue() {
+    if (this.messageQueue.length === 0) return;
+    
+    this.log(\`Processing \${this.messageQueue.length} queued messages\`);
+    
+    while (this.messageQueue.length > 0) {
+      const message = this.messageQueue.shift();
+      this.sendMessage(message);
+    }
+  }
+  
+  /**
+   * Set up ping interval to keep connection alive
+   */
+  setupPingInterval() {
+    this.clearPingInterval();
+    
+    this.pingInterval = setInterval(() => {
+      if (this.isConnected) {
+        this.sendMessage({
+          type: 'ping',
+          clientId: this.sessionId,
+          timestamp: Date.now()
+        });
+      }
+    }, 30000); // 30 seconds
+  }
+  
+  /**
+   * Clear ping interval
+   */
+  clearPingInterval() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
   }
   
   /**
@@ -225,6 +319,14 @@ class ProovdPulse {
     this.clearPingInterval();
     
     if (this.socket) {
+      if (this.isConnected) {
+        this.sendMessage({
+          type: 'leave',
+          clientId: this.sessionId,
+          websiteId: this.config.websiteId
+        });
+      }
+      
       this.socket.close();
       this.socket = null;
     }
@@ -238,10 +340,13 @@ class ProovdPulse {
   getSocketUrl() {
     const baseUrl = this.config.socketUrl || 'wss://socket.proovd.in';
     const websiteId = this.config.websiteId;
+    const clientId = this.sessionId;
     const token = this.config.token || '';
     
-    let url = \`\${baseUrl}?websiteId=\${encodeURIComponent(websiteId)}\`;
+    // Add client and website ID to URL
+    let url = \`\${baseUrl}?websiteId=\${encodeURIComponent(websiteId)}&clientId=\${encodeURIComponent(clientId)}\`;
     
+    // Add token if provided
     if (token) {
       url += \`&token=\${encodeURIComponent(token)}\`;
     }
@@ -321,80 +426,6 @@ class ProovdPulse {
     });
   }
   
-  /**
-   * Send message to the server
-   */
-  sendMessage(message) {
-    if (!this.socket || !this.isConnected) {
-      // Queue message for later
-      this.messageQueue.push(message);
-      this.connect().catch(err => {
-        console.error('ProovdPulse: Failed to connect when sending message:', err);
-      });
-      return;
-    }
-    
-    try {
-      this.socket.send(JSON.stringify(message));
-    } catch (error) {
-      console.error('ProovdPulse: Error sending message:', error);
-      this.messageQueue.push(message);
-    }
-  }
-  
-  /**
-   * Process queued messages
-   */
-  processQueue() {
-    if (this.messageQueue.length === 0 || !this.isConnected) {
-      return;
-    }
-    
-    console.log(\`ProovdPulse: Processing \${this.messageQueue.length} queued messages\`);
-    
-    // Process all queued messages
-    while (this.messageQueue.length > 0) {
-      const message = this.messageQueue.shift();
-      try {
-        if (this.socket) {
-          this.socket.send(JSON.stringify(message));
-        }
-      } catch (error) {
-        console.error('ProovdPulse: Error sending queued message:', error);
-        // Re-queue if sending failed
-        this.messageQueue.push(message);
-        break;
-      }
-    }
-  }
-  
-  /**
-   * Set up ping interval to keep connection alive
-   */
-  setupPingInterval() {
-    this.clearPingInterval();
-    
-    this.pingInterval = setInterval(() => {
-      if (this.isConnected && this.socket) {
-        try {
-          this.socket.send(JSON.stringify({ type: 'ping' }));
-        } catch (error) {
-          console.error('ProovdPulse: Error sending ping:', error);
-        }
-      }
-    }, 30000); // Send ping every 30 seconds
-  }
-  
-  /**
-   * Clear the ping interval
-   */
-  clearPingInterval() {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-  }
-
   /**
    * Track scroll depth percentage
    */
@@ -697,6 +728,15 @@ class ProovdPulse {
 
     // Mark as not initialized
     this.initialized = false;
+  }
+
+  /**
+   * Log messages if debug is enabled
+   */
+  log(message, ...args) {
+    if (this.config.debug) {
+      console.log(`ProovdPulse: ${message}`, ...args);
+    }
   }
 }
 

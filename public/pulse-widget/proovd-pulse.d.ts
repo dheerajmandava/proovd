@@ -3,6 +3,12 @@ interface ProovdPulseOptions extends PulseUIOptions {
     websiteId: string;
     serverUrl: string;
     clientId?: string;
+    authToken?: string;
+    secure?: boolean;
+    debug?: boolean;
+    reconnectMaxAttempts?: number;
+    reconnectBaseDelay?: number;
+    reconnectMaxDelay?: number;
 }
 export declare class ProovdPulse {
     private socketClient;
@@ -15,6 +21,7 @@ export declare class ProovdPulse {
     private maxScrollPercentage;
     private clickHandler;
     private scrollHandler;
+    private isProduction;
     constructor(options: ProovdPulseOptions);
     /**
      * Initialize the widget
@@ -27,7 +34,7 @@ export declare class ProovdPulse {
     /**
      * Report current activity metrics
      */
-    private reportActivity;
+    reportActivity(): void;
     /**
      * Destroy the widget and clean up
      */
@@ -36,5 +43,9 @@ export declare class ProovdPulse {
      * Get or create a client ID
      */
     private getClientId;
+    /**
+     * Log messages if debug is enabled
+     */
+    private log;
 }
 export {};

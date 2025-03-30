@@ -56,9 +56,12 @@ export class ProovdPulse {
       : false;
     
     // Set default server URL based on environment
-    if (this.isProduction && this.options.serverUrl === 'ws://localhost:3001') {
+    if (!this.options.serverUrl) {
+      this.options.serverUrl = this.isProduction 
+        ? 'wss://socket.proovd.in' 
+        : 'ws://localhost:3001';
+    } else if (this.isProduction && this.options.serverUrl === 'ws://localhost:3001') {
       this.options.serverUrl = 'wss://socket.proovd.in';
-      this.log('Using production WebSocket server');
     }
     
     // Set secure option based on environment
