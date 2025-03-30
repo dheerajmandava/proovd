@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 interface ProovdPulseOptions extends PulseUIOptions {
   websiteId: string;
-  serverUrl: string;
+  serverUrl?: string;
   clientId?: string;
   authToken?: string;
   secure?: boolean;
@@ -45,7 +45,8 @@ export class ProovdPulse {
   private maxReconnectAttempts: number;
 
   constructor(options: ProovdPulseOptions) {
-    this.options = options;
+    // Make a copy of options to avoid mutation issues
+    this.options = { ...options };
     
     // Generate a client ID if not provided
     if (!this.options.clientId) {
@@ -75,7 +76,16 @@ export class ProovdPulse {
     
     this.log('Initializing with options:', this.options);
     
-    // Create socket client
+    // Create socket client - ensure we have all required properties first
+    if (!this.options.clientId || !this.options.websiteId || !this.options.serverUrl) {
+      console.error('ProovdPulse: Missing required options', {
+        clientId: this.options.clientId,
+        websiteId: this.options.websiteId,
+        serverUrl: this.options.serverUrl
+      });
+      throw new Error('Missing required options for ProovdPulse initialization');
+    }
+    
     this.socketClient = new PulseSocketClient(
       this.options.clientId,
       this.options.websiteId,

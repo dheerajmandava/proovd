@@ -57,7 +57,7 @@ export class PulseSocketClient {
     this.options = {
       clientId,
       websiteId,
-      serverUrl: this.normalizeServerUrl(serverUrl, useSecure),
+      serverUrl, // No longer calling normalizeServerUrl during initialization
       authToken: options.authToken,
       secure: useSecure,
       reconnectMaxAttempts: options.reconnectMaxAttempts || 10,
@@ -85,11 +85,8 @@ export class PulseSocketClient {
           this.reconnectAttempts = 0;
         }
         
-        // Build the WebSocket URL
-        const wsUrl = this.normalizeServerUrl(
-          this.options.serverUrl,
-          this.options.secure !== false
-        );
+        // Build the WebSocket URL with parameters
+        const wsUrl = this.buildWebSocketUrl();
         
         this.log(`Connecting to WebSocket server: ${wsUrl}`);
         
@@ -335,18 +332,16 @@ export class PulseSocketClient {
   }
   
   /**
-   * Normalize the server URL based on secure option
+   * Build the complete WebSocket URL with query parameters
    */
-  private normalizeServerUrl(url: string, secure: boolean): string {
-    // No changes to base URL, always use what was passed
-    let wsUrl = url;
+  private buildWebSocketUrl(): string {
+    // Get base URL
+    let wsUrl = this.options.serverUrl;
     
     // Build query parameters
     const params = new URLSearchParams();
     params.append('clientId', this.options.clientId);
     params.append('websiteId', this.options.websiteId);
-    
-    // Don't append token parameter (simplified authentication)
     
     // Return complete URL
     return `${wsUrl}?${params.toString()}`;
