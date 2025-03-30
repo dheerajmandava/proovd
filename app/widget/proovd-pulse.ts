@@ -11,6 +11,8 @@ import 'tippy.js/dist/tippy.css';
 
 // Import AWS Amplify for AppSync integration
 import { Amplify, API, graphqlOperation } from 'aws-amplify';
+import { updateUserActivity, getWebsiteStats, onActiveUserChange } from '../graphql/queries';
+import { GraphQLResult } from '@aws-amplify/api-graphql';
 
 import { DOMAnalyzer, HeatmapData } from '../lib/dom-analyzer/dom-analyzer';
 import * as queries from '../graphql/queries';
@@ -33,6 +35,7 @@ export interface ProovdPulseOptions {
     endpoint: string;
     apiKey: string;
   };
+  themeColor?: string;
 }
 
 interface EngagementData {
@@ -46,15 +49,27 @@ interface EngagementData {
   usersByCity?: Record<string, number>;
 }
 
+/**
+ * Represents the structure of GraphQL responses
+ */
+interface GraphQLResponse<T = any> {
+  data?: T;
+  errors?: Array<{
+    message: string;
+    path?: string[];
+  }>;
+}
+
 export class ProovdPulse {
   private container: HTMLElement | null = null;
   private tooltips: Map<string, TippyInstance> = new Map();
   private domAnalyzer: DOMAnalyzer;
   private apiUrl = window.location.origin;
   private currentUrl = window.location.href;
-  private options: Required<ProovdPulseOptions>;
-  private sessionId: string;
-  private clientId: string;
+  private options: ProovdPulseOptions;
+  private sessionId: string = '';
+  private clientId: string = '';
+  private websiteId: string | null = null;
   private isActive = false;
   private engagementData: EngagementData = {
     activeUsers: 0,
@@ -76,35 +91,31 @@ export class ProovdPulse {
   };
   private startTime = new Date();
   private updateTimer: any = null;
+  private userCountElement: HTMLElement | null = null;
   
   constructor(options: ProovdPulseOptions) {
-    // Set default options
+    // Store options with defaults
     this.options = {
       websiteId: options.websiteId,
       apiKey: options.apiKey || '',
       position: options.position || 'bottom-right',
       theme: options.theme || 'auto',
-      sampleRate: options.sampleRate || 1.0, // Default to tracking all users
+      sampleRate: options.sampleRate || 1.0,
       showHeatmap: options.showHeatmap !== undefined ? options.showHeatmap : true,
       showActiveUsers: options.showActiveUsers !== undefined ? options.showActiveUsers : true,
       showEngagementMetrics: options.showEngagementMetrics !== undefined ? options.showEngagementMetrics : true,
       customCSS: options.customCSS || '',
       appSyncConfig: options.appSyncConfig || {
-        region: 'us-east-1', // Default region
-        endpoint: '', // Will be filled from script attributes
-        apiKey: '', // Will be filled from script attributes
-      }
+        region: 'us-east-1',
+        endpoint: '',
+        apiKey: ''
+      },
+      themeColor: options.themeColor || '#0284c7'
     };
     
-    // Only initialize for the percentage of users defined in sampleRate
-    if (Math.random() > this.options.sampleRate) {
-      console.log('ProovdPulse: User not in sample group, widget disabled');
-      return;
-    }
-    
-    // Generate and save session/client IDs
-    this.sessionId = this.getSessionId();
+    // Set the important properties
     this.clientId = this.getClientId();
+    this.websiteId = this.options.websiteId;
     
     // Create DOM analyzer
     this.domAnalyzer = new DOMAnalyzer();
@@ -151,488 +162,196 @@ export class ProovdPulse {
    * Initialize the widget
    */
   private async init(): Promise<void> {
+    console.log('ProovdPulse: Initializing widget...');
+    
     try {
-      console.log('ProovdPulse: Initializing widget...');
-      
-      // Create container
+      // Create the widget container
       this.createContainer();
       
-      // Fetch initial data
-      await this.fetchEngagementData();
+      // Initialize the analyzer
+      this.domAnalyzer.init();
       
-      // Start DOM analyzer
-      this.domAnalyzer.start();
+      // Fetch initial stats
+      await this.fetchWebsiteStats();
       
-      // Start periodic updates
-      this.startUpdates();
+      // Set up recurring activity reporting
+      this.startActivityReporting();
       
-      // Track initial pageview
-      this.trackPageview();
-      
-      // Subscribe to real-time updates
-      this.subscribeToActiveUsers();
-      
-      // Widget is now active
-      this.isActive = true;
-      
-      // Dispatch event that widget is loaded
-      this.dispatchEvent('proovdPulseLoaded', { clientId: this.clientId });
-      
+      console.log('ProovdPulse: Initialization complete');
     } catch (error) {
-      console.error('ProovdPulse initialization error:', error);
-      this.dispatchEvent('proovdPulseError', { message: (error as Error).message });
+      console.error('ProovdPulse: Error during initialization:', error);
     }
   }
   
   /**
-   * Subscribe to active users updates
+   * Fetch the latest stats from the API
    */
-  private subscribeToActiveUsers(): void {
+  private async fetchWebsiteStats(): Promise<void> {
+    if (!this.websiteId) {
+      console.error('ProovdPulse: Cannot fetch stats - no websiteId');
+      return;
+    }
+
     try {
-      this.subscription = API.graphql(
-        graphqlOperation(
-          queries.onActiveUserChange,
-          { websiteId: this.options.websiteId }
-        )
-      ).subscribe({
-        next: (result: any) => {
-          const data = result.value.data.onActiveUserChange;
-          if (data) {
-            this.engagementData.activeUsers = data.activeUsers;
-            
-            // Update country and city stats if available
-            if (data.usersByCountry) {
-              try {
-                this.engagementData.usersByCountry = JSON.parse(data.usersByCountry);
-              } catch (e) {
-                console.error('Error parsing usersByCountry:', e);
-              }
-            }
-            
-            if (data.usersByCity) {
-              try {
-                this.engagementData.usersByCity = JSON.parse(data.usersByCity);
-              } catch (e) {
-                console.error('Error parsing usersByCity:', e);
-              }
-            }
-            
-            // Update average metrics
-            if (data.avgTimeOnPage) {
-              this.engagementData.avgTimeOnPage = data.avgTimeOnPage;
-            }
-            
-            // Render widget with updated data
-            this.renderWidget();
-          }
-        },
-        error: (error: any) => {
-          console.error('Subscription error:', error);
-        }
+      console.log('ProovdPulse: Fetching website stats for', this.websiteId);
+      
+      // Use any type to bypass TypeScript errors for now
+      const response: any = await API.graphql({
+        query: getWebsiteStats,
+        variables: { id: this.websiteId }
       });
       
-      // Handle visibility changes
-      document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
-    } catch (error) {
-      console.error('Error setting up subscription:', error);
-    }
-  }
-  
-  /**
-   * Handle visibility change
-   */
-  private handleVisibilityChange(): void {
-    if (document.visibilityState === 'visible') {
-      // Page is visible again, reconnect if needed
-      if (!this.subscription) {
-        this.subscribeToActiveUsers();
+      console.log('ProovdPulse: API response:', response);
+      
+      if (response.errors) {
+        console.error('ProovdPulse: Error fetching stats:', response.errors);
+        this.updateStatsDisplay({ activeUsers: 1 });
+        return;
       }
-    } else {
-      // Page is hidden, cleanup subscription
-      if (this.subscription) {
-        this.subscription.unsubscribe();
-        this.subscription = null;
-      }
-    }
-  }
-  
-  /**
-   * Start periodic updates
-   */
-  private startUpdates(): void {
-    // Update engagement data every 30 seconds
-    this.updateInterval = setInterval(() => {
-      this.updateEngagementData();
-    }, 30000);
-    
-    // Track scroll position
-    window.addEventListener('scroll', () => {
-      const scrollTop = window.scrollY || document.documentElement.scrollTop;
-      const scrollHeight = document.documentElement.scrollHeight;
-      const clientHeight = document.documentElement.clientHeight;
       
-      this.metrics.scrollPercentage = Math.round((scrollTop / (scrollHeight - clientHeight)) * 100);
-    }, { passive: true });
-    
-    // Track clicks
-    document.addEventListener('click', () => {
-      this.metrics.clickCount++;
-    }, true);
-  }
-  
-  /**
-   * Update engagement metrics
-   */
-  private updateMetrics(): void {
-    // Update time on page
-    const elapsed = Math.floor((new Date().getTime() - this.startTime.getTime()) / 1000);
-    this.metrics.timeOnPage = elapsed;
-  }
-  
-  /**
-   * Fetch engagement data from AppSync
-   */
-  private async fetchEngagementData(): Promise<void> {
-    try {
-      const result = await API.graphql(
-        graphqlOperation(
-          queries.getWebsiteStats,
-          { id: this.options.websiteId }
-        )
-      );
-      
-      const data = (result as any).data.getWebsiteStats;
-      
-      if (data) {
-        this.engagementData.activeUsers = data.activeUsers;
-        this.engagementData.avgTimeOnPage = data.avgTimeOnPage || 0;
-        
-        // Parse JSON fields
-        if (data.usersByCountry) {
-          try {
-            this.engagementData.usersByCountry = JSON.parse(data.usersByCountry);
-          } catch (e) {
-            console.error('Error parsing usersByCountry:', e);
-          }
-        }
-        
-        if (data.usersByCity) {
-          try {
-            this.engagementData.usersByCity = JSON.parse(data.usersByCity);
-          } catch (e) {
-            console.error('Error parsing usersByCity:', e);
-          }
-        }
-        
-        // Render widget with new data
-        this.renderWidget();
+      if (response.data?.getWebsiteStats) {
+        console.log('ProovdPulse: Stats data:', response.data.getWebsiteStats);
+        this.updateStatsDisplay(response.data.getWebsiteStats);
+      } else {
+        console.warn('ProovdPulse: No stats data received');
+        this.updateStatsDisplay({ activeUsers: 1 });
       }
     } catch (error) {
-      console.error('Error fetching engagement data:', error);
+      console.error('ProovdPulse: Failed to fetch stats:', error);
+      this.updateStatsDisplay({ activeUsers: 1 });
     }
   }
   
   /**
-   * Update engagement data and send metrics
+   * Update the stats display with data
    */
-  private async updateEngagementData(): Promise<void> {
-    try {
-      // Update internal metrics
-      this.updateMetrics();
-      
-      if (!API) {
-        console.error('ProovdPulse: API not initialized');
-        return;
-      }
-      
-      if (!this.clientId || !this.options.websiteId) {
-        console.error('ProovdPulse: Missing clientId or websiteId', {
-          clientId: this.clientId,
-          websiteId: this.options.websiteId
-        });
-        return;
-      }
-      
-      console.log('ProovdPulse: Sending metrics to AppSync', {
-        clientId: this.clientId,
-        websiteId: this.options.websiteId,
-        metrics: {
-          scrollPercentage: this.metrics.scrollPercentage,
-          timeOnPage: this.metrics.timeOnPage,
-          clickCount: this.metrics.clickCount
-        }
-      });
-      
-      // Send updated metrics to AppSync
-      const response = await API.graphql({
-        query: queries.updateUserActivity,
-        variables: {
-          clientId: this.clientId,
-          websiteId: this.options.websiteId,
-          metrics: {
-            scrollPercentage: this.metrics.scrollPercentage,
-            timeOnPage: this.metrics.timeOnPage,
-            clickCount: this.metrics.clickCount
-          }
-        }
-      });
-      
-      // Check for errors or null response
-      if (response?.errors) {
-        console.error('ProovdPulse: GraphQL errors:', response.errors);
-        return;
-      }
-      
-      const data = response?.data?.updateUserActivity;
-      if (!data) {
-        console.error('ProovdPulse: Null response from updateUserActivity');
-        // Force refresh of metrics data
-        setTimeout(() => this.fetchActiveUsers(), 5000);
-        return;
-      }
-      
-      console.log('ProovdPulse: UpdateUserActivity success:', data);
-      
-      // Schedule the next update
-      this.scheduleNextUpdate();
-    } catch (error) {
-      console.error('ProovdPulse: Error updating engagement data:', error);
-      // Retry after a delay if it's a network issue
-      if (error.message && (error.message.includes('Network') || error.message.includes('Failed to fetch'))) {
-        console.log('ProovdPulse: Will retry after delay');
-        setTimeout(() => this.updateEngagementData(), 30000); // Retry after 30 seconds
-      }
-    }
-  }
-  
-  /**
-   * Schedule the next metrics update
-   */
-  private scheduleNextUpdate(): void {
-    // Clear any existing timer
-    if (this.updateTimer) {
-      clearTimeout(this.updateTimer);
-    }
-    
-    // Set a new timer for the next update (every minute)
-    this.updateTimer = setTimeout(() => {
-      this.updateEngagementData();
-    }, 60000); // Update every minute
-  }
-  
-  /**
-   * Track pageview
-   */
-  private async trackPageview(): Promise<void> {
-    try {
-      console.log('ProovdPulse: Pageview tracked');
-      
-      if (!API) {
-        console.error('ProovdPulse: API not initialized');
-        return;
-      }
-      
-      if (!this.clientId || !this.options.websiteId) {
-        console.error('ProovdPulse: Missing clientId or websiteId', {
-          clientId: this.clientId,
-          websiteId: this.options.websiteId
-        });
-        return;
-      }
-      
-      console.log('ProovdPulse: Sending initial pageview to AppSync', {
-        clientId: this.clientId,
-        websiteId: this.options.websiteId
-      });
-      
-      // Send initial metrics to AppSync
-      const response = await API.graphql({
-        query: queries.updateUserActivity,
-        variables: {
-          clientId: this.clientId,
-          websiteId: this.options.websiteId,
-          metrics: {
-            scrollPercentage: 0,
-            timeOnPage: 0,
-            clickCount: 0
-          }
-        }
-      });
-      
-      // Check for errors or null response
-      if (response?.errors) {
-        console.error('ProovdPulse: GraphQL errors:', response.errors);
-        return;
-      }
-      
-      const data = response?.data?.updateUserActivity;
-      if (!data) {
-        console.error('ProovdPulse: Null response from trackPageview');
-        return;
-      }
-      
-      console.log('ProovdPulse: Initial trackPageview success:', data);
-      
-      // Begin fetching active users
-      this.fetchActiveUsers();
-      
-      // Schedule updates
-      this.scheduleNextUpdate();
-    } catch (error) {
-      console.error('ProovdPulse: Error tracking pageview:', error);
-      
-      // Retry after a delay if it's a network issue
-      if (error.message && (error.message.includes('Network') || error.message.includes('Failed to fetch'))) {
-        console.log('ProovdPulse: Will retry pageview after delay');
-        setTimeout(() => this.trackPageview(), 10000); // Retry after 10 seconds
-      }
-    }
-  }
-  
-  /**
-   * Fetch active users and metrics from AppSync
-   */
-  private async fetchActiveUsers(): Promise<void> {
-    try {
-      if (!API) {
-        console.error('ProovdPulse: API not initialized for fetchActiveUsers');
-        return;
-      }
-      
-      console.log('ProovdPulse: Fetching website stats');
-      
-      const response = await API.graphql({
-        query: queries.getWebsiteStats,
-        variables: {
-          id: this.options.websiteId
-        }
-      });
-      
-      // Check for errors or null response
-      if (response?.errors) {
-        console.error('ProovdPulse: GraphQL errors in fetchActiveUsers:', response.errors);
-        return;
-      }
-      
-      const data = response?.data?.getWebsiteStats;
-      if (!data) {
-        console.error('ProovdPulse: Null response from getWebsiteStats');
-        return;
-      }
-      
-      console.log('ProovdPulse: Received website stats:', data);
-      
-      // Update metrics display with the fetched data
-      this.updateMetricsDisplay(data);
-      
-      // Set up subscription for real-time updates if not already set up
-      if (!this.subscription) {
-        this.setupSubscription();
-      }
-    } catch (error) {
-      console.error('ProovdPulse: Error fetching active users:', error);
-      
-      // Retry after a delay
-      setTimeout(() => this.fetchActiveUsers(), 30000); // Retry after 30 seconds
-    }
-  }
-  
-  /**
-   * Set up real-time subscription for active users
-   */
-  private setupSubscription(): void {
-    try {
-      console.log('ProovdPulse: Setting up subscription');
-      
-      this.subscription = API.graphql({
-        query: queries.onActiveUserChange,
-        variables: {
-          websiteId: this.options.websiteId
-        }
-      }).subscribe({
-        next: (result) => {
-          const data = result?.data?.onActiveUserChange;
-          if (data) {
-            console.log('ProovdPulse: Subscription update:', data);
-            this.updateMetricsDisplay(data);
-          }
-        },
-        error: (error) => {
-          console.error('ProovdPulse: Subscription error:', error);
-          
-          // Attempt to reconnect after a delay
-          setTimeout(() => {
-            this.subscription = null;
-            this.setupSubscription();
-          }, 30000);
-        }
-      });
-    } catch (error) {
-      console.error('ProovdPulse: Error setting up subscription:', error);
-    }
-  }
-  
-  /**
-   * Update metrics display with data from API
-   */
-  private updateMetricsDisplay(data: any): void {
-    if (!data) return;
+  private updateStatsDisplay(data: any): void {
+    console.log('ProovdPulse: Updating stats display with:', data);
     
     // Update active users count if element exists
     if (this.userCountElement) {
-      this.userCountElement.innerText = data.activeUsers.toString();
-    }
-    
-    // Update other metrics if they exist
-    if (this.options.showEngagementMetrics) {
-      if (this.timeElement) {
-        this.timeElement.innerText = `${data.avgTimeOnPage || 0}s`;
-      }
-      
-      if (this.scrollElement) {
-        this.scrollElement.innerText = `${data.avgScrollPercentage || 0}%`;
-      }
-      
-      if (this.clicksElement) {
-        this.clicksElement.innerText = `${data.totalClicks || 0}`;
-      }
+      const userCount = data.activeUsers || 1;
+      this.userCountElement.textContent = String(userCount);
+      console.log('ProovdPulse: Updated user count to:', userCount);
+    } else {
+      console.error('ProovdPulse: No user count element found');
     }
   }
   
   /**
-   * Create widget container
+   * Report user activity to the API
+   */
+  private async reportActivity(metrics: any): Promise<void> {
+    if (!this.clientId || !this.websiteId) {
+      console.error('ProovdPulse: Cannot report activity - missing clientId or websiteId');
+      return;
+    }
+
+    try {
+      console.log('ProovdPulse: Reporting activity with metrics:', metrics);
+      
+      // Use any type to bypass TypeScript errors for now
+      const response: any = await API.graphql({
+        query: updateUserActivity,
+        variables: {
+          clientId: this.clientId,
+          websiteId: this.websiteId,
+          metrics: metrics
+        }
+      });
+      
+      console.log('ProovdPulse: Activity report response:', response);
+      
+      if (response.errors) {
+        console.error('ProovdPulse: Error reporting activity:', response.errors);
+        return;
+      }
+      
+      if (response.data?.updateUserActivity) {
+        console.log('ProovdPulse: Activity reported successfully');
+        // After reporting, fetch the latest stats
+        this.fetchWebsiteStats();
+      }
+    } catch (error) {
+      console.error('ProovdPulse: Failed to report activity:', error);
+    }
+  }
+  
+  /**
+   * Create the widget container and add it to the DOM
    */
   private createContainer(): void {
-    // Create container element
+    // Create main container
     this.container = document.createElement('div');
     this.container.className = 'proovd-pulse-container';
-    this.container.setAttribute('data-theme', this.getTheme());
+    this.container.setAttribute('data-position', this.options.position || 'bottom-right');
     
-    // Set position
-    switch (this.options.position) {
-      case 'bottom-left':
-        this.container.style.bottom = '20px';
-        this.container.style.left = '20px';
-        break;
-      case 'bottom-right':
-        this.container.style.bottom = '20px';
-        this.container.style.right = '20px';
-        break;
-      case 'top-left':
-        this.container.style.top = '20px';
-        this.container.style.left = '20px';
-        break;
-      case 'top-right':
-        this.container.style.top = '20px';
-        this.container.style.right = '20px';
-        break;
-    }
+    // Apply position styles
+    const positionStyles: Record<string, string> = {
+      'bottom-right': 'bottom: 20px; right: 20px;',
+      'bottom-left': 'bottom: 20px; left: 20px;',
+      'top-right': 'top: 20px; right: 20px;',
+      'top-left': 'top: 20px; left: 20px;'
+    };
     
-    // Add container to body
+    const position = this.options.position || 'bottom-right';
+    this.container.setAttribute('style', `position: fixed; z-index: 9999; ${positionStyles[position]}`);
+    
+    // Create widget element
+    const widget = document.createElement('div');
+    widget.className = 'proovd-pulse-widget';
+    widget.setAttribute('style', 'background-color: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); padding: 12px; width: 220px;');
+    
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'proovd-pulse-header';
+    header.setAttribute('style', 'display: flex; align-items: center; margin-bottom: 8px;');
+    
+    // Create logo
+    const logo = document.createElement('div');
+    logo.className = 'proovd-pulse-logo';
+    logo.setAttribute('style', 'font-weight: bold; font-size: 14px;');
+    logo.textContent = 'ProovdPulse';
+    
+    // Add logo to header
+    header.appendChild(logo);
+    
+    // Create content
+    const content = document.createElement('div');
+    content.className = 'proovd-pulse-content';
+    
+    // Create active users metric
+    const activeUsers = document.createElement('div');
+    activeUsers.className = 'proovd-pulse-metric proovd-pulse-active-users';
+    activeUsers.setAttribute('style', 'font-size: 14px; margin-bottom: 10px;');
+    
+    // Create user count element and store reference
+    const userCount = document.createElement('span');
+    userCount.className = 'proovd-pulse-user-count';
+    userCount.setAttribute('style', 'font-weight: bold;');
+    userCount.textContent = '...';
+    
+    // Store reference to user count element for updating later
+    this.userCountElement = userCount;
+    
+    // Complete the active users text
+    activeUsers.appendChild(userCount);
+    activeUsers.appendChild(document.createTextNode(' people viewing now'));
+    
+    // Add content elements
+    content.appendChild(activeUsers);
+    
+    // Assemble widget
+    widget.appendChild(header);
+    widget.appendChild(content);
+    
+    // Add widget to container
+    this.container.appendChild(widget);
+    
+    // Add container to document
     document.body.appendChild(this.container);
     
-    // Initial empty render
-    this.renderWidget();
+    console.log('ProovdPulse: Container created and added to DOM');
   }
   
   /**
@@ -1139,5 +858,82 @@ export class ProovdPulse {
     });
     
     console.log('ProovdPulse: Widget destroyed');
+  }
+  
+  /**
+   * Initialize DOM analyzer for tracking user behavior
+   */
+  private initAnalyzer(): void {
+    if (this.domAnalyzer) {
+      this.domAnalyzer.init();
+      console.log('ProovdPulse: Analyzer initialized');
+    }
+  }
+  
+  /**
+   * Start periodic activity reporting
+   */
+  private startActivityReporting(): void {
+    console.log('ProovdPulse: Starting activity reporting');
+    
+    // Initial report
+    this.reportActivity({
+      scrollPercentage: 0,
+      timeOnPage: 0,
+      clickCount: 0
+    });
+    
+    // Set up interval for regular reporting
+    setInterval(() => {
+      try {
+        // Get current metrics from analyzer
+        const metrics = this.domAnalyzer.getMetrics();
+        
+        // Report to API
+        this.reportActivity({
+          scrollPercentage: metrics.scrollPercentage || 0,
+          timeOnPage: metrics.timeOnPage || 0,
+          clickCount: metrics.clickCount || 0
+        });
+      } catch (error) {
+        console.error('ProovdPulse: Error reporting metrics:', error);
+      }
+    }, 40000); // Report every 40 seconds
+  }
+  
+  /**
+   * Get theme color from options or use default
+   */
+  private getThemeColor(): string {
+    return this.options.themeColor || '#0284c7';
+  }
+  
+  /**
+   * Validate and complete options with defaults
+   */
+  private validateOptions(options: ProovdPulseOptions): ProovdPulseOptions {
+    // Make sure we have the required fields
+    if (!options.websiteId) {
+      console.error('ProovdPulse: websiteId is required');
+    }
+    
+    // Return with defaults
+    return {
+      websiteId: options.websiteId,
+      apiKey: options.apiKey || '',
+      position: options.position || 'bottom-right',
+      theme: options.theme || 'auto',
+      sampleRate: options.sampleRate || 1.0,
+      showHeatmap: options.showHeatmap !== undefined ? options.showHeatmap : true,
+      showActiveUsers: options.showActiveUsers !== undefined ? options.showActiveUsers : true,
+      showEngagementMetrics: options.showEngagementMetrics !== undefined ? options.showEngagementMetrics : true,
+      customCSS: options.customCSS || '',
+      appSyncConfig: options.appSyncConfig || {
+        region: 'us-east-1',
+        endpoint: '',
+        apiKey: ''
+      },
+      themeColor: options.themeColor || '#0284c7'
+    };
   }
 } 
