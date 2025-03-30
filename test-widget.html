@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ProovdPulse Widget Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #1e293b;
+    }
+    .button {
+      background-color: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .button:hover {
+      background-color: #2563eb;
+    }
+    pre {
+      background-color: #f1f5f9;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    .settings {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .settings label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    .settings input, .settings select {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .log {
+      height: 200px;
+      overflow-y: auto;
+      background-color: #1e293b;
+      color: #e2e8f0;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>ProovdPulse Widget Test</h1>
+  
+  <div class="settings">
+    <div>
+      <label for="websiteId">Website ID:</label>
+      <input type="text" id="websiteId" value="67e0e2226fd66457ee2d254d" />
+    </div>
+    <div>
+      <label for="socketUrl">Socket URL:</label>
+      <input type="text" id="socketUrl" value="ws://localhost:3001" />
+    </div>
+    <div>
+      <label for="position">Position:</label>
+      <select id="position">
+        <option value="bottom-right">Bottom Right</option>
+        <option value="bottom-left">Bottom Left</option>
+        <option value="top-right">Top Right</option>
+        <option value="top-left">Top Left</option>
+      </select>
+    </div>
+  </div>
+  
+  <button class="button" id="loadWidget">Load Widget</button>
+  <button class="button" id="unloadWidget" disabled>Unload Widget</button>
+  <button class="button" id="clickTest">Simulate Clicks</button>
+  <button class="button" id="scrollTest">Simulate Scrolling</button>
+  
+  <h3>Console Log:</h3>
+  <div class="log" id="log"></div>
+  
+  <h3>Instructions:</h3>
+  <ol>
+    <li>Make sure the socket server is running (<code>./start-socket-server.sh</code>)</li>
+    <li>Make sure the Next.js app is running (<code>npm run dev</code>)</li>
+    <li>Click "Load Widget" to initialize the ProovdPulse widget</li>
+    <li>Test interactions with the simulated click and scroll buttons</li>
+    <li>Check the console log for communication with the WebSocket server</li>
+  </ol>
+  
+  <script>
+    // Custom logging function
+    function log(message) {
+      const logElement = document.getElementById('log');
+      const timestamp = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      
+      if (typeof message === 'object') {
+        entry.textContent = `[${timestamp}] ${JSON.stringify(message)}`;
+      } else {
+        entry.textContent = `[${timestamp}] ${message}`;
+      }
+      
+      logElement.appendChild(entry);
+      logElement.scrollTop = logElement.scrollHeight;
+      
+      // Also log to console
+      console.log(message);
+    }
+    
+    // Override console.log
+    const originalLog = console.log;
+    console.log = function() {
+      originalLog.apply(console, arguments);
+      
+      // Add to our log
+      const message = Array.from(arguments).map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg) : arg
+      ).join(' ');
+      
+      log(message);
+    };
+    
+    // Load the widget
+    let pulseWidget = null;
+    
+    document.getElementById('loadWidget').addEventListener('click', async function() {
+      try {
+        const websiteId = document.getElementById('websiteId').value;
+        const socketUrl = document.getElementById('socketUrl').value;
+        const position = document.getElementById('position').value;
+        
+        if (!websiteId) {
+          log('Error: Website ID is required');
+          return;
+        }
+        
+        log(`Fetching auth token for website ${websiteId}...`);
+        
+        // Fetch auth token from your API
+        // In a real scenario, this would be authenticated, but for testing we'll simulate
+        // by using a dummy token if the API call fails
+        let token = '';
+        try {
+          const tokenResponse = await fetch(`http://localhost:3000/api/pulse-auth?websiteId=${websiteId}`);
+          const tokenData = await tokenResponse.json();
+          
+          if (tokenData.success && tokenData.token) {
+            token = tokenData.token;
+            log(`Token received: ${token.substring(0, 15)}...`);
+          } else {
+            log(`Error getting token: ${tokenData.error || 'Unknown error'}`);
+            // Use dummy token for testing
+            token = 'test-token-for-development';
+          }
+        } catch (error) {
+          log(`Error fetching token: ${error.message}`);
+          // Use dummy token for testing
+          token = 'test-token-for-development';
+        }
+        
+        // Load widget script
+        log('Loading widget script...');
+        
+        // Create script element
+        const script = document.createElement('script');
+        script.src = `http://localhost:3000/api/websites/${websiteId}/pulse-widget.js`;
+        script.onload = function() {
+          log('Widget script loaded successfully');
+          
+          if (window.ProovdPulse) {
+            log('Initializing ProovdPulse widget...');
+            
+            // Initialize widget
+            pulseWidget = new ProovdPulse({
+              websiteId: websiteId,
+              token: token,
+              socketUrl: socketUrl,
+              widgetPosition: position,
+              widgetColors: {
+                background: '#1e293b',
+                text: '#ffffff',
+                pulse: '#3b82f6'
+              },
+              customText: {
+                activeUserLabel: 'Live Users',
+                pulseLabel: 'ProovdPulse'
+              }
+            });
+            
+            pulseWidget.init().then(() => {
+              log('Widget initialized successfully');
+              document.getElementById('loadWidget').disabled = true;
+              document.getElementById('unloadWidget').disabled = false;
+            }).catch(err => {
+              log(`Error initializing widget: ${err.message}`);
+            });
+          } else {
+            log('Error: ProovdPulse class not found');
+          }
+        };
+        
+        script.onerror = function() {
+          log('Error loading widget script');
+        };
+        
+        document.head.appendChild(script);
+      } catch (error) {
+        log(`Error: ${error.message}`);
+      }
+    });
+    
+    // Unload widget
+    document.getElementById('unloadWidget').addEventListener('click', function() {
+      if (pulseWidget) {
+        log('Cleaning up widget...');
+        pulseWidget.cleanup();
+        pulseWidget = null;
+        document.getElementById('loadWidget').disabled = false;
+        document.getElementById('unloadWidget').disabled = true;
+        log('Widget removed');
+      }
+    });
+    
+    // Simulate clicks
+    document.getElementById('clickTest').addEventListener('click', function() {
+      if (!pulseWidget) {
+        log('Please load widget first');
+        return;
+      }
+      
+      const clicks = 5;
+      log(`Simulating ${clicks} clicks...`);
+      
+      for (let i = 0; i < clicks; i++) {
+        // Create a click event
+        const clickEvent = new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        });
+        
+        // Dispatch on the document
+        document.dispatchEvent(clickEvent);
+      }
+    });
+    
+    // Simulate scrolling
+    document.getElementById('scrollTest').addEventListener('click', function() {
+      if (!pulseWidget) {
+        log('Please load widget first');
+        return;
+      }
+      
+      log('Simulating page scrolling...');
+      
+      // Add temporary height to the page
+      const tempDiv = document.createElement('div');
+      tempDiv.style.height = '3000px';
+      document.body.appendChild(tempDiv);
+      
+      // Scroll down in increments
+      let pos = 0;
+      const scrollStep = 100;
+      const scrollInterval = setInterval(() => {
+        if (pos < 2000) {
+          window.scrollTo(0, pos += scrollStep);
+          log(`Scrolled to ${pos}px`);
+        } else {
+          clearInterval(scrollInterval);
+          
+          // Scroll back to top after a delay
+          setTimeout(() => {
+            window.scrollTo(0, 0);
+            log('Scrolled back to top');
+            
+            // Remove temporary div
+            document.body.removeChild(tempDiv);
+          }, 1000);
+        }
+      }, 100);
+    });
+    
+    log('ProovdPulse Widget Test ready');
+  </script>
+</body>
+</html> 

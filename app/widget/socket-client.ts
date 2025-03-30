@@ -36,6 +36,7 @@ export class PulseSocketClient {
       try {
         const url = this.getSocketUrl();
         
+        console.log('ProovdPulse: Connecting to WebSocket server at', url);
         this.socket = new WebSocket(url);
         
         // Connection opened
@@ -85,11 +86,13 @@ export class PulseSocketClient {
         this.socket.addEventListener('message', (event) => {
           try {
             const data = JSON.parse(event.data);
+            console.log('ProovdPulse: Received message:', data);
             
             // Handle active users update
-            if (data.type === 'activeUsers' && data.count !== undefined) {
+            if (data.type === 'stats' && data.websiteId === this.config.websiteId) {
+              const activeUsers = data.activeUsers || 0;
               if (this.activeUsersCallback) {
-                this.activeUsersCallback(data.count);
+                this.activeUsersCallback(activeUsers);
               }
             }
             
@@ -115,6 +118,9 @@ export class PulseSocketClient {
     this.clearPingInterval();
     
     if (this.socket) {
+      // Send leave message before closing
+      this.sendLeaveMessage(this.config.websiteId);
+      
       this.socket.close();
       this.socket = null;
     }
@@ -131,14 +137,48 @@ export class PulseSocketClient {
   }
 
   /**
+   * Send join message to the server
+   * @param clientId Client ID to join with
+   */
+  public sendJoinMessage(clientId: string): void {
+    const message = {
+      type: 'join',
+      clientId,
+      websiteId: this.config.websiteId
+    };
+    
+    this.sendMessage(message);
+  }
+
+  /**
+   * Send leave message to the server
+   * @param clientId Client ID to leave with
+   */
+  public sendLeaveMessage(clientId: string): void {
+    const message = {
+      type: 'leave',
+      clientId,
+      websiteId: this.config.websiteId
+    };
+    
+    this.sendMessage(message);
+  }
+
+  /**
    * Send user activity data to the server
    * @param activity User activity data
    */
   public sendActivity(activity: UserActivity): void {
+    // Format the message to match what the server expects
     const message = {
       type: 'activity',
+      clientId: activity.sessionId,
       websiteId: this.config.websiteId,
-      data: activity
+      metrics: {
+        clickCount: activity.totalClicks,
+        scrollPercentage: activity.scrollDepth,
+        timeOnPage: activity.timeOnPage
+      }
     };
     
     this.sendMessage(message);
@@ -159,6 +199,7 @@ export class PulseSocketClient {
     }
     
     try {
+      console.log('ProovdPulse: Sending message:', message);
       this.socket.send(JSON.stringify(message));
     } catch (error) {
       console.error('ProovdPulse: Error sending message:', error);
@@ -224,6 +265,7 @@ export class PulseSocketClient {
    * @returns WebSocket URL with token
    */
   private getSocketUrl(): string {
+    // Default to secure WebSocket for production, with fallback for development
     const baseUrl = this.config.socketUrl || 'wss://socket.proovd.in';
     const websiteId = this.config.websiteId;
     const token = this.config.token || '';
