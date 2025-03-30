@@ -41,6 +41,8 @@ export class ProovdPulse {
   private clickHandler: ((e: MouseEvent) => void) | null = null;
   private scrollHandler: ((e: Event) => void) | null = null;
   private isProduction: boolean;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts: number;
 
   constructor(options: ProovdPulseOptions) {
     this.options = options;
@@ -68,6 +70,8 @@ export class ProovdPulse {
     if (this.options.secure === undefined) {
       this.options.secure = this.isProduction;
     }
+    
+    this.maxReconnectAttempts = this.options.reconnectMaxAttempts || 5;
     
     this.log('Initializing with options:', this.options);
     

@@ -75,16 +75,25 @@ export class PulseSocketClient {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        this.log('Connecting to WebSocket server:', this.options.serverUrl);
-        
-        // Add auth token to URL if provided
-        let url = this.options.serverUrl;
-        if (this.options.authToken) {
-          const separator = url.includes('?') ? '&' : '?';
-          url = `${url}${separator}token=${encodeURIComponent(this.options.authToken)}`;
+        if (this.socket && this.isConnected) {
+          this.log('Already connected to WebSocket server');
+          return resolve();
         }
         
-        this.socket = new WebSocket(url);
+        // Reset reconnection attempts if this is a manual connection
+        if (this.reconnectAttempts === 0) {
+          this.reconnectAttempts = 0;
+        }
+        
+        // Build the WebSocket URL
+        const wsUrl = this.normalizeServerUrl(
+          this.options.serverUrl,
+          this.options.secure !== false
+        );
+        
+        this.log(`Connecting to WebSocket server: ${wsUrl}`);
+        
+        this.socket = new WebSocket(wsUrl);
 
         this.socket.onopen = () => {
           this.log('Connected to WebSocket server');
@@ -299,24 +308,26 @@ export class PulseSocketClient {
    * Attempt to reconnect to the server with exponential backoff
    */
   private attemptReconnect(): void {
-    const maxAttempts = this.options.reconnectMaxAttempts || 10;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+    
+    const maxAttempts = this.options.reconnectMaxAttempts || 5;
+    
     if (this.reconnectAttempts >= maxAttempts) {
-      this.log('Max reconnect attempts reached');
+      this.log(`Maximum reconnect attempts (${maxAttempts}) reached`);
       return;
     }
     
     this.reconnectAttempts++;
-    const baseDelay = this.options.reconnectBaseDelay || 1000;
-    const maxDelay = this.options.reconnectMaxDelay || 30000;
     
-    const delay = Math.min(
-      baseDelay * Math.pow(1.5, this.reconnectAttempts - 1),
-      maxDelay
-    );
+    // Fixed 20 second delay between reconnection attempts
+    const delay = 20000;  // 20 seconds
     
-    this.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    this.log(`Scheduling reconnect attempt ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`);
     
     this.reconnectTimeout = setTimeout(() => {
+      this.log(`Attempting to reconnect (${this.reconnectAttempts}/${maxAttempts})...`);
       this.connect().catch(error => {
         this.log('Reconnect failed', error);
       });
@@ -324,19 +335,21 @@ export class PulseSocketClient {
   }
   
   /**
-   * Normalize the server URL to use the correct protocol
+   * Normalize the server URL based on secure option
    */
   private normalizeServerUrl(url: string, secure: boolean): string {
-    // Already has the correct protocol
-    if ((secure && url.startsWith('wss://')) || (!secure && url.startsWith('ws://'))) {
-      return url;
-    }
+    // No changes to base URL, always use what was passed
+    let wsUrl = url;
     
-    // Strip any existing protocol
-    const strippedUrl = url.replace(/^(wss?:\/\/|https?:\/\/)/, '');
+    // Build query parameters
+    const params = new URLSearchParams();
+    params.append('clientId', this.options.clientId);
+    params.append('websiteId', this.options.websiteId);
     
-    // Add the appropriate protocol
-    return secure ? `wss://${strippedUrl}` : `ws://${strippedUrl}`;
+    // Don't append token parameter (simplified authentication)
+    
+    // Return complete URL
+    return `${wsUrl}?${params.toString()}`;
   }
   
   /**
