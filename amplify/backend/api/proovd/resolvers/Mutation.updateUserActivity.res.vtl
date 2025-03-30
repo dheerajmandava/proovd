@@ -17,11 +17,26 @@
 #set($websiteId = $ctx.args.websiteId)
 #set($timestamp = $util.time.nowISO8601())
 
-## Try to get existing stats first
-#set($existingStats = $ctx.stash.postQueryResult)
+## First, try to get existing stats
+#set($getStatsRequest = {
+  "operation": "GetItem",
+  "tableName": "WebsiteStats-5qhnhm4zrrh2jb5hcz4m3ua7eu-dev",
+  "key": {
+    "id": $util.dynamodb.toDynamoDBJson($websiteId)
+  }
+})
+
+## Execute the GetItem request
+#set($existingStats = {})
+#try
+  #set($existingStats = $util.dynamodb.invokeRequest($getStatsRequest))
+#catch($e)
+  ## If error occurs, log it but continue with default values
+  #set($existingStats = {})
+#end
 
 ## If no stats exist yet, create initial stats object
-#if(!$existingStats)
+#if(!$existingStats.item)
   #set($statsData = {
     "id": $websiteId,
     "activeUsers": 1,
@@ -29,13 +44,14 @@
     "avgScrollPercentage": $ctx.args.metrics.scrollPercentage,
     "avgTimeOnPage": $ctx.args.metrics.timeOnPage,
     "updatedAt": $timestamp,
+    "createdAt": $timestamp,
     "__typename": "WebsiteStats"
   })
   
   ## Create the new stats record
   #set($createStatsRequest = {
     "operation": "PutItem",
-    "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
+    "tableName": "WebsiteStats-5qhnhm4zrrh2jb5hcz4m3ua7eu-dev",
     "key": {
       "id": $util.dynamodb.toDynamoDBJson($websiteId)
     },
@@ -43,42 +59,56 @@
   })
   
   ## Execute the request with error handling
-  #set($result = {})
   #try
     #set($result = $util.dynamodb.invokeRequest($createStatsRequest))
     
-    ## Return the created data
-    $util.toJson($statsData)
+    ## Return the created data including the original UserSession info
+    #set($response = {
+      "id": $ctx.result.id,
+      "clientId": $ctx.args.clientId,
+      "websiteId": $websiteId,
+      "metrics": $ctx.args.metrics,
+      "websiteStats": $statsData
+    })
+    $util.toJson($response)
   #catch($e)
-    $util.error("Failed to create WebsiteStats: $e.message")
+    #set($fallbackResponse = {
+      "id": $ctx.result.id,
+      "clientId": $ctx.args.clientId,
+      "websiteId": $websiteId,
+      "metrics": $ctx.args.metrics,
+      "error": "Failed to create WebsiteStats"
+    })
+    $util.toJson($fallbackResponse)
   #end
 #else
   ## Update existing stats with the new activity data
   ## Calculate new averages and totals
-  #set($currentUsers = $existingStats.activeUsers)
-  #if(!$currentUsers) #set($currentUsers = 0) #end
+  #set($stats = $existingStats.item)
+  #set($currentUsers = 0)
+  #if($stats.activeUsers) #set($currentUsers = $stats.activeUsers) #end
   
   ## Simple increment for demo - in production would need more sophisticated tracking
   #set($newActiveUsers = $currentUsers + 1)
   
   ## Update metrics
-  #set($currentClicks = $existingStats.totalClicks)
-  #if(!$currentClicks) #set($currentClicks = 0) #end
+  #set($currentClicks = 0)
+  #if($stats.totalClicks) #set($currentClicks = $stats.totalClicks) #end
   #set($newTotalClicks = $currentClicks + $ctx.args.metrics.clickCount)
   
   ## Calculate new averages
-  #set($currentScrollAvg = $existingStats.avgScrollPercentage)
-  #if(!$currentScrollAvg) #set($currentScrollAvg = 0) #end
+  #set($currentScrollAvg = 0)
+  #if($stats.avgScrollPercentage) #set($currentScrollAvg = $stats.avgScrollPercentage) #end
   #set($newScrollAvg = ($currentScrollAvg + $ctx.args.metrics.scrollPercentage) / 2)
   
-  #set($currentTimeAvg = $existingStats.avgTimeOnPage)
-  #if(!$currentTimeAvg) #set($currentTimeAvg = 0) #end
+  #set($currentTimeAvg = 0)
+  #if($stats.avgTimeOnPage) #set($currentTimeAvg = $stats.avgTimeOnPage) #end
   #set($newTimeAvg = ($currentTimeAvg + $ctx.args.metrics.timeOnPage) / 2)
   
   ## Create update expression for WebsiteStats
   #set($updateStatsRequest = {
     "operation": "UpdateItem",
-    "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
+    "tableName": "WebsiteStats-5qhnhm4zrrh2jb5hcz4m3ua7eu-dev",
     "key": {
       "id": $util.dynamodb.toDynamoDBJson($websiteId)
     },
@@ -99,11 +129,10 @@
   })
   
   ## Execute the request with error handling
-  #set($result = {})
   #try
     #set($result = $util.dynamodb.invokeRequest($updateStatsRequest))
     
-    ## Return updated stats
+    ## Return updated stats combined with the original UserSession info
     #set($updatedStats = {
       "id": $websiteId,
       "activeUsers": $newActiveUsers,
@@ -114,8 +143,22 @@
       "__typename": "WebsiteStats"
     })
     
-    $util.toJson($updatedStats)
+    #set($response = {
+      "id": $ctx.result.id,
+      "clientId": $ctx.args.clientId,
+      "websiteId": $websiteId,
+      "metrics": $ctx.args.metrics,
+      "websiteStats": $updatedStats
+    })
+    $util.toJson($response)
   #catch($e)
-    $util.error("Failed to update WebsiteStats: $e.message")
+    #set($fallbackResponse = {
+      "id": $ctx.result.id,
+      "clientId": $ctx.args.clientId,
+      "websiteId": $websiteId,
+      "metrics": $ctx.args.metrics,
+      "error": "Failed to update WebsiteStats"
+    })
+    $util.toJson($fallbackResponse)
   #end
 #end 

@@ -4,13 +4,16 @@
 
 ## If no data was found, return default stats
 #if(!$ctx.result)
+  #set($timestamp = $util.time.nowISO8601())
   #set($defaultStats = {
     "id": $ctx.args.id,
     "activeUsers": 0,
     "totalClicks": 0,
     "avgScrollPercentage": 0,
     "avgTimeOnPage": 0,
-    "updatedAt": $util.time.nowISO8601()
+    "updatedAt": $timestamp,
+    "createdAt": $timestamp,
+    "__typename": "WebsiteStats"
   })
   
   $util.toJson($defaultStats)
@@ -30,6 +33,10 @@
   
   #if(!$ctx.result.avgTimeOnPage)
     $util.qr($ctx.result.put("avgTimeOnPage", 0))
+  #end
+  
+  #if(!$ctx.result.__typename)
+    $util.qr($ctx.result.put("__typename", "WebsiteStats"))
   #end
   
   $util.toJson($ctx.result)

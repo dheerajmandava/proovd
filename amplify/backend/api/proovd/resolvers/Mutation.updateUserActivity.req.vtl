@@ -5,7 +5,7 @@
 {
   "version": "2018-05-29",
   "operation": "PutItem",
-  "tableName": "UserSession-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
+  "tableName": "UserSession-5qhnhm4zrrh2jb5hcz4m3ua7eu-dev",
   "key": {
     "id": $util.dynamodb.toDynamoDBJson($uuid)
   },
@@ -15,14 +15,8 @@
     "metrics": $util.dynamodb.toDynamoDBJson($ctx.args.metrics),
     "isActive": $util.dynamodb.toDynamoDBJson(true),
     "lastActive": $util.dynamodb.toDynamoDBJson($timestamp),
-    "__typename": $util.dynamodb.toDynamoDBJson("UserSession")
-  },
-  ## Save the website ID for the response template to use
-  "postQuery": {
-    "operation": "GetItem",
-    "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
-    "key": {
-      "id": $util.dynamodb.toDynamoDBJson($ctx.args.websiteId)
-    }
+    "__typename": $util.dynamodb.toDynamoDBJson("UserSession"),
+    "createdAt": $util.dynamodb.toDynamoDBJson($timestamp),
+    "updatedAt": $util.dynamodb.toDynamoDBJson($timestamp)
   }
 } 
