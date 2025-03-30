@@ -1,12 +1,12 @@
-import { nodeResolve } from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs';
-import typescript from '@rollup/plugin-typescript';
-import terser from '@rollup/plugin-terser';
-import replace from '@rollup/plugin-replace';
+const { nodeResolve } = require('@rollup/plugin-node-resolve');
+const commonjs = require('@rollup/plugin-commonjs');
+const typescript = require('@rollup/plugin-typescript');
+const terser = require('@rollup/plugin-terser');
+const replace = require('@rollup/plugin-replace');
 
 const production = !process.env.ROLLUP_WATCH;
 
-export default {
+module.exports = {
   input: 'src/pulse-widget/index.ts',
   output: {
     file: 'public/pulse-widget.min.js',
