@@ -735,7 +735,7 @@ class ProovdPulse {
    */
   log(message, ...args) {
     if (this.config.debug) {
-      console.log(`ProovdPulse: ${message}`, ...args);
+      console.log(\`ProovdPulse: \${message}\`, ...args);
     }
   }
 }
