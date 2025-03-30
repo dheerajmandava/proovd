@@ -1,7 +1,7 @@
 /**
  * ProovdPulse Widget
  * Real-time website visitor tracking and engagement metrics
- * Production-ready version with secure connections and advanced options
+ * Simple implementation without authentication
  */
 import { PulseSocketClient } from './socket-client';
 import { PulseUI, PulseUIOptions } from './pulse-ui';
@@ -14,8 +14,6 @@ interface ProovdPulseOptions extends PulseUIOptions {
   secure?: boolean;
   debug?: boolean;
   reconnectMaxAttempts?: number;
-  reconnectBaseDelay?: number;
-  reconnectMaxDelay?: number;
 }
 
 interface ActivityMetrics {
@@ -39,9 +37,6 @@ export class ProovdPulse {
   private maxScrollPercentage = 0;
   private clickHandler: ((e: MouseEvent) => void) | null = null;
   private scrollHandler: ((e: Event) => void) | null = null;
-  private isProduction: boolean;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts: number;
 
   constructor(options: ProovdPulseOptions) {
     // Make a copy of options to avoid mutation issues
@@ -52,26 +47,19 @@ export class ProovdPulse {
       this.options.clientId = this.getClientId();
     }
     
-    // Determine environment
-    this.isProduction = typeof window !== 'undefined' 
-      ? window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1')
-      : false;
-    
-    // Set default server URL based on environment
+    // Set default server URL
     if (!this.options.serverUrl) {
-      this.options.serverUrl = this.isProduction 
-        ? 'wss://socket.proovd.in' 
-        : 'ws://localhost:3001';
-    } else if (this.isProduction && this.options.serverUrl === 'ws://localhost:3001') {
-      this.options.serverUrl = 'wss://socket.proovd.in';
+      // Use wss:// for production, ws:// for localhost
+      this.options.serverUrl = window.location.hostname === 'localhost' || 
+        window.location.hostname.includes('127.0.0.1')
+        ? 'ws://localhost:3001'
+        : 'wss://socket.proovd.in';
     }
     
-    // Set secure option based on environment
+    // Set secure option based on protocol
     if (this.options.secure === undefined) {
-      this.options.secure = this.isProduction;
+      this.options.secure = window.location.protocol === 'https:';
     }
-    
-    this.maxReconnectAttempts = this.options.reconnectMaxAttempts || 5;
     
     this.log('Initializing with options:', this.options);
     
@@ -85,6 +73,7 @@ export class ProovdPulse {
       throw new Error('Missing required options for ProovdPulse initialization');
     }
     
+    // Initialize socket client
     this.socketClient = new PulseSocketClient(
       this.options.clientId,
       this.options.websiteId,
@@ -92,9 +81,7 @@ export class ProovdPulse {
       {
         secure: this.options.secure,
         debug: this.options.debug,
-        reconnectMaxAttempts: this.options.reconnectMaxAttempts,
-        reconnectBaseDelay: this.options.reconnectBaseDelay,
-        reconnectMaxDelay: this.options.reconnectMaxDelay
+        reconnectMaxAttempts: this.options.reconnectMaxAttempts
       }
     );
     
@@ -111,6 +98,9 @@ export class ProovdPulse {
     // Handle connection events
     this.socketClient.on('connect', () => {
       this.log('Connected to ProovdPulse server');
+      
+      // Send join message on connect
+      this.socketClient.sendJoin();
     });
     
     this.socketClient.on('disconnect', (data) => {

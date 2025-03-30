@@ -1,7 +1,7 @@
 /**
  * ProovdPulse WebSocket Client
  * Handles communication with the ProovdPulse WebSocket server
- * Production-ready with secure connections and authentication
+ * Simple implementation without authentication
  */
 
 interface PulseMetrics {
@@ -25,8 +25,6 @@ interface PulseOptions {
   serverUrl: string;
   secure?: boolean;
   reconnectMaxAttempts?: number;
-  reconnectBaseDelay?: number;
-  reconnectMaxDelay?: number;
   debug?: boolean;
 }
 
@@ -48,19 +46,17 @@ export class PulseSocketClient {
   private lastPongTime = 0;
 
   constructor(clientId: string, websiteId: string, serverUrl: string, options: Partial<PulseOptions> = {}) {
-    // Determine if we should use secure protocol based on server URL or explicit option
+    // Use secure WebSockets if on HTTPS
     const useSecure = options.secure !== undefined 
       ? options.secure 
-      : (typeof window !== 'undefined' && window.location.protocol === 'https:' || serverUrl.startsWith('wss://'));
+      : (typeof window !== 'undefined' && window.location.protocol === 'https:');
     
     this.options = {
       clientId,
       websiteId,
-      serverUrl, // No longer calling normalizeServerUrl during initialization
+      serverUrl,
       secure: useSecure,
       reconnectMaxAttempts: options.reconnectMaxAttempts || 10,
-      reconnectBaseDelay: options.reconnectBaseDelay || 1000,
-      reconnectMaxDelay: options.reconnectMaxDelay || 30000,
       debug: options.debug || false
     };
     
@@ -94,12 +90,6 @@ export class PulseSocketClient {
           this.log('Connected to WebSocket server');
           this.isConnected = true;
           this.reconnectAttempts = 0;
-          
-          // Send join message
-          this.sendMessage('join', {
-            clientId: this.options.clientId,
-            websiteId: this.options.websiteId
-          });
           
           // Start ping interval for keep-alive
           this.startPingInterval();
@@ -145,6 +135,16 @@ export class PulseSocketClient {
         this.notifyHandlers('error', { error });
         reject(error);
       }
+    });
+  }
+
+  /**
+   * Send a join message to the server
+   */
+  sendJoin(): void {
+    this.sendMessage('join', {
+      clientId: this.options.clientId,
+      websiteId: this.options.websiteId
     });
   }
 
@@ -300,7 +300,7 @@ export class PulseSocketClient {
   }
 
   /**
-   * Attempt to reconnect to the server with exponential backoff
+   * Attempt to reconnect to the server
    */
   private attemptReconnect(): void {
     if (this.reconnectTimeout) {
@@ -316,8 +316,8 @@ export class PulseSocketClient {
     
     this.reconnectAttempts++;
     
-    // Fixed 20 second delay between reconnection attempts
-    const delay = 20000;  // 20 seconds
+    // Fixed delay for all reconnect attempts (simple approach)
+    const delay = 10000; // 10 seconds
     
     this.log(`Scheduling reconnect attempt ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`);
     
