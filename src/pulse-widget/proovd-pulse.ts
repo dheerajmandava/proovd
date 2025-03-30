@@ -11,7 +11,6 @@ interface ProovdPulseOptions extends PulseUIOptions {
   websiteId: string;
   serverUrl?: string;
   clientId?: string;
-  authToken?: string;
   secure?: boolean;
   debug?: boolean;
   reconnectMaxAttempts?: number;
@@ -91,7 +90,6 @@ export class ProovdPulse {
       this.options.websiteId,
       this.options.serverUrl,
       {
-        authToken: this.options.authToken,
         secure: this.options.secure,
         debug: this.options.debug,
         reconnectMaxAttempts: this.options.reconnectMaxAttempts,

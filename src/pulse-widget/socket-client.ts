@@ -23,7 +23,6 @@ interface PulseOptions {
   clientId: string;
   websiteId: string;
   serverUrl: string;
-  authToken?: string;
   secure?: boolean;
   reconnectMaxAttempts?: number;
   reconnectBaseDelay?: number;
@@ -58,7 +57,6 @@ export class PulseSocketClient {
       clientId,
       websiteId,
       serverUrl, // No longer calling normalizeServerUrl during initialization
-      authToken: options.authToken,
       secure: useSecure,
       reconnectMaxAttempts: options.reconnectMaxAttempts || 10,
       reconnectBaseDelay: options.reconnectBaseDelay || 1000,
