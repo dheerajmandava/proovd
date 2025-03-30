@@ -8,21 +8,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Loader2, Clipboard, Share2, Settings, BarChart4, Activity, Users, CheckCircle2 } from 'lucide-react';
 
-// Import AWS Amplify
-import { Amplify, API, graphqlOperation } from 'aws-amplify';
-import * as queries from '@/app/graphql/queries';
-
-// Configure Amplify
-if (typeof window !== 'undefined') {
-  Amplify.configure({
-    aws_project_region: process.env.NEXT_PUBLIC_AWS_REGION,
-    aws_appsync_graphqlEndpoint: process.env.NEXT_PUBLIC_APPSYNC_ENDPOINT,
-    aws_appsync_region: process.env.NEXT_PUBLIC_AWS_REGION,
-    aws_appsync_authenticationType: 'API_KEY',
-    aws_appsync_apiKey: process.env.NEXT_PUBLIC_APPSYNC_API_KEY,
-  });
-}
-
 interface WebsiteData {
   id: string;
   name: string;
@@ -181,8 +166,7 @@ export default function PulseDashboard() {
   const [websiteStats, setWebsiteStats] = useState<WebsiteStats | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [subscription, setSubscription] = useState<any>(null);
-
+  
   // Parse country and city data
   const usersByCountry = websiteStats?.usersByCountry ? 
     JSON.parse(websiteStats.usersByCountry) : {};
@@ -204,14 +188,15 @@ export default function PulseDashboard() {
           throw new Error(websiteResult.error || 'Failed to fetch website data');
         }
         
-        // Fetch engagement data from AppSync
-        const websiteStatsResponse = await API.graphql(
-          graphqlOperation(queries.getWebsiteStats, { id })
-        );
+        // Fetch website stats from REST API
+        const statsResponse = await fetch(`/api/websites/${id}/pulse`);
+        const statsResult = await statsResponse.json();
         
-        const statsData = (websiteStatsResponse as any).data.getWebsiteStats;
-        if (statsData) {
-          setWebsiteStats(statsData);
+        if (statsResult.success) {
+          setWebsiteStats(statsResult.data);
+        } else {
+          console.error('Failed to fetch website stats:', statsResult.error);
+          // Continue with empty stats
         }
         
         setLoading(false);
@@ -223,39 +208,24 @@ export default function PulseDashboard() {
     
     fetchData();
     
-    // Subscribe to real-time updates
-    subscribeToWebsiteStats();
-    
-    // Cleanup function
-    return () => {
-      if (subscription) {
-        subscription.unsubscribe();
+    // Setup a polling interval to refresh stats every 30 seconds
+    const intervalId = setInterval(async () => {
+      try {
+        const statsResponse = await fetch(`/api/websites/${id}/pulse`);
+        const statsResult = await statsResponse.json();
+        
+        if (statsResult.success) {
+          setWebsiteStats(statsResult.data);
+        }
+      } catch (error) {
+        console.error('Error refreshing stats:', error);
       }
+    }, 30000);
+    
+    return () => {
+      clearInterval(intervalId);
     };
   }, [id]);
-  
-  // Subscribe to real-time updates
-  const subscribeToWebsiteStats = async () => {
-    try {
-      const sub = API.graphql(
-        graphqlOperation(queries.onActiveUserChange, { websiteId: id })
-      ).subscribe({
-        next: (result: any) => {
-          const data = result.value.data.onActiveUserChange;
-          if (data) {
-            setWebsiteStats(data);
-          }
-        },
-        error: (error: any) => {
-          console.error('Subscription error:', error);
-        }
-      });
-      
-      setSubscription(sub);
-    } catch (error) {
-      console.error('Error setting up subscription:', error);
-    }
-  };
   
   // Copy widget code to clipboard
   const copyWidgetCode = () => {
@@ -441,141 +411,107 @@ export default function PulseDashboard() {
                       type="checkbox" 
                       name="showHeatmap" 
                       className="mr-2 h-4 w-4" 
-                      defaultChecked={websiteData.settings?.pulse?.showHeatmap === true}
+                      defaultChecked={websiteData.settings?.pulse?.showHeatmap !== false}
                     />
                     Show Heatmap
                   </label>
                 </div>
               </div>
               
-              <div className="mt-6">
-                <h3 className="text-md font-medium">Widget Preview</h3>
-                <LiveProovdPulseWidget 
-                  websiteId={id as string} 
-                  position={websiteData.settings?.pulse?.position || 'bottom-right'} 
-                  theme={websiteData.settings?.pulse?.theme || 'light'}
-                />
-              </div>
-              
-              <div className="mt-6 flex justify-end">
-                <Button type="submit">Save Settings</Button>
+              <div className="mt-6 flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setSettingsOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  Save Settings
+                </Button>
               </div>
             </form>
           </CardContent>
         </Card>
       )}
       
-      <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="w-full">
+      {/* Live Widget Preview */}
+      {settingsOpen && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Widget Preview</CardTitle>
+            <CardDescription>This is how the widget will appear on your website</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <LiveProovdPulseWidget 
+              websiteId={id as string} 
+              position={websiteData.settings?.pulse?.position || 'bottom-right'} 
+              theme={websiteData.settings?.pulse?.theme || 'light'} 
+            />
+          </CardContent>
+        </Card>
+      )}
+      
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="engagement">Engagement</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
           <TabsTrigger value="heatmaps">Heatmaps</TabsTrigger>
         </TabsList>
         
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Active Users
-                </CardTitle>
+                <CardTitle className="text-sm font-medium">Active Users</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{websiteStats?.activeUsers || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  Users currently active on your site
-                </p>
+                <div className="flex flex-col">
+                  <div className="flex items-center">
+                    <span className="text-3xl font-bold">{websiteStats?.activeUsers || 0}</span>
+                    <Activity className="ml-2 h-5 w-5 text-blue-500" />
+                  </div>
+                  <span className="text-xs text-gray-500">Real-time visitors</span>
+                </div>
               </CardContent>
             </Card>
             
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Avg. Time on Page
-                </CardTitle>
+                <CardTitle className="text-sm font-medium">Total Clicks</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {websiteStats?.avgTimeOnPage 
-                    ? `${Math.floor(websiteStats.avgTimeOnPage / 60)}m ${Math.floor(websiteStats.avgTimeOnPage % 60)}s` 
-                    : '0m 0s'}
+                <div className="flex flex-col">
+                  <div className="flex items-center">
+                    <span className="text-3xl font-bold">{websiteStats?.totalClicks || 0}</span>
+                    <CheckCircle2 className="ml-2 h-5 w-5 text-green-500" />
+                  </div>
+                  <span className="text-xs text-gray-500">User interactions</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Average time users spend on your site
-                </p>
               </CardContent>
             </Card>
             
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Avg. Scroll Percentage
-                </CardTitle>
+                <CardTitle className="text-sm font-medium">Scroll Depth</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {websiteStats?.avgScrollPercentage ? `${Math.floor(websiteStats.avgScrollPercentage)}%` : '0%'}
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <span className="text-3xl font-bold">{Math.round(websiteStats?.avgScrollPercentage || 0)}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full">
+                    <div className="h-2 bg-amber-500 rounded-full" style={{ width: `${websiteStats?.avgScrollPercentage || 0}%` }}></div>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  How far users scroll down your pages
-                </p>
               </CardContent>
             </Card>
-          </div>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Activity Overview</CardTitle>
-              <CardDescription>Real-time user activity on your website</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px] w-full flex items-center justify-center bg-gray-50 rounded-lg">
-                {/* Activity chart would go here */}
-                <Activity className="h-12 w-12 text-gray-300" />
-                <p className="ml-2 text-gray-400">Activity visualization coming soon</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        {/* Engagement Tab */}
-        <TabsContent value="engagement" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Engagement Metrics</CardTitle>
-              <CardDescription>Detailed engagement statistics</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Click Activity</h3>
-                  <div className="flex justify-between items-center mb-2">
-                    <span>Total Clicks</span>
-                    <span className="font-semibold">{websiteStats?.totalClicks || 0}</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full">
-                    <div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${Math.min(100, ((websiteStats?.totalClicks || 0) / 100) * 100)}%` }}></div>
-                  </div>
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Scroll Depth</h3>
-                  <div className="flex justify-between items-center mb-2">
-                    <span>Average Scroll</span>
-                    <span className="font-semibold">{websiteStats?.avgScrollPercentage ? `${Math.floor(websiteStats.avgScrollPercentage)}%` : '0%'}</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full">
-                    <div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${Math.min(100, (websiteStats?.avgScrollPercentage || 0))}%` }}></div>
-                  </div>
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Time on Page</h3>
-                  <div className="flex justify-between items-center mb-2">
-                    <span>Average Time</span>
-                    <span className="font-semibold">
+            
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Avg. Time on Page</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <span className="text-3xl font-bold">
                       {websiteStats?.avgTimeOnPage 
                         ? `${Math.floor(websiteStats.avgTimeOnPage / 60)}m ${Math.floor(websiteStats.avgTimeOnPage % 60)}s` 
                         : '0m 0s'}
@@ -585,9 +521,9 @@ export default function PulseDashboard() {
                     <div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${Math.min(100, ((websiteStats?.avgTimeOnPage || 0) / 300) * 100)}%` }}></div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
         
         {/* Locations Tab */}
@@ -607,7 +543,7 @@ export default function PulseDashboard() {
                       .map(([country, count]) => (
                         <li key={country} className="flex justify-between items-center">
                           <span>{country}</span>
-                          <span className="font-semibold">{count}</span>
+                          <span className="font-semibold">{String(count)}</span>
                         </li>
                       ))}
                   </ul>
@@ -634,7 +570,7 @@ export default function PulseDashboard() {
                       .map(([city, count]) => (
                         <li key={city} className="flex justify-between items-center">
                           <span>{city}</span>
-                          <span className="font-semibold">{count}</span>
+                          <span className="font-semibold">{String(count)}</span>
                         </li>
                       ))}
                   </ul>

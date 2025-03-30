@@ -36,6 +36,7 @@
     "bson-ext": "^4.0.3",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
+    "jsonwebtoken": "^9.0.2",
     "kerberos": "^2.2.2",
     "lit-html": "^3.2.1",
     "lucide-react": "^0.483.0",
