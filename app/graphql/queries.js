@@ -5,44 +5,44 @@ export const getWebsiteStats = /* GraphQL */ `
     getWebsiteStats(id: $id) {
       id
       activeUsers
-      usersByCountry
-      usersByCity
-      avgTimeOnPage
-      avgScrollPercentage
       totalClicks
+      avgScrollPercentage
+      avgTimeOnPage
+      updatedAt
     }
   }
 `;
 
 export const onActiveUserChange = /* GraphQL */ `
-  subscription OnActiveUserChange($websiteId: ID!) {
+  subscription OnActiveUserChange($websiteId: String!) {
     onActiveUserChange(websiteId: $websiteId) {
       id
       activeUsers
-      usersByCountry
-      usersByCity
-      avgTimeOnPage
-      avgScrollPercentage
       totalClicks
+      avgScrollPercentage
+      avgTimeOnPage
+      updatedAt
     }
   }
 `;
 
 export const updateUserActivity = /* GraphQL */ `
   mutation UpdateUserActivity(
-    $clientId: String!
-    $websiteId: ID!
-    $metrics: MetricsInput
+    $clientId: String!,
+    $websiteId: String!,
+    $metrics: MetricsInput!
   ) {
     updateUserActivity(
-      clientId: $clientId
-      websiteId: $websiteId
+      clientId: $clientId,
+      websiteId: $websiteId,
       metrics: $metrics
     ) {
       id
-      clientId
-      websiteId
-      lastActive
+      activeUsers
+      totalClicks
+      avgScrollPercentage
+      avgTimeOnPage
+      updatedAt
     }
   }
 `; 

@@ -13,5 +13,113 @@
   $util.error("Lambda resolver did not return a valid response. Check Lambda function logs.")
 #end
 
-## Otherwise, return the result
-$util.toJson($ctx.result) 
+## Now update the WebsiteStats table with this new user activity data
+#set($websiteId = $ctx.args.websiteId)
+#set($timestamp = $util.time.nowISO8601())
+
+## Try to get existing stats first
+#set($existingStats = $ctx.stash.postQueryResult)
+
+## If no stats exist yet, create initial stats object
+#if(!$existingStats)
+  #set($statsData = {
+    "id": $websiteId,
+    "activeUsers": 1,
+    "totalClicks": $ctx.args.metrics.clickCount,
+    "avgScrollPercentage": $ctx.args.metrics.scrollPercentage,
+    "avgTimeOnPage": $ctx.args.metrics.timeOnPage,
+    "updatedAt": $timestamp
+  })
+  
+  ## Create the new stats record
+  $util.qr($ctx.stash.put("statsData", $statsData))
+  
+  #set($createStatsRequest = {
+    "operation": "PutItem",
+    "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
+    "key": {
+      "id": $util.dynamodb.toDynamoDBJson($websiteId)
+    },
+    "attributeValues": $util.dynamodb.toMapValuesJson($statsData)
+  })
+  
+  ## Execute the request
+  #set($result = $util.dynamodb.invokeRequest($createStatsRequest))
+  
+  ## Handle errors
+  #if($result.sdkHttpResponse.statusCode != 200)
+    $util.error("Failed to create WebsiteStats record: $result.statusMessage")
+  #end
+  
+  ## Return the created data
+  $util.toJson($statsData)
+#else
+  ## Update existing stats with the new activity data
+  ## Calculate new averages and totals
+  #set($currentUsers = $existingStats.activeUsers)
+  #if(!$currentUsers) #set($currentUsers = 0) #end
+  
+  ## Determine if this is a new user or existing user
+  #set($isNewUser = true)
+  
+  ## Simple increment for demo - in production would need more sophisticated tracking
+  #set($newActiveUsers = $currentUsers + 1)
+  
+  ## Update metrics
+  #set($currentClicks = $existingStats.totalClicks)
+  #if(!$currentClicks) #set($currentClicks = 0) #end
+  #set($newTotalClicks = $currentClicks + $ctx.args.metrics.clickCount)
+  
+  ## Calculate new averages
+  #set($currentScrollAvg = $existingStats.avgScrollPercentage)
+  #if(!$currentScrollAvg) #set($currentScrollAvg = 0) #end
+  #set($newScrollAvg = ($currentScrollAvg + $ctx.args.metrics.scrollPercentage) / 2)
+  
+  #set($currentTimeAvg = $existingStats.avgTimeOnPage)
+  #if(!$currentTimeAvg) #set($currentTimeAvg = 0) #end
+  #set($newTimeAvg = ($currentTimeAvg + $ctx.args.metrics.timeOnPage) / 2)
+  
+  ## Create update expression for WebsiteStats
+  #set($updateExpression = "SET activeUsers = :activeUsers, totalClicks = :totalClicks, avgScrollPercentage = :scrollAvg, avgTimeOnPage = :timeAvg, updatedAt = :updatedAt")
+  
+  #set($expressionValues = {
+    ":activeUsers": $util.dynamodb.toDynamoDBJson($newActiveUsers),
+    ":totalClicks": $util.dynamodb.toDynamoDBJson($newTotalClicks),
+    ":scrollAvg": $util.dynamodb.toDynamoDBJson($newScrollAvg),
+    ":timeAvg": $util.dynamodb.toDynamoDBJson($newTimeAvg),
+    ":updatedAt": $util.dynamodb.toDynamoDBJson($timestamp)
+  })
+  
+  ## Update the stats
+  #set($updateStatsRequest = {
+    "operation": "UpdateItem",
+    "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
+    "key": {
+      "id": $util.dynamodb.toDynamoDBJson($websiteId)
+    },
+    "update": {
+      "expression": $updateExpression,
+      "expressionValues": $expressionValues
+    }
+  })
+  
+  ## Execute the request
+  #set($result = $util.dynamodb.invokeRequest($updateStatsRequest))
+  
+  ## Handle errors
+  #if($result.sdkHttpResponse.statusCode != 200)
+    $util.error("Failed to update WebsiteStats: $result.statusMessage")
+  #end
+  
+  ## Return updated stats
+  #set($updatedStats = {
+    "id": $websiteId,
+    "activeUsers": $newActiveUsers,
+    "totalClicks": $newTotalClicks,
+    "avgScrollPercentage": $newScrollAvg,
+    "avgTimeOnPage": $newTimeAvg,
+    "updatedAt": $timestamp
+  })
+  
+  $util.toJson($updatedStats)
+#end 

@@ -1,0 +1,36 @@
+#if($ctx.error)
+  $util.error($ctx.error.message, $ctx.error.type)
+#end
+
+## If no data was found, return default stats
+#if(!$ctx.result)
+  #set($defaultStats = {
+    "id": $ctx.args.id,
+    "activeUsers": 0,
+    "totalClicks": 0,
+    "avgScrollPercentage": 0,
+    "avgTimeOnPage": 0,
+    "updatedAt": $util.time.nowISO8601()
+  })
+  
+  $util.toJson($defaultStats)
+#else
+  ## Always ensure the fields are properly filled
+  #if(!$ctx.result.activeUsers)
+    $util.qr($ctx.result.put("activeUsers", 0))
+  #end
+  
+  #if(!$ctx.result.totalClicks)
+    $util.qr($ctx.result.put("totalClicks", 0))
+  #end
+  
+  #if(!$ctx.result.avgScrollPercentage)
+    $util.qr($ctx.result.put("avgScrollPercentage", 0))
+  #end
+  
+  #if(!$ctx.result.avgTimeOnPage)
+    $util.qr($ctx.result.put("avgTimeOnPage", 0))
+  #end
+  
+  $util.toJson($ctx.result)
+#end 

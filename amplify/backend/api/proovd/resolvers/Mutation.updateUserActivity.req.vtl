@@ -1,14 +1,44 @@
-## Forward request to Lambda with detailed context
+#set($uuid = $util.autoId())
+#set($timestamp = $util.time.nowISO8601())
+
+## First save the user session
+#set($userSessionPutRequest = {
+  "operation": "PutItem",
+  "key": {
+    "id": $util.dynamodb.toDynamoDBJson($uuid)
+  },
+  "attributeValues": {
+    "clientId": $util.dynamodb.toDynamoDBJson($ctx.args.clientId),
+    "websiteId": $util.dynamodb.toDynamoDBJson($ctx.args.websiteId),
+    "metrics": $util.dynamodb.toDynamoDBJson($ctx.args.metrics),
+    "isActive": $util.dynamodb.toDynamoDBJson(true),
+    "lastActive": $util.dynamodb.toDynamoDBJson($timestamp)
+  }
+})
+
+## Handle updating WebsiteStats - check if it exists first
+#set($getWebsiteStatsRequest = {
+  "operation": "GetItem",
+  "key": {
+    "id": $util.dynamodb.toDynamoDBJson($ctx.args.websiteId)
+  },
+  "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}"
+})
+
+## Store requests for a transaction
+#set($transaction = [])
+$util.qr($transaction.add($userSessionPutRequest))
+
 {
   "version": "2018-05-29",
-  "operation": "Invoke",
-  "payload": {
-    "field": "updateUserActivity",
-    "arguments": $utils.toJson($context.arguments),
-    "identity": {
-      "sourceIp": "$context.identity.sourceIp",
-      "userAgent": "$context.request.headers.User-Agent"
-    },
-    "timestamp": $utils.toJson($utils.time.nowISO8601())
+  "operation": "TransactWriteItems",
+  "transactItems": $util.toJson($transaction),
+  
+  "postQuery": {
+    "operation": "GetItem",
+    "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
+    "key": {
+      "id": $util.dynamodb.toDynamoDBJson($ctx.args.websiteId)
+    }
   }
 } 

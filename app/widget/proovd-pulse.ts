@@ -269,8 +269,10 @@ export class ProovdPulse {
       
       if (response.data?.updateUserActivity) {
         console.log('ProovdPulse: Activity reported successfully');
-        // After reporting, fetch the latest stats
-        this.fetchWebsiteStats();
+        
+        // Immediately update display with the returned data
+        // This is faster than calling fetchWebsiteStats again
+        this.updateStatsDisplay(response.data.updateUserActivity);
       }
     } catch (error) {
       console.error('ProovdPulse: Failed to report activity:', error);

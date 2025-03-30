@@ -204,3 +204,88 @@ If you're experiencing issues with the AppSync connection, follow these steps:
    - **Missing data**: Check that your GraphQL operations match the schema
 
 If problems persist, check the CloudWatch logs for your Lambda functions and the API Gateway logs for more detailed error information.
+
+# ProovdPulse Analytics Widget
+
+ProovdPulse is a real-time website analytics widget that shows user engagement metrics. It tracks visitor activity and displays:
+
+- Number of active users
+- Average time on page
+- Average scroll percentage
+- Total clicks
+
+## How It Works
+
+1. **Data Collection**: The widget tracks user activity on your website (scrolling, clicking, time spent)
+2. **Data Storage**: User sessions are stored in DynamoDB (UserSession table)
+3. **Data Aggregation**: Website statistics are calculated and stored in DynamoDB (WebsiteStats table)
+4. **Real-time Updates**: Data is displayed in the widget and updated in real-time via AppSync subscriptions
+
+## Implementation
+
+The ProovdPulse implementation consists of:
+
+### 1. DynamoDB Tables
+
+- **UserSession**: Stores individual user sessions and metrics
+- **WebsiteStats**: Stores aggregated website statistics
+
+### 2. AppSync GraphQL API
+
+The following GraphQL operations are used:
+
+- `updateUserActivity`: Reports user activity metrics
+- `getWebsiteStats`: Retrieves current website statistics
+- `onActiveUserChange`: Real-time subscription for stats updates
+
+### 3. Widget Implementation
+
+The widget is implemented in TypeScript and can be found in `/app/widget/proovd-pulse.ts`. It:
+
+- Tracks user behavior via DOM events
+- Reports activity metrics to AppSync every 40 seconds
+- Displays real-time visitor stats in a floating widget
+
+## Setup and Configuration
+
+### Environment Variables
+
+Set these in your `.env.local` file:
+
+```
+# AppSync Configuration
+NEXT_PUBLIC_APPSYNC_ENDPOINT=https://your-appsync-endpoint.appsync-api.region.amazonaws.com/graphql
+NEXT_PUBLIC_APPSYNC_API_KEY=your-appsync-api-key
+NEXT_PUBLIC_AWS_REGION=your-aws-region
+```
+
+### Widget Script Tag
+
+Add this script tag to your website:
+
+```html
+<script src="https://your-deployment-url.com/widget/proovd-pulse.js" 
+  data-website-id="your-website-id"
+  data-appsync-endpoint="your-appsync-endpoint"
+  data-appsync-api-key="your-appsync-api-key"
+  data-appsync-region="your-aws-region"></script>
+```
+
+## Troubleshooting
+
+If the widget doesn't show data:
+
+1. Check browser console for errors
+2. Verify AppSync endpoint and API key are correct
+3. Make sure your website ID exists in the WebsiteStats table
+4. Try running the test script to add data: `node add-test-stats.js`
+5. Check CloudWatch logs for any AppSync resolver errors
+
+## Development and Testing
+
+A test page is available at `/app/test-widget.html`. Open this in your browser to:
+
+- View widget behavior
+- Monitor console logs
+- Trigger activity reports manually
+- Fetch stats on demand
