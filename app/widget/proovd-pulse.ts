@@ -193,7 +193,7 @@ export class ProovdPulse {
     }
 
     try {
-      console.log('ProovdPulse: Fetching website stats for', this.websiteId);
+      console.log('ProovdPulse: Fetching website stats for websiteId:', this.websiteId);
       
       // Use any type to bypass TypeScript errors for now
       const response: any = await API.graphql({
@@ -201,23 +201,37 @@ export class ProovdPulse {
         variables: { id: this.websiteId }
       });
       
-      console.log('ProovdPulse: API response:', response);
+      console.log('ProovdPulse: Stats API full response:', JSON.stringify(response));
       
       if (response.errors) {
-        console.error('ProovdPulse: Error fetching stats:', response.errors);
+        console.error('ProovdPulse: GraphQL errors fetching stats:', response.errors);
+        // Show default stats in case of error
         this.updateStatsDisplay({ activeUsers: 1 });
         return;
       }
       
       if (response.data?.getWebsiteStats) {
-        console.log('ProovdPulse: Stats data:', response.data.getWebsiteStats);
+        console.log('ProovdPulse: Received stats data:', response.data.getWebsiteStats);
         this.updateStatsDisplay(response.data.getWebsiteStats);
       } else {
-        console.warn('ProovdPulse: No stats data received');
-        this.updateStatsDisplay({ activeUsers: 1 });
+        console.warn('ProovdPulse: No stats data received, using defaults');
+        
+        // Create default website stats
+        const defaultStats = {
+          id: this.websiteId,
+          activeUsers: 1,
+          totalClicks: 0,
+          avgScrollPercentage: 0,
+          avgTimeOnPage: 0,
+          updatedAt: new Date().toISOString()
+        };
+        
+        // Update display with default stats
+        this.updateStatsDisplay(defaultStats);
       }
     } catch (error) {
-      console.error('ProovdPulse: Failed to fetch stats:', error);
+      console.error('ProovdPulse: Error fetching website stats:', error);
+      // Show default stats in case of error
       this.updateStatsDisplay({ activeUsers: 1 });
     }
   }
@@ -243,12 +257,17 @@ export class ProovdPulse {
    */
   private async reportActivity(metrics: any): Promise<void> {
     if (!this.clientId || !this.websiteId) {
-      console.error('ProovdPulse: Cannot report activity - missing clientId or websiteId');
+      console.error('ProovdPulse: Cannot report activity - missing clientId or websiteId', {
+        clientId: this.clientId,
+        websiteId: this.websiteId
+      });
       return;
     }
 
     try {
       console.log('ProovdPulse: Reporting activity with metrics:', metrics);
+      console.log('ProovdPulse: Using websiteId:', this.websiteId);
+      console.log('ProovdPulse: Using clientId:', this.clientId);
       
       // Use any type to bypass TypeScript errors for now
       const response: any = await API.graphql({
@@ -260,22 +279,29 @@ export class ProovdPulse {
         }
       });
       
-      console.log('ProovdPulse: Activity report response:', response);
+      console.log('ProovdPulse: Activity report full response:', JSON.stringify(response));
       
       if (response.errors) {
-        console.error('ProovdPulse: Error reporting activity:', response.errors);
+        console.error('ProovdPulse: GraphQL errors reporting activity:', response.errors);
         return;
       }
       
       if (response.data?.updateUserActivity) {
         console.log('ProovdPulse: Activity reported successfully');
+        console.log('ProovdPulse: Updated stats:', response.data.updateUserActivity);
         
         // Immediately update display with the returned data
-        // This is faster than calling fetchWebsiteStats again
         this.updateStatsDisplay(response.data.updateUserActivity);
+      } else {
+        console.error('ProovdPulse: Null response from updateUserActivity', response);
+        // Fetch stats as a fallback
+        this.fetchWebsiteStats();
       }
     } catch (error) {
       console.error('ProovdPulse: Failed to report activity:', error);
+      
+      // Try to fetch stats directly as a fallback
+      setTimeout(() => this.fetchWebsiteStats(), 2000);
     }
   }
   

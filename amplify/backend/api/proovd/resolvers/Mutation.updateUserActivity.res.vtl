@@ -28,12 +28,11 @@
     "totalClicks": $ctx.args.metrics.clickCount,
     "avgScrollPercentage": $ctx.args.metrics.scrollPercentage,
     "avgTimeOnPage": $ctx.args.metrics.timeOnPage,
-    "updatedAt": $timestamp
+    "updatedAt": $timestamp,
+    "__typename": "WebsiteStats"
   })
   
   ## Create the new stats record
-  $util.qr($ctx.stash.put("statsData", $statsData))
-  
   #set($createStatsRequest = {
     "operation": "PutItem",
     "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
@@ -43,24 +42,21 @@
     "attributeValues": $util.dynamodb.toMapValuesJson($statsData)
   })
   
-  ## Execute the request
-  #set($result = $util.dynamodb.invokeRequest($createStatsRequest))
-  
-  ## Handle errors
-  #if($result.sdkHttpResponse.statusCode != 200)
-    $util.error("Failed to create WebsiteStats record: $result.statusMessage")
+  ## Execute the request with error handling
+  #set($result = {})
+  #try
+    #set($result = $util.dynamodb.invokeRequest($createStatsRequest))
+    
+    ## Return the created data
+    $util.toJson($statsData)
+  #catch($e)
+    $util.error("Failed to create WebsiteStats: $e.message")
   #end
-  
-  ## Return the created data
-  $util.toJson($statsData)
 #else
   ## Update existing stats with the new activity data
   ## Calculate new averages and totals
   #set($currentUsers = $existingStats.activeUsers)
   #if(!$currentUsers) #set($currentUsers = 0) #end
-  
-  ## Determine if this is a new user or existing user
-  #set($isNewUser = true)
   
   ## Simple increment for demo - in production would need more sophisticated tracking
   #set($newActiveUsers = $currentUsers + 1)
@@ -80,17 +76,6 @@
   #set($newTimeAvg = ($currentTimeAvg + $ctx.args.metrics.timeOnPage) / 2)
   
   ## Create update expression for WebsiteStats
-  #set($updateExpression = "SET activeUsers = :activeUsers, totalClicks = :totalClicks, avgScrollPercentage = :scrollAvg, avgTimeOnPage = :timeAvg, updatedAt = :updatedAt")
-  
-  #set($expressionValues = {
-    ":activeUsers": $util.dynamodb.toDynamoDBJson($newActiveUsers),
-    ":totalClicks": $util.dynamodb.toDynamoDBJson($newTotalClicks),
-    ":scrollAvg": $util.dynamodb.toDynamoDBJson($newScrollAvg),
-    ":timeAvg": $util.dynamodb.toDynamoDBJson($newTimeAvg),
-    ":updatedAt": $util.dynamodb.toDynamoDBJson($timestamp)
-  })
-  
-  ## Update the stats
   #set($updateStatsRequest = {
     "operation": "UpdateItem",
     "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
@@ -98,28 +83,39 @@
       "id": $util.dynamodb.toDynamoDBJson($websiteId)
     },
     "update": {
-      "expression": $updateExpression,
-      "expressionValues": $expressionValues
+      "expression": "SET activeUsers = :activeUsers, totalClicks = :totalClicks, avgScrollPercentage = :scrollAvg, avgTimeOnPage = :timeAvg, updatedAt = :updatedAt, #typename = :typename",
+      "expressionNames": {
+        "#typename": "__typename"
+      },
+      "expressionValues": {
+        ":activeUsers": $util.dynamodb.toDynamoDBJson($newActiveUsers),
+        ":totalClicks": $util.dynamodb.toDynamoDBJson($newTotalClicks),
+        ":scrollAvg": $util.dynamodb.toDynamoDBJson($newScrollAvg),
+        ":timeAvg": $util.dynamodb.toDynamoDBJson($newTimeAvg),
+        ":updatedAt": $util.dynamodb.toDynamoDBJson($timestamp),
+        ":typename": $util.dynamodb.toDynamoDBJson("WebsiteStats")
+      }
     }
   })
   
-  ## Execute the request
-  #set($result = $util.dynamodb.invokeRequest($updateStatsRequest))
-  
-  ## Handle errors
-  #if($result.sdkHttpResponse.statusCode != 200)
-    $util.error("Failed to update WebsiteStats: $result.statusMessage")
+  ## Execute the request with error handling
+  #set($result = {})
+  #try
+    #set($result = $util.dynamodb.invokeRequest($updateStatsRequest))
+    
+    ## Return updated stats
+    #set($updatedStats = {
+      "id": $websiteId,
+      "activeUsers": $newActiveUsers,
+      "totalClicks": $newTotalClicks,
+      "avgScrollPercentage": $newScrollAvg,
+      "avgTimeOnPage": $newTimeAvg,
+      "updatedAt": $timestamp,
+      "__typename": "WebsiteStats"
+    })
+    
+    $util.toJson($updatedStats)
+  #catch($e)
+    $util.error("Failed to update WebsiteStats: $e.message")
   #end
-  
-  ## Return updated stats
-  #set($updatedStats = {
-    "id": $websiteId,
-    "activeUsers": $newActiveUsers,
-    "totalClicks": $newTotalClicks,
-    "avgScrollPercentage": $newScrollAvg,
-    "avgTimeOnPage": $newTimeAvg,
-    "updatedAt": $timestamp
-  })
-  
-  $util.toJson($updatedStats)
 #end 

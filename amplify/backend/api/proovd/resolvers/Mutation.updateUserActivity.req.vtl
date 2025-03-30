@@ -1,9 +1,11 @@
 #set($uuid = $util.autoId())
 #set($timestamp = $util.time.nowISO8601())
 
-## First save the user session
-#set($userSessionPutRequest = {
+## Save user session directly with a standard PutItem operation
+{
+  "version": "2018-05-29",
   "operation": "PutItem",
+  "tableName": "UserSession-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
   "key": {
     "id": $util.dynamodb.toDynamoDBJson($uuid)
   },
@@ -12,28 +14,10 @@
     "websiteId": $util.dynamodb.toDynamoDBJson($ctx.args.websiteId),
     "metrics": $util.dynamodb.toDynamoDBJson($ctx.args.metrics),
     "isActive": $util.dynamodb.toDynamoDBJson(true),
-    "lastActive": $util.dynamodb.toDynamoDBJson($timestamp)
-  }
-})
-
-## Handle updating WebsiteStats - check if it exists first
-#set($getWebsiteStatsRequest = {
-  "operation": "GetItem",
-  "key": {
-    "id": $util.dynamodb.toDynamoDBJson($ctx.args.websiteId)
+    "lastActive": $util.dynamodb.toDynamoDBJson($timestamp),
+    "__typename": $util.dynamodb.toDynamoDBJson("UserSession")
   },
-  "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}"
-})
-
-## Store requests for a transaction
-#set($transaction = [])
-$util.qr($transaction.add($userSessionPutRequest))
-
-{
-  "version": "2018-05-29",
-  "operation": "TransactWriteItems",
-  "transactItems": $util.toJson($transaction),
-  
+  ## Save the website ID for the response template to use
   "postQuery": {
     "operation": "GetItem",
     "tableName": "WebsiteStats-${env.API_PROOVD_GRAPHQLAPIIDOUTPUT}-${env.ENV}",
