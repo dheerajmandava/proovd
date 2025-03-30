@@ -78,7 +78,7 @@ class ProovdPulse {
     this.reconnectInterval = 3000;
     this.messageQueue = [];
     this.pingInterval = null;
-    this.debug = config.debug || false;
+    this.debug = true;
     
     // Log init
     this.log('Initializing ProovdPulse with config:', config);
