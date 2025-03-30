@@ -430,4 +430,85 @@ style.textContent = `
 document.head.appendChild(style);
 
 // Export for module usage
-export default Proovd; 
+export default Proovd;
+
+/**
+ * ProovdPulse Widget Loader
+ * Dynamically loads and initializes the ProovdPulse tracking widget
+ */
+
+interface ProovdPulseConfig {
+  websiteId: string;
+  token?: string;
+  socketUrl?: string;
+  widgetPosition?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+  widgetColors?: {
+    background?: string;
+    text?: string;
+    pulse?: string;
+  };
+  customText?: {
+    activeUserLabel?: string;
+    pulseLabel?: string;
+  };
+  hideWidgetOnMobile?: boolean;
+}
+
+// Function to load the ProovdPulse script
+function loadProovdPulse(config: ProovdPulseConfig): void {
+  // Skip if already loaded
+  if (window.ProovdPulse) {
+    console.log('ProovdPulse already loaded');
+    return;
+  }
+
+  // Check if we have required parameters
+  if (!config.websiteId) {
+    console.error('ProovdPulse: websiteId is required');
+    return;
+  }
+
+  try {
+    // Create script element
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.async = true;
+    
+    // Set script attributes
+    const scriptSrc = `https://app.proovd.in/api/websites/${config.websiteId}/pulse-widget.js`;
+    script.src = scriptSrc;
+    
+    // Initialize widget when script is loaded
+    script.onload = () => {
+      if (window.ProovdPulse) {
+        // Initialize the widget with configuration
+        const pulse = new window.ProovdPulse(config);
+        pulse.init().catch((err: Error) => {
+          console.error('Failed to initialize ProovdPulse:', err);
+        });
+      } else {
+        console.error('ProovdPulse failed to load');
+      }
+    };
+    
+    // Add script to head
+    document.head.appendChild(script);
+    
+    console.log('ProovdPulse script added to page');
+  } catch (error) {
+    console.error('Error loading ProovdPulse:', error);
+  }
+}
+
+// Add ProovdPulse to the window object
+declare global {
+  interface Window {
+    ProovdPulse: any;
+    loadProovdPulse: typeof loadProovdPulse;
+  }
+}
+
+// Expose the load function globally
+window.loadProovdPulse = loadProovdPulse;
+
+export { loadProovdPulse }; 

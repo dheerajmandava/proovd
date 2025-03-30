@@ -13,6 +13,7 @@ import { activeUsersTracker } from '@/app/lib/active-users';
 import crypto from 'crypto';
 import Website from '@/app/lib/models/website';
 import { parse } from 'url';
+import { WebsiteStats } from '@/app/lib/models/website-stats';
 
 // Validate request schema - Make it more flexible to match what the client sends
 const pulseRequestSchema = z.object({
@@ -69,127 +70,76 @@ function getOrCreateSessionId(clientId?: string): string {
 
 /**
  * GET /api/websites/[id]/pulse
- * Get engagement data for a website
+ * Returns pulse statistics for a website
  */
 export async function GET(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  console.log('Received GET request for Pulse API with ID:', params.id);
-  
   try {
-    const { searchParams } = new URL(req.url);
-    const origin = searchParams.get('origin') || '*';
+    await connectToDatabase();
     
-    // Log the environment variables 
-    console.log('AppSync Configuration Check:', {
-      endpointSet: !!process.env.NEXT_PUBLIC_APPSYNC_ENDPOINT,
-      apiKeySet: !!process.env.NEXT_PUBLIC_APPSYNC_API_KEY,
-      regionSet: !!process.env.NEXT_PUBLIC_AWS_REGION
+    // Get session
+    const session = await getServerSession(authOptions);
+    
+    // Verify user is authenticated
+    if (!session || !session.user) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+    
+    // Get website ID from params
+    const websiteId = params.id;
+    
+    // Verify the website exists and belongs to the user
+    const website = await Website.findOne({
+      _id: websiteId,
+      userId: session.user.id
     });
-    
-    // Connect to database
-    console.log('Connecting to database...');
-    const { db } = await connectToDatabase();
-    
-    // Get the website data
-    console.log('Finding website with ID:', params.id);
-    const website = await Website.findById(params.id);
     
     if (!website) {
-      console.error('Website not found with ID:', params.id);
-      return NextResponse.json({ error: 'Website not found' }, { 
-        status: 404,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
+      return NextResponse.json(
+        { success: false, error: 'Website not found' },
+        { status: 404 }
+      );
+    }
+    
+    // Fetch website stats from MongoDB
+    const websiteStats = await WebsiteStats.findOne({ websiteId });
+    
+    // If no stats found, return default stats
+    if (!websiteStats) {
+      const defaultStats = {
+        id: websiteId,
+        websiteId,
+        activeUsers: 0,
+        totalClicks: 0,
+        avgScrollPercentage: 0,
+        avgTimeOnPage: 0,
+        usersByCountry: '{}',
+        usersByCity: '{}',
+        updatedAt: new Date()
+      };
+      
+      return NextResponse.json({
+        success: true,
+        data: defaultStats
       });
     }
     
-    console.log('Website found:', {
-      id: website._id.toString(),
-      domain: website.domain,
-      pulseEnabled: website.settings?.pulse?.enabled
+    // Return the website stats
+    return NextResponse.json({
+      success: true,
+      data: websiteStats
     });
-    
-    // Check if ProovdPulse is enabled for this website
-    if (!website.settings?.pulse?.enabled) {
-      console.error('ProovdPulse not enabled for website:', params.id);
-      return NextResponse.json({ error: 'ProovdPulse not enabled for this website' }, { 
-        status: 403,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
-      });
-    }
-    
-    // Get AppSync configuration
-    const appsyncEndpoint = process.env.NEXT_PUBLIC_APPSYNC_ENDPOINT;
-    const appsyncApiKey = process.env.NEXT_PUBLIC_APPSYNC_API_KEY;
-    const awsRegion = process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1';
-    
-    // Validate AppSync configuration
-    if (!appsyncEndpoint || !appsyncApiKey) {
-      console.error('Missing AppSync configuration:', {
-        endpointSet: !!appsyncEndpoint,
-        apiKeySet: !!appsyncApiKey
-      });
-      return NextResponse.json({ error: 'Server configuration error' }, { 
-        status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
-      });
-    }
-    
-    // Return the widget script with the website configuration
-    const websiteConfig = {
-      id: website._id.toString(),
-      settings: website.settings.pulse,
-      appsyncEndpoint,
-      appsyncApiKey,
-      region: awsRegion
-    };
-    
-    console.log('Returning widget configuration with AppSync details');
-    
-    return NextResponse.json(
-      { 
-        websiteConfig,
-        status: 'success' 
-      },
-      {
-        status: 200,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Content-Type': 'application/json',
-        },
-      }
-    );
   } catch (error) {
-    console.error('Error in ProovdPulse API:', error);
-    
-    const { searchParams } = new URL(req.url);
-    const origin = searchParams.get('origin') || '*';
+    console.error('Error fetching pulse data:', error);
     
     return NextResponse.json(
-      { error: 'Internal server error', message: error.message },
-      {
-        status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
-      }
+      { success: false, error: 'Failed to fetch pulse data' },
+      { status: 500 }
     );
   }
 }
