@@ -2,6 +2,7 @@
   "name": "proovd",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -17,7 +18,9 @@
     "db:start": "docker-compose up -d",
     "db:stop": "docker-compose down",
     "db:logs": "docker-compose logs -f",
-    "db:test-transactions": "chmod +x ./scripts/test-transactions.js && node ./scripts/test-transactions.js"
+    "db:test-transactions": "chmod +x ./scripts/test-transactions.js && node ./scripts/test-transactions.js",
+    "build:widget": "rollup -c",
+    "dev:widget": "rollup -c -w"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.8.0",
@@ -63,6 +66,11 @@
     "@aws-amplify/backend-cli": "^1.5.0",
     "@eslint/eslintrc": "^3",
     "@prisma/client": "^6.5.0",
+    "@rollup/plugin-commonjs": "^28.0.3",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-replace": "^6.0.2",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.1.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/node-fetch": "^2.6.12",
@@ -80,6 +88,7 @@
     "node-loader": "^2.1.0",
     "postcss": "^8.5.3",
     "prisma": "^6.5.0",
+    "rollup": "^4.38.0",
     "tailwindcss": "^4.0.14",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
