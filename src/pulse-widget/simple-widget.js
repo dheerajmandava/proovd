@@ -20,6 +20,15 @@ class PulseWidget {
     this.reconnectTimeout = null;
     this.reconnectAttempts = 0;
     
+    // Activity tracking
+    this.activityInterval = null;
+    this.activityMetrics = {
+      clickCount: 0,
+      scrollPercentage: 0,
+      timeOnPage: 0
+    };
+    this.pageLoadTime = Date.now();
+    
     this.options = {
       position: options.position || 'bottom-right',
       theme: options.theme || 'auto',
@@ -39,6 +48,9 @@ class PulseWidget {
     return new Promise((resolve, reject) => {
       console.log('🟢 Initializing PulseWidget');
       this.initUI();
+      
+      // Start tracking user activity
+      this.startActivityTracking();
       
       // Connect to real-time socket
       this.connectSocket()
@@ -64,6 +76,50 @@ class PulseWidget {
   }
   
   /**
+   * Start tracking user activity
+   */
+  startActivityTracking() {
+    console.log('🟢 Starting activity tracking');
+    
+    // Track clicks
+    document.addEventListener('click', () => {
+      this.activityMetrics.clickCount++;
+      console.log('🟢 Click tracked, total:', this.activityMetrics.clickCount);
+    });
+    
+    // Track scrolling
+    let maxScroll = 0;
+    document.addEventListener('scroll', () => {
+      const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+      if (scrollHeight > 0) {
+        const scrollPercent = Math.round((window.scrollY / scrollHeight) * 100);
+        if (scrollPercent > maxScroll) {
+          maxScroll = scrollPercent;
+          this.activityMetrics.scrollPercentage = maxScroll;
+          console.log('🟢 Max scroll updated:', this.activityMetrics.scrollPercentage + '%');
+        }
+      }
+    });
+    
+    // Send activity data periodically
+    this.activityInterval = setInterval(() => {
+      // Update time on page
+      this.activityMetrics.timeOnPage = Math.round((Date.now() - this.pageLoadTime) / 1000);
+      
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        const message = {
+          type: 'activity',
+          websiteId: this.websiteId,
+          metrics: { ...this.activityMetrics }
+        };
+        
+        console.log('🟢 Sending activity metrics:', message);
+        this.sendMessage(message);
+      }
+    }, 10000); // Send activity metrics every 10 seconds
+  }
+  
+  /**
    * Connect to WebSocket server
    */
   connectSocket() {
@@ -78,10 +134,24 @@ class PulseWidget {
           console.log('✅ Socket connection opened');
           this.reconnectAttempts = 0;
           
+          // Join the website's room
+          this.sendMessage({
+            type: 'join',
+            websiteId: this.websiteId,
+            clientId: this.getClientId()
+          });
+          
           // Request initial stats
           this.sendMessage({
             type: 'stats',
             websiteId: this.websiteId
+          });
+          
+          // Send initial activity
+          this.sendMessage({
+            type: 'activity',
+            websiteId: this.websiteId,
+            metrics: { ...this.activityMetrics }
           });
           
           // Set up regular stats polling
@@ -130,6 +200,40 @@ class PulseWidget {
         console.error('❌ Error connecting to socket:', error);
         reject(error);
       }
+    });
+  }
+  
+  /**
+   * Get or generate a unique client ID
+   */
+  getClientId() {
+    const storageKey = 'proovd_pulse_client_id';
+    let clientId = localStorage.getItem(storageKey);
+    
+    if (!clientId) {
+      clientId = this.generateUUID();
+      try {
+        localStorage.setItem(storageKey, clientId);
+      } catch (e) {
+        console.error('❌ Failed to store client ID:', e);
+      }
+    }
+    
+    return clientId;
+  }
+  
+  /**
+   * Generate a UUID v4
+   */
+  generateUUID() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
     });
   }
   
@@ -386,10 +490,28 @@ class PulseWidget {
   destroy() {
     console.log('🟢 Destroying PulseWidget');
     
+    // Send leave message if connected
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.sendMessage({
+        type: 'leave', 
+        websiteId: this.websiteId,
+        clientId: this.getClientId()
+      });
+    }
+    
+    // Remove event listeners
+    document.removeEventListener('click', this.handleClick);
+    document.removeEventListener('scroll', this.handleScroll);
+    
     // Clear intervals
     if (this.pulseInterval) {
       clearInterval(this.pulseInterval);
       this.pulseInterval = null;
+    }
+    
+    if (this.activityInterval) {
+      clearInterval(this.activityInterval);
+      this.activityInterval = null;
     }
     
     if (this.reconnectTimeout) {
