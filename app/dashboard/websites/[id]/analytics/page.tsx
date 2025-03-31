@@ -69,39 +69,72 @@ export default function AnalyticsDashboard() {
         
         // Fetch website data
         const websiteResponse = await fetch(`/api/websites/${id}`);
+        let websiteResponseData;
         
-        if (!websiteResponse.ok) {
-          const errorData = await websiteResponse.json();
-          throw new Error(errorData.error || `Error fetching website: ${websiteResponse.status}`);
+        try {
+          websiteResponseData = await websiteResponse.json();
+        } catch (parseError) {
+          console.error('Error parsing website response:', parseError);
+          throw new Error(`Failed to parse website API response: ${websiteResponse.status}`);
         }
         
-        const websiteResult = await websiteResponse.json();
+        if (!websiteResponse.ok) {
+          // We've already parsed the response, so we can access the error message
+          throw new Error(websiteResponseData.error || `Error fetching website: ${websiteResponse.status}`);
+        }
         
-        if (websiteResult) {
-          setWebsiteData(websiteResult);
+        // Website API returns data directly, not wrapped in success/data properties
+        if (websiteResponseData && websiteResponseData._id) {
+          setWebsiteData({
+            id: websiteResponseData._id,
+            name: websiteResponseData.name,
+            domain: websiteResponseData.domain,
+            url: websiteResponseData.domain // Use domain as URL if not provided
+          });
         } else {
-          throw new Error(websiteResult.error || 'Failed to fetch website data');
+          throw new Error('Invalid website data format received');
         }
         
         // Fetch analytics data
         const analyticsResponse = await fetch(`/api/websites/${id}/analytics?timeRange=${timeRange}&groupBy=day`);
-        console.log('analyticsResponse',analyticsResponse);
-        if (!analyticsResponse.ok) {
-          console.error(`Analytics fetch error: ${analyticsResponse.status}`);
-          throw new Error(`Failed to fetch analytics data: ${analyticsResponse.status}`);
+        let analyticsResult;
+        
+        try {
+          analyticsResult = await analyticsResponse.json();
+        } catch (parseError) {
+          console.error('Error parsing analytics response:', parseError);
+          throw new Error('Invalid analytics data format received from server');
         }
         
-        const analyticsResult = await analyticsResponse.json();
+        if (!analyticsResponse.ok) {
+          // We've already parsed the response, so we can access the error message
+          throw new Error(analyticsResult.error || `Failed to fetch analytics data: ${analyticsResponse.status}`);
+        }
         
         if (analyticsResult.success) {
-          // Set summary data
-          setAnalyticsSummary(analyticsResult.data.summary);
-          
-          // Set time series data
-          setTimeSeriesData(analyticsResult.data.timeSeriesData);
-          
-          // Set top notifications
-          setTopNotifications(analyticsResult.data.topNotifications || []);
+          // Ensure we have the expected data structure
+          if (analyticsResult.data && typeof analyticsResult.data === 'object') {
+            // Set summary data
+            setAnalyticsSummary(analyticsResult.data.summary || {
+              totalImpressions: 0,
+              totalClicks: 0,
+              conversionRate: 0,
+              totalNotifications: 0
+            });
+            
+            // Set time series data
+            setTimeSeriesData(Array.isArray(analyticsResult.data.timeSeriesData) 
+              ? analyticsResult.data.timeSeriesData 
+              : []);
+            
+            // Set top notifications
+            setTopNotifications(Array.isArray(analyticsResult.data.topNotifications) 
+              ? analyticsResult.data.topNotifications 
+              : []);
+          } else {
+            console.error('Invalid data structure in analytics response:', analyticsResult);
+            throw new Error('Invalid data structure in analytics response');
+          }
         } else {
           throw new Error(analyticsResult.error || 'Failed to fetch analytics data');
         }
@@ -120,7 +153,7 @@ export default function AnalyticsDashboard() {
   
   // Initialize and update chart
   useEffect(() => {
-    if (!chartRef.current || !timeSeriesData.length) return;
+    if (!chartRef.current) return;
     
     // Destroy existing chart if it exists
     if (chartInstance.current) {
@@ -129,6 +162,16 @@ export default function AnalyticsDashboard() {
     
     const ctx = chartRef.current.getContext('2d');
     if (!ctx) return;
+    
+    // Check if we have data to display
+    if (!timeSeriesData || timeSeriesData.length === 0) {
+      // Draw a fallback message on the canvas instead of a chart
+      ctx.font = '16px Arial';
+      ctx.fillStyle = '#666';
+      ctx.textAlign = 'center';
+      ctx.fillText('No data available for the selected time period', chartRef.current.width / 2, chartRef.current.height / 2);
+      return;
+    }
     
     // Prepare data for the chart
     const labels = timeSeriesData.map(item => item.date);
@@ -207,8 +250,10 @@ export default function AnalyticsDashboard() {
   if (error || !websiteData) {
     return (
       <div className="flex h-[600px] w-full flex-col items-center justify-center">
-        <h2 className="text-xl font-semibold">Website not found</h2>
-        <p className="mt-2 text-gray-500">{error || 'The requested website could not be found.'}</p>
+        <h2 className="text-xl font-semibold">Error Loading Data</h2>
+        <p className="mt-2 text-center text-gray-500 max-w-md">
+          {error || 'The requested website could not be found.'}
+        </p>
         <Link href="/dashboard" className="mt-4">
           <Button>Back to Dashboard</Button>
         </Link>
@@ -330,7 +375,7 @@ export default function AnalyticsDashboard() {
           </Button>
         </CardHeader>
         <CardContent>
-          {topNotifications.length > 0 ? (
+          {topNotifications && topNotifications.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -343,7 +388,7 @@ export default function AnalyticsDashboard() {
                 </thead>
                 <tbody>
                   {topNotifications.map((notification, index) => (
-                    <tr key={index} className="border-t">
+                    <tr key={notification.id || index} className="border-t">
                       <td className="py-3 text-left font-medium">{notification.type}</td>
                       <td className="py-3 text-right">{notification.views}</td>
                       <td className="py-3 text-right">{notification.clicks}</td>

@@ -37,6 +37,11 @@ interface WebsiteDetailsPageProps {
       initialDelay: number;
       loop: boolean;
       customStyles: string;
+      pulse?: {
+        position: string;
+        theme: string;
+        showActiveUsers: boolean;
+      };
     };
     allowedDomains?: string[];
     analytics?: {
@@ -53,6 +58,26 @@ export default function WebsiteDetailsPage({ website }: WebsiteDetailsPageProps)
   const searchParams = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
   const [activeTab, setActiveTab] = useState(initialTab);
+  
+  // Helper functions for formatting settings
+  const getPositionLabel = (position: string): string => {
+    switch (position) {
+      case 'top-left': return 'Top Left';
+      case 'top-right': return 'Top Right';
+      case 'bottom-left': return 'Bottom Left';
+      case 'bottom-right': return 'Bottom Right';
+      default: return 'Bottom Right';
+    }
+  };
+  
+  const getThemeLabel = (theme: string): string => {
+    switch (theme) {
+      case 'light': return 'Light';
+      case 'dark': return 'Dark';
+      case 'auto': return 'Auto (System)';
+      default: return 'Auto (System)';
+    }
+  };
   
   // Update URL when tab changes
   const handleTabChange = (tab: string) => {
@@ -118,6 +143,13 @@ export default function WebsiteDetailsPage({ website }: WebsiteDetailsPageProps)
         </button>
         <button 
           role="tab"
+          className={`tab ${activeTab === 'proovdpulse' ? 'tab-active' : ''}`}
+          onClick={() => handleTabChange('proovdpulse')}
+        >
+          ProovdPulse
+        </button>
+        <button 
+          role="tab"
           className={`tab ${activeTab === 'settings' ? 'tab-active' : ''}`}
           onClick={() => handleTabChange('settings')}
         >
@@ -130,6 +162,71 @@ export default function WebsiteDetailsPage({ website }: WebsiteDetailsPageProps)
       {/* Tab Content */}
       {activeTab === 'overview' && <OverviewTab websiteId={websiteId} />}
       {activeTab === 'notifications' && <NotificationsTab websiteId={websiteId} />}
+      {activeTab === 'proovdpulse' && (
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="card bg-base-100 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title">
+                <div className="flex items-center">
+                  <div className="mr-2 h-3 w-3 rounded-full bg-green-500 animate-pulse"></div>
+                  Real-Time Tracking
+                </div>
+              </h2>
+              <div className="flex flex-col">
+                <div className="alert alert-success mt-2 text-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 stroke-current" fill="none" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>ProovdPulse tracking is ready</span>
+                </div>
+                <p className="mt-4 text-sm text-gray-600">
+                  Add the tracking widget to your website by copying the script tag below and adding it to your site's HTML.
+                </p>
+                <div className="mt-4 bg-base-200 rounded-box p-3 text-sm font-mono overflow-x-auto">
+                  {`<script src="${typeof window !== 'undefined' ? window.location.origin : ''}/api/cdn/p/${websiteId}"></script>`}
+                </div>
+              </div>
+              <div className="card-actions justify-end mt-4">
+                <Link href={`/dashboard/websites/${websiteId}/pulse`} className="btn btn-primary btn-sm">
+                  View Live Dashboard
+                </Link>
+              </div>
+            </div>
+          </div>
+          
+          <div className="card bg-base-100 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title">Widget Settings</h2>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Position:</span>
+                  <span className="badge badge-primary">{getPositionLabel(website.settings?.pulse?.position || 'bottom-right')}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Theme:</span>
+                  <span className="badge">{getThemeLabel(website.settings?.pulse?.theme || 'auto')}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Active Users Display:</span>
+                  <span className={`badge ${website.settings?.pulse?.showActiveUsers !== false ? 'badge-success' : 'badge-outline'}`}>
+                    {website.settings?.pulse?.showActiveUsers !== false ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-sm text-gray-600">
+                  The ProovdPulse widget uses secure WebSockets to transmit real-time data about your website visitors.
+                </p>
+              </div>
+              <div className="card-actions justify-end mt-4">
+                <Link href={`/dashboard/websites/${websiteId}/pulse`} className="btn btn-outline btn-sm">
+                  Configure Widget
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {activeTab === 'settings' && <SettingsTab websiteId={websiteId} />}
     </div>
   );

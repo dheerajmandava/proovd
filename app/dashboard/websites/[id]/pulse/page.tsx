@@ -35,16 +35,43 @@ interface WebsiteStats {
 }
 
 // Add a new component for the live ProovdPulse widget
-function LiveProovdPulseWidget({ websiteId, position, theme }: { 
-  websiteId: string;
-  position: string;
-  theme: string;
+function LiveProovdPulseWidget({ 
+  websiteId, 
+  position = 'bottom-right', 
+  theme = 'light' 
+}: { 
+  websiteId: string, 
+  position?: string, 
+  theme?: string 
 }) {
   const widgetRef = useRef<HTMLDivElement>(null);
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
+  const [activeUsersCount, setActiveUsersCount] = useState<number | null>(null);
+  
+  // Get active users count from API
+  useEffect(() => {
+    async function getActiveUsers() {
+      try {
+        const response = await fetch(`/api/websites/${websiteId}/pulse`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setActiveUsersCount(data.data.activeUsers || 0);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching active users:', error);
+      }
+    }
+    
+    getActiveUsers();
+    const interval = setInterval(getActiveUsers, 10000);
+    
+    return () => clearInterval(interval);
+  }, [websiteId]);
+  
   useEffect(() => {
     async function getAuthToken() {
       try {
@@ -52,6 +79,7 @@ function LiveProovdPulseWidget({ websiteId, position, theme }: {
         if (!response.ok) {
           throw new Error('Failed to get authentication token');
         }
+        
         const data = await response.json();
         setToken(data.token);
       } catch (error: any) {
@@ -61,17 +89,14 @@ function LiveProovdPulseWidget({ websiteId, position, theme }: {
         setLoading(false);
       }
     }
-
+    
     getAuthToken();
   }, [websiteId]);
-
+  
   useEffect(() => {
-    // This is where we would initialize the ProovdPulse widget
-    // In a real dashboard, we would load the script from CDN and initialize
-    // For now, we'll just simulate the widget appearance
-
+    // Create widget UI
     if (!widgetRef.current || !token) return;
-
+    
     const widgetContainer = widgetRef.current;
     widgetContainer.innerHTML = ''; // Clear any previous widget
     
@@ -128,7 +153,9 @@ function LiveProovdPulseWidget({ websiteId, position, theme }: {
     
     // Create count element
     const countElement = document.createElement('div');
-    countElement.textContent = '1 active user';
+    countElement.textContent = activeUsersCount !== null && activeUsersCount > 0 
+      ? `${activeUsersCount} active user${activeUsersCount !== 1 ? 's' : ''}` 
+      : 'ProovdPulse';
     
     widgetDiv.appendChild(pulseIndicator);
     widgetDiv.appendChild(countElement);
@@ -141,16 +168,16 @@ function LiveProovdPulseWidget({ websiteId, position, theme }: {
         style.parentNode.removeChild(style);
       }
     };
-  }, [token, position, theme]);
-
+  }, [token, position, theme, activeUsersCount]);
+  
   if (loading) {
     return <div className="h-16 w-32 animate-pulse rounded-md bg-gray-200"></div>;
   }
-
+  
   if (error) {
     return <div className="text-sm text-red-500">{error}</div>;
   }
-
+  
   return (
     <div className="border-rounded mt-4 p-4 border border-dashed border-gray-300">
       <p className="mb-2 text-sm text-gray-500">Live Widget Preview:</p>
@@ -164,18 +191,17 @@ export default function PulseDashboard() {
   const [loading, setLoading] = useState(true);
   const [websiteData, setWebsiteData] = useState<WebsiteData | null>(null);
   const [websiteStats, setWebsiteStats] = useState<WebsiteStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
   
   // Parse country and city data
   const usersByCountry = websiteStats?.usersByCountry ? 
     JSON.parse(websiteStats.usersByCountry) : {};
-  
   const usersByCity = websiteStats?.usersByCity ? 
     JSON.parse(websiteStats.usersByCity) : {};
-  
-  // Fetch website data
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -183,18 +209,31 @@ export default function PulseDashboard() {
 
         // Fetch website data from REST API
         const websiteResponse = await fetch(`/api/websites/${id}`);
+        let websiteResponseData;
         
-        if (!websiteResponse.ok) {
-          const errorData = await websiteResponse.json();
-          throw new Error(errorData.error || `Error fetching website: ${websiteResponse.status}`);
+        try {
+          websiteResponseData = await websiteResponse.json();
+        } catch (parseError) {
+          console.error('Error parsing website response:', parseError);
+          throw new Error(`Failed to parse website API response: ${websiteResponse.status}`);
         }
         
-        const websiteResult = await websiteResponse.json();
+        if (!websiteResponse.ok) {
+          // We've already parsed the response, so we can access the error message
+          throw new Error(websiteResponseData.error || `Error fetching website: ${websiteResponse.status}`);
+        }
         
-        if (websiteResult.success) {
-          setWebsiteData(websiteResult);
+        // Website API returns data directly, not wrapped in success/data properties
+        if (websiteResponseData && websiteResponseData._id) {
+          setWebsiteData({
+            id: websiteResponseData._id,
+            name: websiteResponseData.name,
+            domain: websiteResponseData.domain,
+            url: websiteResponseData.domain, // Use domain as URL if not provided
+            settings: websiteResponseData.settings || {}
+          });
         } else {
-          throw new Error(websiteResult.error || 'Failed to fetch website data');
+          throw new Error('Failed to fetch website data');
         }
         
         // Fetch website stats from REST API
@@ -208,6 +247,7 @@ export default function PulseDashboard() {
           
           if (statsResult.success) {
             setWebsiteStats(statsResult.data);
+            setIsSocketConnected(true);
           } else {
             console.error('Failed to fetch website stats:', statsResult.error);
             // Continue with empty stats
@@ -225,7 +265,7 @@ export default function PulseDashboard() {
     
     fetchData();
     
-    // Setup a polling interval to refresh stats every 30 seconds
+    // Setup a polling interval to refresh stats every 10 seconds
     const intervalId = setInterval(async () => {
       if (!websiteData) return; // Don't poll if we don't have website data
       
@@ -237,12 +277,14 @@ export default function PulseDashboard() {
           
           if (statsResult.success) {
             setWebsiteStats(statsResult.data);
+            setIsSocketConnected(true);
           }
         }
       } catch (error) {
         console.error('Error refreshing stats:', error);
+        setIsSocketConnected(false);
       }
-    }, 30000);
+    }, 10000); // Refresh every 10 seconds
     
     return () => {
       clearInterval(intervalId);
@@ -251,38 +293,27 @@ export default function PulseDashboard() {
   
   // Copy widget code to clipboard
   const copyWidgetCode = () => {
-    const code = `<script src="https://cdn.jsdelivr.net/npm/uuid@9.0.0/dist/umd/uuidv4.min.js"></script>
-<script type="module">
-  import { ProovdPulse } from 'https://cdn.proovd.in/pulse-widget/proovd-pulse.js';
-  
-  // Initialize ProovdPulse
-  document.addEventListener('DOMContentLoaded', async () => {
-    try {
-      // Get auth token from your backend
-      const response = await fetch('${window.location.origin}/api/pulse-auth?websiteId=${id}');
-      const { token } = await response.json();
-      
-      // Initialize with authentication token
-      window.proovdPulse = new ProovdPulse({
-        websiteId: '${id}',
-        serverUrl: 'wss://socket.proovd.in',
-        authToken: token,
-        position: '${websiteData.settings?.pulse?.position || 'bottom-right'}',
-        theme: '${websiteData.settings?.pulse?.theme || 'light'}'
-      });
-      
-      await window.proovdPulse.init();
-    } catch (error) {
-      console.error('Failed to initialize ProovdPulse:', error);
-    }
-  });
-</script>`;
+    // Create a more visible prompt
+    const code = `<script src="${window.location.origin}/api/cdn/p/${id}"></script>`;
     navigator.clipboard.writeText(code);
-    alert('Widget code copied to clipboard');
+    alert('Widget code copied to clipboard! Add this single line to your website to enable ProovdPulse tracking.');
   };
   
   // Save settings
-  const saveSettings = async (settings: any) => {
+  const saveSettings = async (event: React.FormEvent) => {
+    event.preventDefault();
+    
+    const form = event.target as HTMLFormElement;
+    const formData = new FormData(form);
+    
+    const settings = {
+      position: String(formData.get('position') || 'bottom-right'),
+      theme: String(formData.get('theme') || 'auto'),
+      showActiveUsers: formData.get('showActiveUsers') === 'on',
+      showEngagementMetrics: formData.get('showEngagementMetrics') === 'on',
+      showHeatmap: formData.get('showHeatmap') === 'on'
+    };
+    
     try {
       const response = await fetch(`/api/websites/${id}`, {
         method: 'PATCH',
@@ -291,6 +322,7 @@ export default function PulseDashboard() {
         },
         body: JSON.stringify({
           settings: {
+            ...websiteData?.settings,
             pulse: settings
           }
         }),
@@ -298,7 +330,8 @@ export default function PulseDashboard() {
       
       const result = await response.json();
       
-      if (result.success) {
+      if (result.success || result._id) {
+        // Update local state
         setWebsiteData({
           ...websiteData!,
           settings: {
@@ -308,12 +341,15 @@ export default function PulseDashboard() {
         });
         
         setSettingsOpen(false);
+        
+        // Show success message
+        alert('Settings saved successfully!');
       } else {
         throw new Error(result.error || 'Failed to update settings');
       }
     } catch (error) {
       console.error('Error saving settings:', error);
-      alert('Failed to save settings');
+      alert('Failed to save settings. Please try again.');
     }
   };
   
@@ -356,6 +392,28 @@ export default function PulseDashboard() {
         </div>
       </div>
       
+      {isSocketConnected ? (
+        <div className="alert alert-success mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 stroke-current mr-2" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h3 className="font-bold">Connected</h3>
+            <p>Real-time data is being received from your website.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="alert alert-warning mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 stroke-current mr-2" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div>
+            <h3 className="font-bold">Waiting for Data</h3>
+            <p>Add the widget to your website to start receiving real-time data.</p>
+          </div>
+        </div>
+      )}
+      
       {settingsOpen && (
         <Card className="mb-6">
           <CardHeader>
@@ -363,18 +421,7 @@ export default function PulseDashboard() {
             <CardDescription>Customize how the ProovdPulse widget appears on your website</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              
-              saveSettings({
-                position: formData.get('position'),
-                theme: formData.get('theme'),
-                showActiveUsers: formData.get('showActiveUsers') === 'on',
-                showEngagementMetrics: formData.get('showEngagementMetrics') === 'on',
-                showHeatmap: formData.get('showHeatmap') === 'on',
-              });
-            }}>
+            <form onSubmit={saveSettings}>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="font-medium">Widget Position</label>
@@ -421,7 +468,7 @@ export default function PulseDashboard() {
                       type="checkbox" 
                       name="showEngagementMetrics" 
                       className="mr-2 h-4 w-4" 
-                      defaultChecked={websiteData.settings?.pulse?.showEngagementMetrics !== false}
+                      defaultChecked={websiteData.settings?.pulse?.showEngagementMetrics === true}
                     />
                     Show Engagement Metrics
                   </label>
@@ -433,7 +480,7 @@ export default function PulseDashboard() {
                       type="checkbox" 
                       name="showHeatmap" 
                       className="mr-2 h-4 w-4" 
-                      defaultChecked={websiteData.settings?.pulse?.showHeatmap !== false}
+                      defaultChecked={websiteData.settings?.pulse?.showHeatmap === true}
                     />
                     Show Heatmap
                   </label>
@@ -480,7 +527,7 @@ export default function PulseDashboard() {
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
+            <Card key="active-users">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium">Active Users</CardTitle>
               </CardHeader>
@@ -495,7 +542,7 @@ export default function PulseDashboard() {
               </CardContent>
             </Card>
             
-            <Card>
+            <Card key="total-clicks">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium">Total Clicks</CardTitle>
               </CardHeader>
@@ -510,7 +557,7 @@ export default function PulseDashboard() {
               </CardContent>
             </Card>
             
-            <Card>
+            <Card key="scroll-depth">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium">Scroll Depth</CardTitle>
               </CardHeader>
@@ -520,13 +567,17 @@ export default function PulseDashboard() {
                     <span className="text-3xl font-bold">{Math.round(websiteStats?.avgScrollPercentage || 0)}%</span>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full">
-                    <div className="h-2 bg-amber-500 rounded-full" style={{ width: `${websiteStats?.avgScrollPercentage || 0}%` }}></div>
+                    <div 
+                      className="h-2 bg-amber-500 rounded-full" 
+                      style={{ width: `${websiteStats?.avgScrollPercentage || 0}%` }}
+                    ></div>
                   </div>
+                  <span className="text-xs text-gray-500">Average scroll percentage</span>
                 </div>
               </CardContent>
             </Card>
             
-            <Card>
+            <Card key="avg-time">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium">Avg. Time on Page</CardTitle>
               </CardHeader>
@@ -540,8 +591,12 @@ export default function PulseDashboard() {
                     </span>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full">
-                    <div className="h-2 bg-indigo-500 rounded-full" style={{ width: `${Math.min(100, ((websiteStats?.avgTimeOnPage || 0) / 300) * 100)}%` }}></div>
+                    <div 
+                      className="h-2 bg-indigo-500 rounded-full" 
+                      style={{ width: `${Math.min(100, ((websiteStats?.avgTimeOnPage || 0) / 300) * 100)}%` }}
+                    ></div>
                   </div>
+                  <span className="text-xs text-gray-500">Average session duration</span>
                 </div>
               </CardContent>
             </Card>

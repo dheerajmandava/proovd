@@ -29,11 +29,21 @@ const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
         {React.Children.map(children, child => {
           if (!React.isValidElement(child)) return child
           
-          // Add the activeTab and onTabChange props
-          return React.cloneElement(child as React.ReactElement<any>, {
-            activeTab,
-            onTabChange: handleTabChange,
-          })
+          // Check component type by displayName
+          const childDisplayName = (child.type as any)?.displayName;
+          const isTabsComponent = 
+            childDisplayName === 'TabsList' || 
+            childDisplayName === 'TabsTrigger' || 
+            childDisplayName === 'TabsContent';
+            
+          if (isTabsComponent) {
+            return React.cloneElement(child as React.ReactElement<any>, {
+              activeTab,
+              onTabChange: handleTabChange,
+            });
+          }
+          
+          return child;
         })}
       </div>
     )
@@ -43,13 +53,30 @@ Tabs.displayName = 'Tabs'
 
 const TabsList = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
+  React.HTMLAttributes<HTMLDivElement> & { activeTab?: string; onTabChange?: (value: string) => void }
+>(({ className, children, activeTab, onTabChange, ...props }, ref) => (
   <div
     ref={ref}
     className={`inline-flex h-10 items-center justify-center rounded-md bg-gray-100 p-1 text-gray-600 ${className || ''}`}
     {...props}
-  />
+  >
+    {React.Children.map(children, child => {
+      if (!React.isValidElement(child)) return child;
+      
+      // Check component type by displayName
+      const childDisplayName = (child.type as any)?.displayName;
+      
+      // Only pass these props to TabsTrigger components
+      if (childDisplayName === 'TabsTrigger') {
+        return React.cloneElement(child as React.ReactElement<any>, {
+          activeTab,
+          onTabChange,
+        });
+      }
+      
+      return child;
+    })}
+  </div>
 ))
 TabsList.displayName = 'TabsList'
 

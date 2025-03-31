@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { 
-  getWebsiteById, 
+  getWebsiteById
+} from '@/app/lib/services';
+import { 
   getWebsiteMetricsSummary, 
   getWebsiteTimeSeries, 
   getTopNotifications 
-} from '@/app/lib/services';
-import { handleApiError } from '@/app/lib/utils/error';
-import { auth } from '@/auth';
+} from '@/app/lib/services/analytics.service';
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 
@@ -66,48 +66,57 @@ export async function GET(request, { params }) {
       );
     }
 
-    // Fetch analytics data
-    const summary = await getWebsiteMetricsSummary(id, timeRange);
-    const timeSeriesData = await getWebsiteTimeSeries(id, timeRange, groupBy);
-    const topNotifications = await getTopNotifications(id, timeRange, 5);
+    try {
+      // Fetch analytics data
+      // Note: The getWebsiteMetricsSummary function doesn't accept a timeRange parameter
+      const summary = await getWebsiteMetricsSummary(id);
+      const timeSeriesData = await getWebsiteTimeSeries(id, timeRange, groupBy);
+      
+      // Note: The getTopNotifications function doesn't accept a timeRange parameter
+      const topNotifications = await getTopNotifications(id, 5);
 
-    // Process time series data to ensure it's in the right format
-    const formattedTimeSeries = timeSeriesData.map(item => ({
-      date: formatDate(item.date, groupBy),
-      impressions: item.impressions || 0,
-      clicks: item.clicks || 0
-    }));
+      // Process time series data to ensure it's in the right format
+      const formattedTimeSeries = timeSeriesData.map(item => ({
+        date: formatDate(item.date, groupBy),
+        impressions: item.impressions || 0,
+        clicks: item.clicks || 0
+      }));
 
-    // Process top notifications to add conversion rate
-    const formattedTopNotifications = topNotifications.map(notification => ({
-      id: notification._id,
-      type: notification.type,
-      views: notification.impressions || 0,
-      clicks: notification.clicks || 0,
-      conversionRate: notification.impressions > 0 
-        ? notification.clicks / notification.impressions 
-        : 0
-    }));
+      // Process top notifications to add conversion rate
+      const formattedTopNotifications = topNotifications.map(notification => ({
+        id: notification._id || notification.notificationId,
+        type: notification.type || 'Unknown',
+        views: notification.impressions || 0,
+        clicks: notification.clicks || 0,
+        conversionRate: notification.impressions > 0 
+          ? notification.clicks / notification.impressions 
+          : 0
+      }));
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        summary: {
-          totalImpressions: summary.totalImpressions || 0,
-          totalClicks: summary.totalClicks || 0,
-          conversionRate: summary.totalImpressions > 0 
-            ? summary.totalClicks / summary.totalImpressions 
-            : 0,
-          totalNotifications: summary.totalNotifications || 0
-        },
-        timeSeriesData: formattedTimeSeries,
-        topNotifications: formattedTopNotifications
-      }
-    });
+      return NextResponse.json({
+        success: true,
+        data: {
+          summary: {
+            totalImpressions: summary.totalImpressions || 0,
+            totalClicks: summary.totalClicks || 0,
+            conversionRate: parseFloat(summary.conversionRate) || 0,
+            totalNotifications: summary.totalNotifications || 0
+          },
+          timeSeriesData: formattedTimeSeries,
+          topNotifications: formattedTopNotifications
+        }
+      });
+    } catch (serviceError) {
+      console.error('Error in analytics service:', serviceError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to process analytics data: ' + serviceError.message },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error('Error in analytics API:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch analytics data' },
+      { success: false, error: 'Failed to fetch analytics data: ' + error.message },
       { status: 500 }
     );
   }
@@ -115,30 +124,41 @@ export async function GET(request, { params }) {
 
 // Helper function to format date based on grouping
 function formatDate(date, groupBy) {
-  const d = new Date(date);
+  if (!date) return '';
   
-  if (groupBy === 'hour') {
-    return d.toLocaleString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      hour: 'numeric'
-    });
-  } else if (groupBy === 'day') {
-    return d.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric'
-    });
-  } else if (groupBy === 'week') {
-    // Calculate the start of the week
-    const startOfWeek = new Date(d);
-    startOfWeek.setDate(d.getDate() - d.getDay());
-    return `${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-  } else if (groupBy === 'month') {
-    return d.toLocaleDateString('en-US', { 
-      month: 'short', 
-      year: 'numeric'
-    });
+  try {
+    const d = new Date(date);
+    
+    if (isNaN(d.getTime())) {
+      return String(date);
+    }
+    
+    if (groupBy === 'hour') {
+      return d.toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        hour: 'numeric'
+      });
+    } else if (groupBy === 'day') {
+      return d.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric'
+      });
+    } else if (groupBy === 'week') {
+      // Calculate the start of the week
+      const startOfWeek = new Date(d);
+      startOfWeek.setDate(d.getDate() - d.getDay());
+      return `${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    } else if (groupBy === 'month') {
+      return d.toLocaleDateString('en-US', { 
+        month: 'short', 
+        year: 'numeric'
+      });
+    }
+    
+    return d.toISOString();
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return String(date);
   }
-  
-  return d.toISOString();
 } 

@@ -36,7 +36,7 @@ export async function GET(
     }
     
     // Check if ProovdPulse is enabled for this website
-    if (!website.settings?.pulse?.enabled) {
+    if (website.settings?.pulse && website.settings.pulse.enabled === false) {
       return new NextResponse(`console.error('ProovdPulse not enabled for this website');`, { 
         status: 403,
         headers: {
@@ -48,7 +48,7 @@ export async function GET(
       });
     }
     
-    // Get the bundled widget file
+    // Get the bundled widget file from the public directory
     const widgetFilePath = path.join(process.cwd(), 'public', 'pulse-widget.min.js');
     
     let widgetJs;
@@ -56,8 +56,7 @@ export async function GET(
       widgetJs = fs.readFileSync(widgetFilePath, 'utf8');
     } catch (error) {
       console.error('Error reading widget file:', error);
-      // If the file doesn't exist, return an error
-      return new NextResponse(`console.error('ProovdPulse: Widget file not found. Please build the widget first with npm run build:widget');`, {
+      return new NextResponse(`console.error('ProovdPulse: Widget file not found');`, {
         status: 500,
         headers: {
           'Content-Type': 'application/javascript',
@@ -66,6 +65,36 @@ export async function GET(
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         },
       });
+    }
+    
+    // Get website settings for initialization
+    const position = website.settings?.pulse?.position || 'bottom-right';
+    const theme = website.settings?.pulse?.theme || 'light';
+    
+    // Replace WEBSITE_ID_PLACEHOLDER with actual ID and add auto-initialization
+    widgetJs = widgetJs.replace(/WEBSITE_ID_PLACEHOLDER/g, params.id);
+    
+    // Ensure the widget self-initializes with the correct settings
+    const initScript = `
+// Auto-initialize with website settings
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', function() {
+    if (window.ProovdPulse) {
+      new window.ProovdPulse({
+        websiteId: "${params.id}",
+        widgetPosition: "${position}",
+        theme: "${theme}",
+        serverUrl: "wss://socket.proovd.in"
+      }).init().catch(function(err) {
+        console.error("ProovdPulse initialization error:", err);
+      });
+    }
+  });
+}`;
+    
+    // Add the initialization code if not already present
+    if (!widgetJs.includes(`websiteId: "${params.id}"`)) {
+      widgetJs += initScript;
     }
     
     // Return the widget script with proper headers
