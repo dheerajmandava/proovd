@@ -164,6 +164,7 @@ export default function PulseDashboard() {
   const [loading, setLoading] = useState(true);
   const [websiteData, setWebsiteData] = useState<WebsiteData | null>(null);
   const [websiteStats, setWebsiteStats] = useState<WebsiteStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [settingsOpen, setSettingsOpen] = useState(false);
   
@@ -178,30 +179,46 @@ export default function PulseDashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
+        setLoading(true);
+
         // Fetch website data from REST API
         const websiteResponse = await fetch(`/api/websites/${id}`);
+        
+        if (!websiteResponse.ok) {
+          const errorData = await websiteResponse.json();
+          throw new Error(errorData.error || `Error fetching website: ${websiteResponse.status}`);
+        }
+        
         const websiteResult = await websiteResponse.json();
         
         if (websiteResult.success) {
-          setWebsiteData(websiteResult.data);
+          setWebsiteData(websiteResult);
         } else {
           throw new Error(websiteResult.error || 'Failed to fetch website data');
         }
         
         // Fetch website stats from REST API
         const statsResponse = await fetch(`/api/websites/${id}/pulse`);
-        const statsResult = await statsResponse.json();
         
-        if (statsResult.success) {
-          setWebsiteStats(statsResult.data);
+        if (!statsResponse.ok) {
+          console.error(`Stats fetch error: ${statsResponse.status}`);
+          // Don't throw here, just log the error and continue with null stats
         } else {
-          console.error('Failed to fetch website stats:', statsResult.error);
-          // Continue with empty stats
+          const statsResult = await statsResponse.json();
+          
+          if (statsResult.success) {
+            setWebsiteStats(statsResult.data);
+          } else {
+            console.error('Failed to fetch website stats:', statsResult.error);
+            // Continue with empty stats
+          }
         }
         
+        setError(null);
         setLoading(false);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching data:', error);
+        setError(error.message || 'An error occurred while fetching data');
         setLoading(false);
       }
     }
@@ -210,12 +227,17 @@ export default function PulseDashboard() {
     
     // Setup a polling interval to refresh stats every 30 seconds
     const intervalId = setInterval(async () => {
+      if (!websiteData) return; // Don't poll if we don't have website data
+      
       try {
         const statsResponse = await fetch(`/api/websites/${id}/pulse`);
-        const statsResult = await statsResponse.json();
         
-        if (statsResult.success) {
-          setWebsiteStats(statsResult.data);
+        if (statsResponse.ok) {
+          const statsResult = await statsResponse.json();
+          
+          if (statsResult.success) {
+            setWebsiteStats(statsResult.data);
+          }
         }
       } catch (error) {
         console.error('Error refreshing stats:', error);
@@ -303,11 +325,11 @@ export default function PulseDashboard() {
     );
   }
   
-  if (!websiteData) {
+  if (error || !websiteData) {
     return (
       <div className="flex h-[600px] w-full flex-col items-center justify-center">
         <h2 className="text-xl font-semibold">Website not found</h2>
-        <p className="mt-2 text-gray-500">The requested website could not be found.</p>
+        <p className="mt-2 text-gray-500">{error || 'The requested website could not be found.'}</p>
         <Link href="/dashboard" className="mt-4">
           <Button>Back to Dashboard</Button>
         </Link>

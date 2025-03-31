@@ -131,7 +131,7 @@ export default function PulseDashboard() {
                 const websiteResponse = await fetch(`/api/websites/${id}`);
                 const websiteResult = await websiteResponse.json();
                 if (websiteResult.success) {
-                    setWebsiteData(websiteResult.data);
+                    setWebsiteData(websiteResult);
                 }
                 else {
                     throw new Error(websiteResult.error || 'Failed to fetch website data');

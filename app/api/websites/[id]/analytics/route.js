@@ -7,71 +7,138 @@ import {
 } from '@/app/lib/services';
 import { handleApiError } from '@/app/lib/utils/error';
 import { auth } from '@/auth';
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/auth";
 
 /**
  * GET /api/websites/[id]/analytics
  * 
  * Gets analytics data for a specific website
  */
-export async function GET(req, props) {
-  const params = await props.params;
+export async function GET(request, { params }) {
   try {
-    const { id } = params;
-    const searchParams = req.nextUrl.searchParams;
-    const timeRange = searchParams.get('timeRange') || 'week';
-    const groupBy = searchParams.get('groupBy') || 'day';
+    // Parse query parameters
+    const { searchParams } = new URL(request.url);
+    const id = params.id;
+    const timeRange = searchParams.get('timeRange') || 'week'; // Default to week
+    const groupBy = searchParams.get('groupBy') || 'day'; // Default to day
 
     // Validate parameters
-    if (!['day', 'week', 'month', 'year'].includes(timeRange)) {
+    const validTimeRanges = ['day', 'week', 'month', 'year'];
+    const validGroupBy = ['hour', 'day', 'week', 'month'];
+
+    if (!validTimeRanges.includes(timeRange)) {
       return NextResponse.json(
-        { error: 'Invalid time range' },
+        { success: false, error: 'Invalid timeRange parameter' },
         { status: 400 }
       );
     }
 
-    if (!['hour', 'day', 'week', 'month'].includes(groupBy)) {
+    if (!validGroupBy.includes(groupBy)) {
       return NextResponse.json(
-        { error: 'Invalid group by parameter' },
+        { success: false, error: 'Invalid groupBy parameter' },
         { status: 400 }
       );
     }
 
     // Check authentication
-    const session = await auth();
-    if (!session?.user?.id) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
       return NextResponse.json(
-        { error: 'Authentication required' },
+        { success: false, error: 'Not authenticated' },
         { status: 401 }
       );
     }
 
-    // Verify website ownership using service
+    // Get website and check ownership
     const website = await getWebsiteById(id);
-
-    if (!website || website.userId !== session.user.id) {
+    if (!website) {
       return NextResponse.json(
-        { error: 'Website not found' },
+        { success: false, error: 'Website not found' },
         { status: 404 }
       );
     }
 
-    // Get analytics data using services
-    const summary = await getWebsiteMetricsSummary(id);
-    const timeSeries = await getWebsiteTimeSeries(id, timeRange, groupBy);
-    const topNotifications = await getTopNotifications(id, 5);
+    if (website.userId !== session.user.id) {
+      return NextResponse.json(
+        { success: false, error: 'Not authorized to view this website' },
+        { status: 403 }
+      );
+    }
 
-    // Return the analytics data
+    // Fetch analytics data
+    const summary = await getWebsiteMetricsSummary(id, timeRange);
+    const timeSeriesData = await getWebsiteTimeSeries(id, timeRange, groupBy);
+    const topNotifications = await getTopNotifications(id, timeRange, 5);
+
+    // Process time series data to ensure it's in the right format
+    const formattedTimeSeries = timeSeriesData.map(item => ({
+      date: formatDate(item.date, groupBy),
+      impressions: item.impressions || 0,
+      clicks: item.clicks || 0
+    }));
+
+    // Process top notifications to add conversion rate
+    const formattedTopNotifications = topNotifications.map(notification => ({
+      id: notification._id,
+      type: notification.type,
+      views: notification.impressions || 0,
+      clicks: notification.clicks || 0,
+      conversionRate: notification.impressions > 0 
+        ? notification.clicks / notification.impressions 
+        : 0
+    }));
+
     return NextResponse.json({
-      summary,
-      timeSeries,
-      topNotifications
+      success: true,
+      data: {
+        summary: {
+          totalImpressions: summary.totalImpressions || 0,
+          totalClicks: summary.totalClicks || 0,
+          conversionRate: summary.totalImpressions > 0 
+            ? summary.totalClicks / summary.totalImpressions 
+            : 0,
+          totalNotifications: summary.totalNotifications || 0
+        },
+        timeSeriesData: formattedTimeSeries,
+        topNotifications: formattedTopNotifications
+      }
     });
   } catch (error) {
-    console.error('Error fetching analytics:', error);
-    const apiError = handleApiError(error);
+    console.error('Error in analytics API:', error);
     return NextResponse.json(
-      { error: apiError.message },
-      { status: apiError.statusCode }
+      { success: false, error: 'Failed to fetch analytics data' },
+      { status: 500 }
     );
   }
+}
+
+// Helper function to format date based on grouping
+function formatDate(date, groupBy) {
+  const d = new Date(date);
+  
+  if (groupBy === 'hour') {
+    return d.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      hour: 'numeric'
+    });
+  } else if (groupBy === 'day') {
+    return d.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric'
+    });
+  } else if (groupBy === 'week') {
+    // Calculate the start of the week
+    const startOfWeek = new Date(d);
+    startOfWeek.setDate(d.getDate() - d.getDay());
+    return `${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  } else if (groupBy === 'month') {
+    return d.toLocaleDateString('en-US', { 
+      month: 'short', 
+      year: 'numeric'
+    });
+  }
+  
+  return d.toISOString();
 } 

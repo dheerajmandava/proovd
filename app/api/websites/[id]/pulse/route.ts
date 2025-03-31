@@ -13,7 +13,11 @@ import { activeUsersTracker } from '@/app/lib/active-users';
 import crypto from 'crypto';
 import Website from '@/app/lib/models/website';
 import { parse } from 'url';
-import { WebsiteStats } from '@/app/lib/models/website-stats';
+import { getWebsiteById } from '@/app/lib/services';
+import mongoose from 'mongoose';
+
+// Import models
+import WebsiteStats from '@/app/lib/models/website-stats';
 
 // Validate request schema - Make it more flexible to match what the client sends
 const pulseRequestSchema = z.object({
@@ -81,24 +85,47 @@ export async function GET(
     
     // Get session
     const session = await getServerSession(authOptions);
-    
-    // Verify user is authenticated
-    if (!session || !session.user) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
+    const isAuthenticatedRequest = session && session.user;
     
     // Get website ID from params
     const websiteId = params.id;
     
-    // Verify the website exists and belongs to the user
-    const website = await Website.findOne({
-      _id: websiteId,
-      userId: session.user.id
-    });
+    // Get the website - try to find it for the logged-in user first
+    let website = null;
     
+    if (isAuthenticatedRequest) {
+      try {
+        website = await getWebsiteById(websiteId);
+        
+        // If website exists but doesn't belong to user, only allow if it's public
+        if (website && website.userId !== session.user.id) {
+          if (!website.settings?.isPublic) {
+            return NextResponse.json(
+              { success: false, error: 'Website not found' },
+              { status: 404 }
+            );
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching website:', error);
+        // Continue to try unauthenticated access if authenticated access fails
+      }
+    } 
+    
+    // If still no website found and request is unauthenticated or website doesn't belong to user,
+    // try to find a public website
+    if (!website) {
+      const publicWebsite = await Website.findOne({
+        _id: websiteId,
+        'settings.isPublic': true
+      });
+      
+      if (publicWebsite) {
+        website = publicWebsite;
+      }
+    }
+    
+    // If no website found, return a 404
     if (!website) {
       return NextResponse.json(
         { success: false, error: 'Website not found' },
@@ -107,14 +134,18 @@ export async function GET(
     }
     
     // Fetch website stats from MongoDB
-    const websiteStats = await WebsiteStats.findOne({ websiteId });
+    const db = mongoose.connection;
+    const websiteStatsCollection = db.collection('websitestats');
+    const statsDoc = await websiteStatsCollection.findOne({ websiteId });
     
     // If no stats found, return default stats
-    if (!websiteStats) {
+    if (!statsDoc) {
+      const activeUsers = activeUsersTracker.getActiveUsers(websiteId);
+      
       const defaultStats = {
         id: websiteId,
         websiteId,
-        activeUsers: 0,
+        activeUsers,
         totalClicks: 0,
         avgScrollPercentage: 0,
         avgTimeOnPage: 0,
@@ -128,6 +159,12 @@ export async function GET(
         data: defaultStats
       });
     }
+    
+    // Update active users count in the stats
+    const websiteStats = {
+      ...statsDoc,
+      activeUsers: activeUsersTracker.getActiveUsers(websiteId)
+    };
     
     // Return the website stats
     return NextResponse.json({

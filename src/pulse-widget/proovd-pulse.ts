@@ -4,10 +4,10 @@
  * Production-ready version with secure connections and advanced options
  */
 import { PulseSocketClient } from './socket-client';
-import { PulseUI, PulseUIOptions } from './pulse-ui';
 import { v4 as uuidv4 } from 'uuid';
+import { widgetRegistry, WidgetConfig } from './widget-registry';
 
-interface ProovdPulseOptions extends PulseUIOptions {
+interface ProovdPulseOptions {
   websiteId: string;
   serverUrl?: string;
   clientId?: string;
@@ -15,6 +15,11 @@ interface ProovdPulseOptions extends PulseUIOptions {
   debug?: boolean;
   reconnectMaxAttempts?: number;
   reconnectDelay?: number;
+  container?: string | HTMLElement;
+  widgets?: WidgetConfig[];
+  theme?: 'light' | 'dark' | 'auto';
+  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  shadowDOM?: boolean;
 }
 
 interface ActivityMetrics {
@@ -25,7 +30,6 @@ interface ActivityMetrics {
 
 export class ProovdPulse {
   private socketClient: PulseSocketClient;
-  private ui: PulseUI;
   private options: ProovdPulseOptions;
   private metrics: ActivityMetrics = {
     clickCount: 0,
@@ -41,6 +45,9 @@ export class ProovdPulse {
   private isProduction: boolean;
   private reconnectAttempts = 0;
   private maxReconnectAttempts: number;
+  private container: HTMLElement | null = null;
+  private shadow: ShadowRoot | null = null;
+  private widgetsContainer: HTMLElement | null = null;
 
   constructor(options: ProovdPulseOptions) {
     // Make a copy of options to avoid mutation issues
@@ -70,6 +77,36 @@ export class ProovdPulse {
       this.options.secure = this.isProduction;
     }
     
+    // Set default container
+    if (!this.options.container) {
+      this.options.container = 'body';
+    }
+    
+    // Set default theme
+    if (!this.options.theme) {
+      this.options.theme = 'light';
+    }
+    
+    // Set default position
+    if (!this.options.position) {
+      this.options.position = 'bottom-right';
+    }
+    
+    // Set default for shadow DOM
+    if (this.options.shadowDOM === undefined) {
+      this.options.shadowDOM = true;
+    }
+    
+    // Set default widgets if not provided
+    if (!this.options.widgets) {
+      this.options.widgets = [
+        { type: 'viewers', enabled: true },
+        { type: 'purchases', enabled: false },
+        { type: 'stock', enabled: false },
+        { type: 'urgency', enabled: false }
+      ];
+    }
+    
     this.maxReconnectAttempts = this.options.reconnectMaxAttempts || 5;
     
     this.log('Initializing with options:', this.options);
@@ -96,13 +133,13 @@ export class ProovdPulse {
       }
     );
     
-    // Create UI component
-    this.ui = new PulseUI(options);
-    
     // Handle stats updates
     this.socketClient.on('stats', (data) => {
       if (data.websiteId === this.options.websiteId) {
-        this.ui.updateUserCount(data.activeUsers || 0);
+        this.updateWidgets({
+          type: 'viewers',
+          count: data.activeUsers || 0
+        });
       }
     });
     
@@ -125,8 +162,14 @@ export class ProovdPulse {
    */
   async init(): Promise<void> {
     try {
-      // Mount UI
-      this.ui.mount();
+      // Create widget container
+      await this.createContainer();
+      
+      // Initialize enabled widgets
+      if (this.widgetsContainer) {
+        widgetRegistry.setContainer(this.widgetsContainer);
+        widgetRegistry.initialize(this.options.widgets || []);
+      }
       
       // Connect to socket server
       await this.socketClient.connect();
@@ -137,7 +180,86 @@ export class ProovdPulse {
       this.log('Initialized successfully');
     } catch (error) {
       console.error('ProovdPulse: Failed to initialize', error);
+      throw error;
     }
+  }
+
+  /**
+   * Create container for widgets
+   */
+  private async createContainer(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        // Get container element
+        if (typeof this.options.container === 'string') {
+          const containerElement = document.querySelector(this.options.container);
+          if (!containerElement) {
+            throw new Error(`ProovdPulse: Container element "${this.options.container}" not found`);
+          }
+          this.container = containerElement as HTMLElement;
+        } else if (this.options.container) {
+          this.container = this.options.container;
+        } else {
+          throw new Error('ProovdPulse: No container specified');
+        }
+        
+        // Create a wrapper element
+        const wrapper = document.createElement('div');
+        wrapper.className = 'proovd-pulse-wrapper';
+        
+        // Use shadow DOM if enabled and supported
+        if (this.options.shadowDOM && this.container && typeof this.container.attachShadow === 'function') {
+          this.shadow = wrapper.attachShadow({ mode: 'open' });
+          
+          // Create style element for shadow DOM
+          const style = document.createElement('style');
+          style.textContent = `
+            :host {
+              all: initial;
+            }
+            .proovd-pulse-widgets-container {
+              position: relative;
+              width: 100%;
+              height: 100%;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              font-size: 14px;
+              line-height: 1.5;
+              color: #333;
+            }
+          `;
+          this.shadow.appendChild(style);
+          
+          // Create container for widgets
+          this.widgetsContainer = document.createElement('div');
+          this.widgetsContainer.className = 'proovd-pulse-widgets-container';
+          this.shadow.appendChild(this.widgetsContainer);
+        } else {
+          // Create container for widgets without shadow DOM
+          this.widgetsContainer = document.createElement('div');
+          this.widgetsContainer.className = 'proovd-pulse-widgets-container';
+          this.widgetsContainer.style.position = 'relative';
+          this.widgetsContainer.style.width = '100%';
+          this.widgetsContainer.style.height = '100%';
+          wrapper.appendChild(this.widgetsContainer);
+        }
+        
+        // Add wrapper to container
+        if (this.container) {
+          this.container.appendChild(wrapper);
+        }
+        
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * Update widgets with new data
+   */
+  private updateWidgets(data: any): void {
+    widgetRegistry.update(data);
   }
 
   /**
@@ -213,6 +335,119 @@ export class ProovdPulse {
   }
 
   /**
+   * Enable a widget
+   */
+  enableWidget(type: string, options?: Record<string, any>): void {
+    if (!widgetRegistry.hasWidgetType(type)) {
+      console.error(`ProovdPulse: Widget type '${type}' not registered`);
+      return;
+    }
+    
+    // Find existing widget config
+    const existingIndex = this.options.widgets!.findIndex(w => w.type === type);
+    
+    if (existingIndex >= 0) {
+      // Update existing widget
+      this.options.widgets![existingIndex].enabled = true;
+      if (options) {
+        this.options.widgets![existingIndex].options = {
+          ...this.options.widgets![existingIndex].options,
+          ...options
+        };
+      }
+    } else {
+      // Add new widget
+      this.options.widgets!.push({
+        type,
+        enabled: true,
+        options
+      });
+    }
+    
+    // Reinitialize widgets
+    widgetRegistry.initialize(this.options.widgets!);
+  }
+
+  /**
+   * Disable a widget
+   */
+  disableWidget(type: string): void {
+    // Find existing widget config
+    const existingIndex = this.options.widgets!.findIndex(w => w.type === type);
+    
+    if (existingIndex >= 0) {
+      // Update existing widget
+      this.options.widgets![existingIndex].enabled = false;
+      
+      // Reinitialize widgets
+      widgetRegistry.initialize(this.options.widgets!);
+    }
+  }
+
+  /**
+   * Configure a widget
+   */
+  configureWidget(type: string, options: Record<string, any>): void {
+    // Find existing widget config
+    const existingIndex = this.options.widgets!.findIndex(w => w.type === type);
+    
+    if (existingIndex >= 0) {
+      // Update existing widget
+      this.options.widgets![existingIndex].options = {
+        ...this.options.widgets![existingIndex].options,
+        ...options
+      };
+      
+      // Reinitialize widgets if enabled
+      if (this.options.widgets![existingIndex].enabled) {
+        widgetRegistry.initialize(this.options.widgets!);
+      }
+    } else {
+      // Add new widget (disabled by default)
+      this.options.widgets!.push({
+        type,
+        enabled: false,
+        options
+      });
+    }
+  }
+
+  /**
+   * Simulate a purchase notification
+   */
+  simulatePurchase(productName: string, location?: string): void {
+    this.updateWidgets({
+      type: 'purchases',
+      productName,
+      timestamp: new Date(),
+      location
+    });
+  }
+
+  /**
+   * Update stock status
+   */
+  updateStock(productId: string, currentStock: number, initialStock?: number): void {
+    this.updateWidgets({
+      type: 'stock',
+      productId,
+      currentStock,
+      initialStock
+    });
+  }
+
+  /**
+   * Show countdown timer
+   */
+  showCountdown(endTime: number | string, message?: string): void {
+    this.updateWidgets({
+      type: 'countdown',
+      endTime,
+      message
+    });
+  }
+
+  /**
    * Destroy the widget and clean up
    */
   destroy(): void {
@@ -239,8 +474,20 @@ export class ProovdPulse {
     // Disconnect socket
     this.socketClient.disconnect();
     
-    // Unmount UI
-    this.ui.unmount();
+    // Clean up widgets
+    widgetRegistry.cleanUp();
+    
+    // Remove container
+    if (this.container && this.widgetsContainer && this.widgetsContainer.parentNode) {
+      const wrapper = this.widgetsContainer.parentNode as HTMLElement;
+      if (wrapper.parentNode) {
+        wrapper.parentNode.removeChild(wrapper);
+      }
+    }
+    
+    this.container = null;
+    this.widgetsContainer = null;
+    this.shadow = null;
     
     this.log('Destroyed');
   }
@@ -249,20 +496,18 @@ export class ProovdPulse {
    * Get or create a client ID
    */
   private getClientId(): string {
-    // Try to get from localStorage first
-    const storedId = localStorage.getItem('proovdPulseClientId');
-    if (storedId) {
-      return storedId;
+    let clientId = localStorage.getItem('proovdPulseClientId');
+    
+    if (!clientId) {
+      clientId = uuidv4();
+      localStorage.setItem('proovdPulseClientId', clientId);
     }
     
-    // Generate a new ID
-    const newId = uuidv4();
-    localStorage.setItem('proovdPulseClientId', newId);
-    return newId;
+    return clientId;
   }
-  
+
   /**
-   * Log messages if debug is enabled
+   * Log message if debug is enabled
    */
   private log(message: string, ...args: any[]): void {
     if (this.options.debug) {
