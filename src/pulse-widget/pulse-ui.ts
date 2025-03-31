@@ -23,6 +23,7 @@ export class PulseWidget {
   private websiteId: string;
   private clientId: string;
   private serverUrl: string;
+  private updateInterval: number | null = null;
 
   /**
    * Create a new PulseWidget instance
@@ -69,6 +70,14 @@ export class PulseWidget {
       
       // Initialize the UI
       this.initUI();
+      
+      // Set up a regular polling interval to request updated stats every 10 seconds
+      this.updateInterval = window.setInterval(() => {
+        if (this.socketClient.isActive()) {
+          this.socketClient.sendActivity({ requestStats: true });
+          console.log('🟢 Requesting updated stats');
+        }
+      }, 10000);
       
       console.log('✅ PulseWidget connected and UI initialized');
       return Promise.resolve();
@@ -135,11 +144,7 @@ export class PulseWidget {
     // Create or update content
     this.container.innerHTML = `
       <div class="proovd-pulse-content">
-        <div class="proovd-pulse-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-          </svg>
-        </div>
+        <div class="proovd-pulse-dot"></div>
         <div class="proovd-pulse-count">${this.activeUsers}</div>
         <div class="proovd-pulse-label">active now</div>
       </div>
@@ -213,15 +218,49 @@ export class PulseWidget {
         gap: 8px;
       }
       
-      .proovd-pulse-icon {
-        color: #ff4757;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      .proovd-pulse-dot {
+        width: 12px;
+        height: 12px;
+        background-color: #2F80ED;
+        border-radius: 50%;
+        position: relative;
+        display: inline-block;
       }
       
-      .proovd-pulse-dark .proovd-pulse-icon {
-        color: #ff6b81;
+      .proovd-pulse-dot:before {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        background-color: #2F80ED;
+        border-radius: 50%;
+        opacity: 0.7;
+        animation: pulse 2s ease-in-out infinite;
+      }
+      
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+          opacity: 0.7;
+        }
+        70% {
+          transform: scale(2);
+          opacity: 0;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 0;
+        }
+      }
+      
+      .proovd-pulse-dark .proovd-pulse-dot {
+        background-color: #60A5FA;
+      }
+      
+      .proovd-pulse-dark .proovd-pulse-dot:before {
+        background-color: #60A5FA;
       }
       
       .proovd-pulse-count {
@@ -265,6 +304,9 @@ export class PulseWidget {
     if (data && data.stats && typeof data.stats.activeUsers === 'number') {
       this.activeUsers = data.stats.activeUsers;
       this.updateUI();
+    } else if (data && typeof data.activeUsers === 'number') {
+      this.activeUsers = data.activeUsers;
+      this.updateUI();
     }
   }
 
@@ -273,6 +315,10 @@ export class PulseWidget {
    */
   private handleConnect(data: any): void {
     console.log('✅ Socket connected:', data);
+    // Request stats immediately after connecting
+    if (this.socketClient.isActive()) {
+      this.socketClient.sendActivity({ requestStats: true });
+    }
   }
   
   /**
@@ -297,6 +343,12 @@ export class PulseWidget {
     
     // Disconnect from the socket server
     this.socketClient.disconnect();
+    
+    // Remove update interval
+    if (this.updateInterval !== null) {
+      window.clearInterval(this.updateInterval);
+      this.updateInterval = null;
+    }
     
     // Remove the container from the DOM
     if (this.container && this.container.parentNode) {

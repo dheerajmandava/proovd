@@ -4,9 +4,10 @@
  */
 
 interface PulseMetrics {
-  clickCount: number;
-  scrollPercentage: number;
-  timeOnPage: number;
+  clickCount?: number;
+  scrollPercentage?: number;
+  timeOnPage?: number;
+  requestStats?: boolean;
 }
 
 interface PulseStats {
