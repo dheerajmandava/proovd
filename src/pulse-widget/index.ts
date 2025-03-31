@@ -118,7 +118,7 @@ if (scriptTags.length > 0) {
   }
 }
 
-// Create a self-initializing widget for script URLs of the form: https://proovd.in/p/{websiteId}.js
+// Create a self-initializing widget for script URLs of the form: https://www.proovd.in/p/{websiteId}.js
 try {
   // Get the current script
   const currentScript = document.currentScript as HTMLScriptElement;
@@ -126,7 +126,7 @@ try {
     const scriptSrc = currentScript.src;
     console.log('🟢 Current script src:', scriptSrc);
     
-    // Check if it follows the pattern https://proovd.in/p/{websiteId}.js
+    // Check if it follows the pattern https://www.proovd.in/p/{websiteId}.js
     const websiteIdMatch = scriptSrc.match(/\/p\/([a-zA-Z0-9]+)\.js$/);
     if (websiteIdMatch && websiteIdMatch[1]) {
       const websiteId = websiteIdMatch[1];

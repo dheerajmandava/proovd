@@ -42,7 +42,7 @@ export async function GET(
         
         // Load the main script with cache busting from proovd.in
         const script = document.createElement('script');
-        script.src = "https://proovd.in/api/websites/${params.id}/pulse-widget.js?t=" + new Date().getTime();
+        script.src = "https://www.proovd.in/api/websites/${params.id}/pulse-widget.js?t=" + new Date().getTime();
         script.async = true;
         script.setAttribute('data-website-id', "${params.id}");
         script.setAttribute('data-position', "bottom-right");
@@ -63,7 +63,7 @@ export async function GET(
         // Debug information
         console.log("ℹ️ Widget configuration:", {
           websiteId: "${params.id}",
-          apiEndpoint: "https://proovd.in/api/websites/${params.id}/pulse-widget.js",
+          apiEndpoint: "https://www.proovd.in/api/websites/${params.id}/pulse-widget.js",
           timestamp: new Date().toISOString(),
           serverTimestamp: "${BUILD_TIMESTAMP}"
         });
