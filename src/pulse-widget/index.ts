@@ -1,7 +1,7 @@
 /**
  * ProovdPulse Widget - Real-time social proof widget
  */
-import { SocketClient, SocketClientOptions } from './socket-client';
+import { PulseSocketClient } from './socket-client';
 
 declare global {
   interface Window {
@@ -26,7 +26,7 @@ class PulseWidget {
   private websiteId: string;
   private serverUrl: string;
   private options: PulseWidgetOptions;
-  private socketClient: SocketClient;
+  private socketClient: PulseSocketClient;
   private pulseInterval: number | null = null;
 
   constructor(clientId: string, websiteId: string, serverUrl: string, options: PulseWidgetOptions = {}) {
@@ -48,7 +48,7 @@ class PulseWidget {
       updateInterval: options.updateInterval || 10000 // Default 10 seconds
     };
 
-    this.socketClient = new SocketClient(clientId, websiteId, serverUrl, {
+    this.socketClient = new PulseSocketClient(clientId, websiteId, serverUrl, {
       secure: true,
       debug: this.options.debug,
       updateInterval: this.options.updateInterval
