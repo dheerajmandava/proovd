@@ -96,9 +96,9 @@ if (typeof WebSocket === 'undefined') {
   
   if (typeof window.ProovdPulse === 'undefined') {
     console.error('❌ ProovdPulse class not found in window object!');
-    return;
-  }
-  
+      return;
+    }
+
   var websiteId = "${params.id}";
   console.log('🟢 Using websiteId:', websiteId);
   

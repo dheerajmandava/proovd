@@ -40,16 +40,16 @@ export async function GET(
       (function() {
         console.log("🟢 ProovdPulse Loader Starting - Website ID: ${params.id}");
         
-        // Load the main script with cache busting
+        // Load the main script with cache busting from proovd.in
         const script = document.createElement('script');
-        script.src = "/public/pulse-widget.min.js?t=" + new Date().getTime();
+        script.src = "https://proovd.in/api/websites/${params.id}/pulse-widget.js?t=" + new Date().getTime();
         script.async = true;
         script.setAttribute('data-website-id', "${params.id}");
         script.setAttribute('data-position', "bottom-right");
         
         // Handle script loading errors
-        script.onerror = function() {
-          console.error("❌ Failed to load ProovdPulse widget script");
+        script.onerror = function(err) {
+          console.error("❌ Failed to load ProovdPulse widget script:", err);
         };
         
         // Handle successful loading
@@ -63,6 +63,7 @@ export async function GET(
         // Debug information
         console.log("ℹ️ Widget configuration:", {
           websiteId: "${params.id}",
+          apiEndpoint: "https://proovd.in/api/websites/${params.id}/pulse-widget.js",
           timestamp: new Date().toISOString(),
           serverTimestamp: "${BUILD_TIMESTAMP}"
         });

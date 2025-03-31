@@ -77,7 +77,7 @@ export class PulseWidget {
       return Promise.reject(error);
     }
   }
-  
+
   /**
    * Initialize the UI
    */
@@ -144,7 +144,7 @@ export class PulseWidget {
         <div class="proovd-pulse-label">active now</div>
       </div>
     `;
-    
+
     // Add click handler to toggle expanded view
     this.container.querySelector('.proovd-pulse-content')?.addEventListener('click', () => {
       this.container?.classList.toggle('proovd-pulse-expanded');
@@ -195,8 +195,8 @@ export class PulseWidget {
       .proovd-pulse-top-right {
         top: 0;
         right: 0;
-      }
-      
+    }
+
       .proovd-pulse-bottom-left {
         bottom: 0;
         left: 0;
@@ -248,7 +248,7 @@ export class PulseWidget {
         padding: 16px;
       }
     `;
-    
+
     // Add custom CSS if provided
     if (this.options.customCSS) {
       styleEl.textContent += this.options.customCSS;
@@ -256,7 +256,7 @@ export class PulseWidget {
     
     document.head.appendChild(styleEl);
   }
-  
+
   /**
    * Handle stats update from the socket server
    */
@@ -267,7 +267,7 @@ export class PulseWidget {
       this.updateUI();
     }
   }
-  
+
   /**
    * Handle socket connection
    */
@@ -281,14 +281,14 @@ export class PulseWidget {
   private handleDisconnect(data: any): void {
     console.log('🔴 Socket disconnected:', data);
   }
-  
+
   /**
    * Handle socket error
    */
   private handleError(data: any): void {
     console.error('❌ Socket error:', data);
   }
-  
+
   /**
    * Destroy the widget instance
    */
