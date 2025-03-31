@@ -1,7 +1,6 @@
 /**
  * ProovdPulse WebSocket Client
  * Handles communication with the ProovdPulse WebSocket server
- * Production-ready with secure connections and authentication
  */
 export class PulseSocketClient {
     constructor(clientId, websiteId, serverUrl, options = {}) {
@@ -24,12 +23,10 @@ export class PulseSocketClient {
         this.options = {
             clientId,
             websiteId,
-            serverUrl: this.normalizeServerUrl(serverUrl, useSecure),
-            authToken: options.authToken,
+            serverUrl,
             secure: useSecure,
             reconnectMaxAttempts: options.reconnectMaxAttempts || 10,
-            reconnectBaseDelay: options.reconnectBaseDelay || 1000,
-            reconnectMaxDelay: options.reconnectMaxDelay || 30000,
+            reconnectDelay: options.reconnectDelay || 20000, // Fixed 20 second delay
             debug: options.debug || false
         };
         this.log('Initialized with options:', this.options);
@@ -40,14 +37,18 @@ export class PulseSocketClient {
     connect() {
         return new Promise((resolve, reject) => {
             try {
-                this.log('Connecting to WebSocket server:', this.options.serverUrl);
-                // Add auth token to URL if provided
-                let url = this.options.serverUrl;
-                if (this.options.authToken) {
-                    const separator = url.includes('?') ? '&' : '?';
-                    url = `${url}${separator}token=${encodeURIComponent(this.options.authToken)}`;
+                if (this.socket && this.isConnected) {
+                    this.log('Already connected to WebSocket server');
+                    return resolve();
                 }
-                this.socket = new WebSocket(url);
+                // Reset reconnection attempts if this is a manual connection
+                if (this.reconnectAttempts === 0) {
+                    this.reconnectAttempts = 0;
+                }
+                // Build the WebSocket URL with parameters
+                const wsUrl = this.buildWebSocketUrl();
+                this.log(`Connecting to WebSocket server: ${wsUrl}`);
+                this.socket = new WebSocket(wsUrl);
                 this.socket.onopen = () => {
                     this.log('Connected to WebSocket server');
                     this.isConnected = true;
@@ -239,37 +240,40 @@ export class PulseSocketClient {
         }
     }
     /**
-     * Attempt to reconnect to the server with exponential backoff
+     * Attempt to reconnect to the server with fixed delay
      */
     attemptReconnect() {
-        const maxAttempts = this.options.reconnectMaxAttempts || 10;
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+        }
+        const maxAttempts = this.options.reconnectMaxAttempts || 5;
         if (this.reconnectAttempts >= maxAttempts) {
-            this.log('Max reconnect attempts reached');
+            this.log(`Maximum reconnect attempts (${maxAttempts}) reached`);
             return;
         }
         this.reconnectAttempts++;
-        const baseDelay = this.options.reconnectBaseDelay || 1000;
-        const maxDelay = this.options.reconnectMaxDelay || 30000;
-        const delay = Math.min(baseDelay * Math.pow(1.5, this.reconnectAttempts - 1), maxDelay);
-        this.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+        // Use fixed delay
+        const delay = this.options.reconnectDelay || 20000; // 20 seconds
+        this.log(`Scheduling reconnect attempt ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`);
         this.reconnectTimeout = setTimeout(() => {
+            this.log(`Attempting to reconnect (${this.reconnectAttempts}/${maxAttempts})...`);
             this.connect().catch(error => {
                 this.log('Reconnect failed', error);
             });
         }, delay);
     }
     /**
-     * Normalize the server URL to use the correct protocol
+     * Build the complete WebSocket URL with query parameters
      */
-    normalizeServerUrl(url, secure) {
-        // Already has the correct protocol
-        if ((secure && url.startsWith('wss://')) || (!secure && url.startsWith('ws://'))) {
-            return url;
-        }
-        // Strip any existing protocol
-        const strippedUrl = url.replace(/^(wss?:\/\/|https?:\/\/)/, '');
-        // Add the appropriate protocol
-        return secure ? `wss://${strippedUrl}` : `ws://${strippedUrl}`;
+    buildWebSocketUrl() {
+        // Get base URL
+        let wsUrl = this.options.serverUrl;
+        // Build query parameters
+        const params = new URLSearchParams();
+        params.append('clientId', this.options.clientId);
+        params.append('websiteId', this.options.websiteId);
+        // Return complete URL
+        return `${wsUrl}?${params.toString()}`;
     }
     /**
      * Log messages if debug is enabled

@@ -1,7 +1,6 @@
 /**
  * ProovdPulse WebSocket Client
  * Handles communication with the ProovdPulse WebSocket server
- * Production-ready with secure connections and authentication
  */
 interface PulseMetrics {
     clickCount: number;
@@ -12,11 +11,9 @@ interface PulseOptions {
     clientId: string;
     websiteId: string;
     serverUrl: string;
-    authToken?: string;
     secure?: boolean;
     reconnectMaxAttempts?: number;
-    reconnectBaseDelay?: number;
-    reconnectMaxDelay?: number;
+    reconnectDelay?: number;
     debug?: boolean;
 }
 type MessageHandler = (data: any) => void;
@@ -79,13 +76,13 @@ export declare class PulseSocketClient {
      */
     private notifyHandlers;
     /**
-     * Attempt to reconnect to the server with exponential backoff
+     * Attempt to reconnect to the server with fixed delay
      */
     private attemptReconnect;
     /**
-     * Normalize the server URL to use the correct protocol
+     * Build the complete WebSocket URL with query parameters
      */
-    private normalizeServerUrl;
+    private buildWebSocketUrl;
     /**
      * Log messages if debug is enabled
      */
