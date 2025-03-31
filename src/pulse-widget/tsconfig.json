@@ -1,18 +1,15 @@
 {
-  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "es2020",
     "module": "ESNext",
     "moduleResolution": "node",
-    "outDir": "../../dist/pulse-widget",
-    "rootDir": "./",
-    "strict": true,
-    "declaration": true,
     "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "lib": ["DOM", "DOM.Iterable", "ESNext"]
+    "sourceMap": true,
+    "strict": true,
+    "lib": ["dom", "es2020"],
+    "outDir": "../../public/pulse-widget",
+    "jsx": "react-jsx",
+    "skipLibCheck": true
   },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": ["**/*.ts"]
 } 

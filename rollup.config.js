@@ -1,11 +1,11 @@
-import typescript from '@rollup/plugin-typescript';
-import { nodeResolve } from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs';
-import terser from '@rollup/plugin-terser';
+const typescript = require('@rollup/plugin-typescript');
+const { nodeResolve } = require('@rollup/plugin-node-resolve');
+const commonjs = require('@rollup/plugin-commonjs');
+const terser = require('@rollup/plugin-terser');
 
 const production = !process.env.ROLLUP_WATCH;
 
-export default {
+module.exports = {
   input: 'src/pulse-widget/index.ts',
   output: {
     file: 'public/pulse-widget.min.js',
@@ -19,8 +19,17 @@ export default {
     }),
     commonjs(),
     typescript({
-      tsconfig: './src/pulse-widget/tsconfig.json',
-      sourceMap: !production
+      tsconfig: false,
+      compilerOptions: {
+        target: "es2020",
+        module: "ESNext",
+        moduleResolution: "node",
+        esModuleInterop: true,
+        sourceMap: !production,
+        lib: ["dom", "es2020"],
+        strict: true
+      },
+      include: ["src/pulse-widget/**/*.ts"]
     }),
     production && terser()
   ]

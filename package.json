@@ -9,7 +9,7 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:pulse": "tsc -p src/pulse-widget/tsconfig.json && cp -r dist/pulse-widget public/",
+    "build:pulse": "tsc -p src/pulse-widget/tsconfig.json",
     "build:all": "npm run build:widget && npm run build:pulse && npm run build",
     "db:cleanup": "chmod +x ./scripts/run-cleanup.sh && ./scripts/run-cleanup.sh",
     "cleanup:stale": "chmod +x ./scripts/cleanup-stale-websites.js && node ./scripts/cleanup-stale-websites.js",
