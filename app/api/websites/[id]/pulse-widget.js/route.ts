@@ -80,54 +80,46 @@ export async function GET(
 console.log = console.log || function() {};
 console.error = console.error || function() {};
 
-// Display ProovdPulse initialization status
-console.log('🟢 ProovdPulse widget script loaded for website: ${params.id}');
-
-// Test if WebSocket is available
-if (typeof WebSocket === 'undefined') {
-  console.error('❌ WebSocket is not available in this browser');
-} else {
-  console.log('✅ WebSocket is available');
-}
+// Add initial debugging info
+console.log('🟢 ProovdPulse Loader Starting - Website ID: ${params.id}');
+console.log('ℹ️ Widget configuration: ' + JSON.stringify({
+  websiteId: '${params.id}',
+  apiEndpoint: '${request.url}',
+  timestamp: new Date().toISOString(),
+  serverTimestamp: '${new Date().toISOString()}'
+}));
 
 // Force immediate initialization on script load
 (function() {
-  console.log('🟢 Initializing ProovdPulse widget...');
-  
-  if (typeof window.ProovdPulse === 'undefined') {
-    console.error('❌ ProovdPulse class not found in window object!');
+  // Wait for DOM to be ready
+  function initWidget() {
+    if (typeof window.ProovdPulse === 'undefined' || !window.ProovdPulse.init) {
+      console.error('❌ ProovdPulse API not found or init method missing!');
       return;
     }
-
-  var websiteId = "${params.id}";
-  console.log('🟢 Using websiteId:', websiteId);
-  
-  try {
-    window._proovdPulseInstance = new window.ProovdPulse({
-      websiteId: websiteId,
-      position: "${position}",
-      theme: "${theme}",
-      debug: true,
-      serverUrl: "wss://socket.proovd.in",
-      container: "body"
-    });
     
-    window._proovdPulseInstance.init()
-      .then(function() {
-        console.log('✅ ProovdPulse initialized successfully!');
-      })
-      .catch(function(error) {
-        console.error('❌ ProovdPulse initialization failed:', error);
+    try {
+      window.ProovdPulse.init('${params.id}', {
+        position: "${position}",
+        theme: "${theme}",
+        debug: true,
+        serverUrl: "wss://socket.proovd.in"
       });
-  } catch (e) {
-    console.error('❌ Error during ProovdPulse initialization:', e);
+      console.log('✅ ProovdPulse widget script loaded successfully');
+    } catch (e) {
+      console.error('❌ Error initializing ProovdPulse widget:', e);
+    }
+  }
+  
+  // Run initialization when DOM is loaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initWidget);
+  } else {
+    initWidget();
   }
 })();`;
     
-    // Remove any potentially conflicting initialization code
-    widgetJs = widgetJs.replace(/if\s*\(\s*typeof\s+window\s+!==\s*['"]undefined['"]\s*&&\s*!window\.location\.href\.includes\s*\(\s*['"]localhost['"]\s*\)\s*\)\s*\{[\s\S]*?\}\s*\}\s*\)\s*\)\s*\}\s*\}\s*\)/g, '');
-    
-    // Add our debug script at the end
+    // Append our debug script at the end
     widgetJs += debugScript;
     
     // Return the widget script with proper headers
@@ -138,7 +130,9 @@ if (typeof WebSocket === 'undefined') {
         'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Cache-Control': 'no-cache, no-store, must-revalidate' // Prevent caching
+        'Cache-Control': 'no-cache, no-store, must-revalidate', // Prevent caching
+        'Pragma': 'no-cache',
+        'Expires': '0'
       },
     });
   } catch (error) {

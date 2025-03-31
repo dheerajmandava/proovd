@@ -10,18 +10,23 @@ let widgetInstance = null;
  * Widget class
  */
 class PulseWidget {
-  constructor(websiteId, options = {}) {
+  constructor(options = {}) {
     this.container = null;
     this.activeUsers = 0;
     this.pulseInterval = null;
-    this.websiteId = websiteId;
+    this.websiteId = options.websiteId || '';
+    this.socketUrl = options.serverUrl || 'wss://socket.proovd.in';
+    this.socket = null;
+    this.reconnectTimeout = null;
+    this.reconnectAttempts = 0;
     
     this.options = {
       position: options.position || 'bottom-right',
       theme: options.theme || 'auto',
       zIndex: options.zIndex || 999999,
       pulseColor: options.pulseColor || '#2563eb', // Default blue color
-      updateInterval: options.updateInterval || 3000 // Faster updates: 3 seconds
+      updateInterval: options.updateInterval || 3000, // Faster updates: 3 seconds
+      debug: options.debug || false
     };
     
     console.log('🟢 PulseWidget created with options:', this.options);
@@ -31,18 +36,135 @@ class PulseWidget {
    * Initialize the widget
    */
   init() {
-    console.log('🟢 Initializing PulseWidget');
-    this.initUI();
+    return new Promise((resolve, reject) => {
+      console.log('🟢 Initializing PulseWidget');
+      this.initUI();
+      
+      // Connect to real-time socket
+      this.connectSocket()
+        .then(() => {
+          console.log('✅ Socket connected successfully');
+          resolve();
+        })
+        .catch(error => {
+          console.error('❌ Socket connection failed:', error);
+          // Fallback to random data if connection fails
+          this.activeUsers = Math.floor(Math.random() * 5) + 1;
+          this.updateUI();
+          
+          // Simulate updates with random data as fallback
+          setInterval(() => {
+            this.activeUsers = Math.floor(Math.random() * 5) + 1;
+            this.updateUI();
+          }, this.options.updateInterval);
+          
+          reject(error);
+        });
+    });
+  }
+  
+  /**
+   * Connect to WebSocket server
+   */
+  connectSocket() {
+    return new Promise((resolve, reject) => {
+      try {
+        const url = `${this.socketUrl}?websiteId=${this.websiteId}`;
+        console.log('🟢 Connecting to socket:', url);
+        
+        this.socket = new WebSocket(url);
+        
+        this.socket.onopen = () => {
+          console.log('✅ Socket connection opened');
+          this.reconnectAttempts = 0;
+          
+          // Request initial stats
+          this.sendMessage({
+            type: 'stats',
+            websiteId: this.websiteId
+          });
+          
+          // Set up regular stats polling
+          setInterval(() => {
+            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+              this.sendMessage({
+                type: 'stats',
+                websiteId: this.websiteId
+              });
+            }
+          }, this.options.updateInterval);
+          
+          resolve();
+        };
+        
+        this.socket.onmessage = (event) => {
+          try {
+            console.log('🟢 Received message:', event.data);
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'stats') {
+              if (data.activeUsers !== undefined) {
+                this.activeUsers = data.activeUsers;
+                this.updateUI();
+              } else if (data.stats && data.stats.activeUsers !== undefined) {
+                this.activeUsers = data.stats.activeUsers;
+                this.updateUI();
+              }
+            }
+          } catch (error) {
+            console.error('❌ Error parsing message:', error);
+          }
+        };
+        
+        this.socket.onclose = (event) => {
+          console.log('🔴 Socket connection closed:', event.code, event.reason);
+          this.attemptReconnect();
+        };
+        
+        this.socket.onerror = (error) => {
+          console.error('❌ Socket error:', error);
+          reject(error);
+        };
+        
+      } catch (error) {
+        console.error('❌ Error connecting to socket:', error);
+        reject(error);
+      }
+    });
+  }
+  
+  /**
+   * Send message to socket
+   */
+  sendMessage(data) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify(data));
+    }
+  }
+  
+  /**
+   * Attempt reconnection
+   */
+  attemptReconnect() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
     
-    // Simulate active users with random data
-    this.activeUsers = Math.floor(Math.random() * 10) + 1;
-    this.updateUI();
+    if (this.reconnectAttempts >= 5) {
+      console.log('🔴 Maximum reconnect attempts reached');
+      return;
+    }
     
-    // Update users periodically
-    setInterval(() => {
-      this.activeUsers = Math.floor(Math.random() * 10) + 1;
-      this.updateUI();
-    }, this.options.updateInterval);
+    this.reconnectAttempts++;
+    const delay = 3000 * this.reconnectAttempts;
+    
+    console.log(`🟡 Attempting reconnect in ${delay}ms (${this.reconnectAttempts}/5)`);
+    
+    this.reconnectTimeout = setTimeout(() => {
+      this.connectSocket().catch(error => {
+        console.error('❌ Reconnection failed:', error);
+      });
+    }, delay);
   }
   
   /**
@@ -102,7 +224,7 @@ class PulseWidget {
       if (dot) {
         dot.classList.add('pulse');
         setTimeout(() => {
-          if (dot.classList) {
+          if (dot && dot.classList) {
             dot.classList.remove('pulse');
           }
         }, 1000);
@@ -264,15 +386,27 @@ class PulseWidget {
   destroy() {
     console.log('🟢 Destroying PulseWidget');
     
-    // Clear pulse interval
+    // Clear intervals
     if (this.pulseInterval) {
       clearInterval(this.pulseInterval);
       this.pulseInterval = null;
     }
     
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    
+    // Close socket
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+    
     // Remove DOM elements
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
+      this.container = null;
     }
     
     // Remove styles
@@ -286,23 +420,33 @@ class PulseWidget {
 }
 
 /**
- * Initialize the ProovdPulse Widget
+ * Initialize the widget
  */
 function init(websiteId, options = {}) {
-  console.log('🟢 ProovdPulse Widget Initializing...', { websiteId, options });
+  console.log('🟢 ProovdPulse Widget Initializing...', {websiteId, options});
   
   try {
-    // Destroy previous instance if it exists
+    // Destroy previous instance if exists
     if (widgetInstance) {
-      console.log('⚠️ ProovdPulse Widget already initialized, destroying previous instance');
+      console.log('⚠️ Previous instance found, destroying it');
       widgetInstance.destroy();
+      widgetInstance = null;
     }
     
     // Create new instance
-    widgetInstance = new PulseWidget(websiteId, options);
+    widgetInstance = new PulseWidget({
+      ...options,
+      websiteId: websiteId
+    });
     
-    // Initialize
-    widgetInstance.init();
+    // Initialize it
+    widgetInstance.init()
+      .then(() => {
+        console.log('✅ ProovdPulse Widget initialized successfully');
+      })
+      .catch(error => {
+        console.error('❌ ProovdPulse Widget initialization failed:', error);
+      });
     
     return widgetInstance;
   } catch (error) {
@@ -312,7 +456,7 @@ function init(websiteId, options = {}) {
 }
 
 /**
- * Get the current instance
+ * Get the instance
  */
 function getInstance() {
   return widgetInstance;
@@ -320,15 +464,13 @@ function getInstance() {
 
 // Expose API
 window.ProovdPulse = {
-  init,
-  getInstance,
-  version: '1.0.0'
+  init: init,
+  getInstance: getInstance,
+  version: '1.1.0'
 };
 
-// Auto-initialization from data attributes
-console.log('🟢 Checking for auto-initialization...');
+// Check for auto-initialization
 const scripts = document.querySelectorAll('script[data-website-id]');
-
 if (scripts.length > 0) {
   try {
     const script = scripts[0];
@@ -338,13 +480,12 @@ if (scripts.length > 0) {
     if (websiteId) {
       console.log('🟢 Auto-initializing ProovdPulse Widget with website ID:', websiteId);
       
-      // Parse data attributes as options
+      // Extract all data attributes as options
       const options = {};
-      
-      // Convert kebab-case data attributes to camelCase options
       for (const attr of Array.from(script.attributes)) {
         if (attr.name.startsWith('data-') && attr.name !== 'data-website-id') {
-          const key = attr.name.substring(5).replace(/-([a-z])/g, (_, m) => m.toUpperCase());
+          // Convert data-attribute-name to attributeName
+          const key = attr.name.substring(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
           options[key] = attr.value;
         }
       }
@@ -357,15 +498,15 @@ if (scripts.length > 0) {
   }
 }
 
-// Try to initialize from script URL (for CDN usage)
+// Also check for initialization via script URL
 try {
-  const script = document.currentScript;
-  if (script) {
-    const src = script.src;
+  const currentScript = document.currentScript;
+  if (currentScript) {
+    const src = currentScript.src;
     console.log('🟢 Current script src:', src);
     
-    // Extract website ID from URL pattern /p/{websiteId}.js
-    const match = src.match(/\/p\/([a-zA-Z0-9]+)\.js$/);
+    // Match website ID from URL pattern /api/websites/{id}/pulse-widget.js
+    const match = src.match(/\/api\/websites\/([a-zA-Z0-9]+)\/pulse-widget\.js/);
     if (match && match[1]) {
       const websiteId = match[1];
       console.log('🟢 Detected websiteId from script URL:', websiteId);
