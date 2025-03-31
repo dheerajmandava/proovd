@@ -26,6 +26,7 @@ interface PulseOptions {
   reconnectMaxAttempts?: number;
   reconnectDelay?: number;
   debug?: boolean;
+  updateInterval?: number;
 }
 
 type MessageHandler = (data: any) => void;
@@ -61,7 +62,8 @@ export class PulseSocketClient {
       secure: useSecure,
       reconnectMaxAttempts: options.reconnectMaxAttempts || 10,
       reconnectDelay: options.reconnectDelay || 20000, // Fixed 20 second delay
-      debug: debugEnabled
+      debug: debugEnabled,
+      updateInterval: options.updateInterval || 10000 // 10 seconds by default (faster updates)
     };
     
     console.log('🟢 PulseSocketClient initialized with options:', this.options);
@@ -225,7 +227,7 @@ export class PulseSocketClient {
       } else {
         console.log('🟡 Socket not active, skipping ping');
       }
-    }, 30000) as unknown as NodeJS.Timeout; // 30 seconds
+    }, this.options.updateInterval) as unknown as NodeJS.Timeout; // Use the shorter update interval
   }
   
   /**

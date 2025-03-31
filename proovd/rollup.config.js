@@ -6,7 +6,7 @@ const terser = require('@rollup/plugin-terser');
 const production = !process.env.ROLLUP_WATCH;
 
 module.exports = {
-  input: 'src/pulse-widget/simple-widget.js',
+  input: 'src/pulse-widget/index.ts',
   output: {
     file: 'public/pulse-widget.min.js',
     format: 'iife',
@@ -18,6 +18,19 @@ module.exports = {
       browser: true
     }),
     commonjs(),
+    typescript({
+      tsconfig: false,
+      compilerOptions: {
+        target: "es2020",
+        module: "ESNext",
+        moduleResolution: "node",
+        esModuleInterop: true,
+        sourceMap: !production,
+        lib: ["dom", "es2020"],
+        strict: true
+      },
+      include: ["src/pulse-widget/**/*.ts"]
+    }),
     production && terser()
   ]
 }; 

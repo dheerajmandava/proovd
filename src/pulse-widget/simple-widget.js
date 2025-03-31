@@ -1,92 +1,59 @@
 /**
- * ProovdPulse Widget - Real-time social proof widget
+ * ProovdPulse Widget - Simple blue pulsing dot
  */
-import { SocketClient, SocketClientOptions } from './socket-client';
 
-declare global {
-  interface Window {
-    ProovdPulse: {
-      init: (websiteId: string, options?: PulseWidgetOptions) => PulseWidget | null;
-      getInstance: () => PulseWidget | null;
-      version: string;
-    };
-  }
-}
-
-// Global instance
-let widgetInstance: PulseWidget | null = null;
+// Global variables
+console.log('🟢 ProovdPulse Widget Script Loaded');
+let widgetInstance = null;
 
 /**
- * PulseWidget class to create and manage the social proof widget
+ * Widget class
  */
 class PulseWidget {
-  private container: HTMLElement | null = null;
-  private activeUsers: number = 0;
-  private clientId: string;
-  private websiteId: string;
-  private serverUrl: string;
-  private options: PulseWidgetOptions;
-  private socketClient: SocketClient;
-  private pulseInterval: number | null = null;
-
-  constructor(clientId: string, websiteId: string, serverUrl: string, options: PulseWidgetOptions = {}) {
+  constructor(websiteId, options = {}) {
     this.container = null;
     this.activeUsers = 0;
-    console.log('🟢 Creating Pulse Widget with websiteId:', websiteId);
-
-    this.clientId = clientId;
+    this.pulseInterval = null;
     this.websiteId = websiteId;
-    this.serverUrl = serverUrl;
+    
     this.options = {
       position: options.position || 'bottom-right',
       theme: options.theme || 'auto',
-      showActiveUsers: options.showActiveUsers !== false,
-      showIcon: options.showIcon !== false,
       zIndex: options.zIndex || 999999,
-      debug: options.debug || false,
       pulseColor: options.pulseColor || '#2563eb', // Default blue color
-      updateInterval: options.updateInterval || 10000 // Default 10 seconds
+      updateInterval: options.updateInterval || 3000 // Faster updates: 3 seconds
     };
-
-    this.socketClient = new SocketClient(clientId, websiteId, serverUrl, {
-      secure: true,
-      debug: this.options.debug,
-      updateInterval: this.options.updateInterval
-    });
-
-    this.socketClient.on('stats', this.handleStatsUpdate.bind(this));
-    this.socketClient.on('connect', this.handleConnect.bind(this));
-    this.socketClient.on('disconnect', this.handleDisconnect.bind(this));
-    this.socketClient.on('error', this.handleError.bind(this));
-
+    
     console.log('🟢 PulseWidget created with options:', this.options);
   }
-
+  
   /**
-   * Connect to the socket server and initialize the UI
+   * Initialize the widget
    */
-  async connect(): Promise<void> {
-    console.log('🟢 PulseWidget connecting...');
-    try {
-      await this.socketClient.connect();
-      this.initUI();
-      console.log('✅ PulseWidget connected and UI initialized');
-      return Promise.resolve();
-    } catch (error) {
-      console.error('❌ PulseWidget connection failed:', error);
-      return Promise.reject(error);
-    }
+  init() {
+    console.log('🟢 Initializing PulseWidget');
+    this.initUI();
+    
+    // Simulate active users with random data
+    this.activeUsers = Math.floor(Math.random() * 10) + 1;
+    this.updateUI();
+    
+    // Update users periodically
+    setInterval(() => {
+      this.activeUsers = Math.floor(Math.random() * 10) + 1;
+      this.updateUI();
+    }, this.options.updateInterval);
   }
-
+  
   /**
-   * Initialize the UI components
+   * Initialize UI
    */
-  private initUI(): void {
-    console.log('🟢 Initializing PulseWidget UI');
+  initUI() {
+    // Create container
     this.container = document.createElement('div');
     this.container.className = 'proovd-pulse-widget';
     this.container.id = 'proovd-pulse-widget';
-
+    
     // Apply theme
     if (this.options.theme === 'dark') {
       this.container.classList.add('proovd-pulse-dark');
@@ -97,13 +64,13 @@ class PulseWidget {
       
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
         if (e.matches) {
-          this.container?.classList.add('proovd-pulse-dark');
+          this.container.classList.add('proovd-pulse-dark');
         } else {
-          this.container?.classList.remove('proovd-pulse-dark');
+          this.container.classList.remove('proovd-pulse-dark');
         }
       });
     }
-
+    
     // Apply position
     this.container.classList.add(`proovd-pulse-${this.options.position}`);
     
@@ -111,42 +78,44 @@ class PulseWidget {
     if (this.options.zIndex) {
       this.container.style.zIndex = String(this.options.zIndex);
     }
-
+    
     this.updateUI();
     document.body.appendChild(this.container);
     this.addStyles();
-
+    
     // Start pulsing animation
     this.startPulseAnimation();
     
     console.log('✅ PulseWidget UI initialized');
   }
-
+  
   /**
-   * Start the pulsing animation for the dot
+   * Start pulsing animation
    */
-  private startPulseAnimation(): void {
+  startPulseAnimation() {
     if (this.pulseInterval) {
       clearInterval(this.pulseInterval);
     }
     
-    this.pulseInterval = window.setInterval(() => {
+    this.pulseInterval = setInterval(() => {
       const dot = document.querySelector('.proovd-pulse-dot');
       if (dot) {
         dot.classList.add('pulse');
         setTimeout(() => {
-          dot?.classList.remove('pulse');
+          if (dot.classList) {
+            dot.classList.remove('pulse');
+          }
         }, 1000);
       }
     }, 2000); // Pulse every 2 seconds
   }
-
+  
   /**
-   * Update the UI with latest data
+   * Update UI with current data
    */
-  private updateUI(): void {
+  updateUI() {
     if (!this.container) return;
-
+    
     this.container.innerHTML = `
       <div class="proovd-pulse-content">
         <div class="proovd-pulse-dot"></div>
@@ -154,20 +123,25 @@ class PulseWidget {
         <div class="proovd-pulse-label">active now</div>
       </div>
     `;
-
+    
     // Add click handler
-    this.container.querySelector('.proovd-pulse-content')?.addEventListener('click', () => {
-      this.container?.classList.toggle('proovd-pulse-expanded');
-    });
+    const content = this.container.querySelector('.proovd-pulse-content');
+    if (content) {
+      content.addEventListener('click', () => {
+        if (this.container) {
+          this.container.classList.toggle('proovd-pulse-expanded');
+        }
+      });
+    }
   }
-
+  
   /**
-   * Add necessary styles to the document
+   * Add styles to document
    */
-  private addStyles(): void {
+  addStyles() {
     // Don't add styles if they already exist
     if (document.getElementById('proovd-pulse-styles')) return;
-
+    
     const style = document.createElement('style');
     style.id = 'proovd-pulse-styles';
     
@@ -177,7 +151,7 @@ class PulseWidget {
     style.textContent = `
       .proovd-pulse-widget {
         position: fixed;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         font-size: 14px;
         line-height: 1.4;
         color: #333;
@@ -280,55 +254,15 @@ class PulseWidget {
         padding: 16px;
       }
     `;
-
-    // Add any custom CSS
-    if (this.options.customCSS) {
-      style.textContent += this.options.customCSS;
-    }
-
+    
     document.head.appendChild(style);
   }
-
-  /**
-   * Handle stats update from socket
-   */
-  private handleStatsUpdate(data: any): void {
-    console.log('🟢 Received stats update:', data);
-    if (data && data.stats && typeof data.stats.activeUsers === 'number') {
-      this.activeUsers = data.stats.activeUsers;
-      this.updateUI();
-    }
-  }
-
-  /**
-   * Handle socket connection
-   */
-  private handleConnect(data: any): void {
-    console.log('✅ Socket connected:', data);
-  }
-
-  /**
-   * Handle socket disconnection
-   */
-  private handleDisconnect(data: any): void {
-    console.log('🔴 Socket disconnected:', data);
-  }
-
-  /**
-   * Handle socket error
-   */
-  private handleError(data: any): void {
-    console.error('❌ Socket error:', data);
-  }
-
+  
   /**
    * Destroy the widget
    */
-  destroy(): void {
-    console.log('🟢 Destroying PulseWidget instance');
-    
-    // Disconnect socket
-    this.socketClient.disconnect();
+  destroy() {
+    console.log('🟢 Destroying PulseWidget');
     
     // Clear pulse interval
     if (this.pulseInterval) {
@@ -352,70 +286,11 @@ class PulseWidget {
 }
 
 /**
- * Interface for PulseWidget options
- */
-interface PulseWidgetOptions {
-  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-  theme?: 'light' | 'dark' | 'auto';
-  showActiveUsers?: boolean;
-  showIcon?: boolean;
-  zIndex?: number;
-  debug?: boolean;
-  customCSS?: string;
-  pulseColor?: string;
-  updateInterval?: number;
-  clientId?: string;
-  socketServer?: string;
-}
-
-// Generate or retrieve client ID
-const CLIENT_ID_KEY = 'proovd_pulse_client_id';
-
-function getClientId(): string {
-  // Check if client ID exists in localStorage
-  const storedId = localStorage.getItem(CLIENT_ID_KEY);
-  if (storedId) {
-    console.log('🟢 Using stored client ID:', storedId);
-    return storedId;
-  }
-  
-  // Generate new client ID
-  const newId = generateUUID();
-  
-  // Try to store it
-  try {
-    localStorage.setItem(CLIENT_ID_KEY, newId);
-    console.log('🟢 Generated and stored new client ID:', newId);
-  } catch (e) {
-    console.error('❌ Failed to store client ID:', e);
-  }
-  
-  return newId;
-}
-
-/**
- * Generate UUID v4
- */
-function generateUUID(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-
-// Global variables
-console.log('🟢 ProovdPulse Widget Script Loaded');
-
-/**
  * Initialize the ProovdPulse Widget
  */
-function init(websiteId: string, options: PulseWidgetOptions = {}): PulseWidget | null {
+function init(websiteId, options = {}) {
   console.log('🟢 ProovdPulse Widget Initializing...', { websiteId, options });
+  
   try {
     // Destroy previous instance if it exists
     if (widgetInstance) {
@@ -423,29 +298,11 @@ function init(websiteId: string, options: PulseWidgetOptions = {}): PulseWidget 
       widgetInstance.destroy();
     }
     
-    // Get client ID
-    const clientId = options.clientId || getClientId();
-    console.log('🟢 Using client ID:', clientId);
-    
-    // Get socket server
-    const socketServer = options.socketServer || 'wss://socket.proovd.in';
-    console.log('🟢 Using socket server:', socketServer);
-    
-    // Force debug for development
-    options.debug = true;
-    
     // Create new instance
-    widgetInstance = new PulseWidget(clientId, websiteId, socketServer, options);
+    widgetInstance = new PulseWidget(websiteId, options);
     
-    // Connect to socket server
-    console.log('🟢 Connecting to socket server...');
-    widgetInstance.connect()
-      .then(() => {
-        console.log('✅ ProovdPulse Widget initialized successfully');
-      })
-      .catch((error) => {
-        console.error('❌ Failed to initialize ProovdPulse Widget:', error);
-      });
+    // Initialize
+    widgetInstance.init();
     
     return widgetInstance;
   } catch (error) {
@@ -457,7 +314,7 @@ function init(websiteId: string, options: PulseWidgetOptions = {}): PulseWidget 
 /**
  * Get the current instance
  */
-function getInstance(): PulseWidget | null {
+function getInstance() {
   return widgetInstance;
 }
 
@@ -471,9 +328,10 @@ window.ProovdPulse = {
 // Auto-initialization from data attributes
 console.log('🟢 Checking for auto-initialization...');
 const scripts = document.querySelectorAll('script[data-website-id]');
+
 if (scripts.length > 0) {
   try {
-    const script = scripts[0] as HTMLElement;
+    const script = scripts[0];
     const websiteId = script.getAttribute('data-website-id');
     const position = script.getAttribute('data-position') || 'bottom-right';
     
@@ -481,18 +339,18 @@ if (scripts.length > 0) {
       console.log('🟢 Auto-initializing ProovdPulse Widget with website ID:', websiteId);
       
       // Parse data attributes as options
-      const options: any = {};
+      const options = {};
       
       // Convert kebab-case data attributes to camelCase options
       for (const attr of Array.from(script.attributes)) {
         if (attr.name.startsWith('data-') && attr.name !== 'data-website-id') {
-          const key = attr.name.substring(5).replace(/-([a-z])/g, (m) => m[1].toUpperCase());
+          const key = attr.name.substring(5).replace(/-([a-z])/g, (_, m) => m.toUpperCase());
           options[key] = attr.value;
         }
       }
       
       console.log('🟢 Auto-initialization options:', options);
-      init(websiteId, { position: position as any, ...options, debug: true });
+      init(websiteId, { position, ...options, debug: true });
     }
   } catch (error) {
     console.error('❌ Error during auto-initialization:', error);
@@ -501,7 +359,7 @@ if (scripts.length > 0) {
 
 // Try to initialize from script URL (for CDN usage)
 try {
-  const script = document.currentScript as HTMLScriptElement;
+  const script = document.currentScript;
   if (script) {
     const src = script.src;
     console.log('🟢 Current script src:', src);
@@ -519,4 +377,4 @@ try {
 }
 
 // Export for module usage
-export { init, getInstance }; 
+export { init, getInstance, PulseWidget }; 
