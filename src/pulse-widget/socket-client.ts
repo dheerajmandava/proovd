@@ -1,7 +1,6 @@
 /**
  * ProovdPulse WebSocket Client
  * Handles communication with the ProovdPulse WebSocket server
- * Simple implementation without authentication
  */
 
 interface PulseMetrics {
@@ -25,6 +24,7 @@ interface PulseOptions {
   serverUrl: string;
   secure?: boolean;
   reconnectMaxAttempts?: number;
+  reconnectDelay?: number;
   debug?: boolean;
 }
 
@@ -46,10 +46,10 @@ export class PulseSocketClient {
   private lastPongTime = 0;
 
   constructor(clientId: string, websiteId: string, serverUrl: string, options: Partial<PulseOptions> = {}) {
-    // Use secure WebSockets if on HTTPS
+    // Determine if we should use secure protocol based on server URL or explicit option
     const useSecure = options.secure !== undefined 
       ? options.secure 
-      : (typeof window !== 'undefined' && window.location.protocol === 'https:');
+      : (typeof window !== 'undefined' && window.location.protocol === 'https:' || serverUrl.startsWith('wss://'));
     
     this.options = {
       clientId,
@@ -57,6 +57,7 @@ export class PulseSocketClient {
       serverUrl,
       secure: useSecure,
       reconnectMaxAttempts: options.reconnectMaxAttempts || 10,
+      reconnectDelay: options.reconnectDelay || 20000, // Fixed 20 second delay
       debug: options.debug || false
     };
     
@@ -90,6 +91,12 @@ export class PulseSocketClient {
           this.log('Connected to WebSocket server');
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          
+          // Send join message
+          this.sendMessage('join', {
+            clientId: this.options.clientId,
+            websiteId: this.options.websiteId
+          });
           
           // Start ping interval for keep-alive
           this.startPingInterval();
@@ -135,16 +142,6 @@ export class PulseSocketClient {
         this.notifyHandlers('error', { error });
         reject(error);
       }
-    });
-  }
-
-  /**
-   * Send a join message to the server
-   */
-  sendJoin(): void {
-    this.sendMessage('join', {
-      clientId: this.options.clientId,
-      websiteId: this.options.websiteId
     });
   }
 
@@ -300,7 +297,7 @@ export class PulseSocketClient {
   }
 
   /**
-   * Attempt to reconnect to the server
+   * Attempt to reconnect to the server with fixed delay
    */
   private attemptReconnect(): void {
     if (this.reconnectTimeout) {
@@ -316,8 +313,8 @@ export class PulseSocketClient {
     
     this.reconnectAttempts++;
     
-    // Fixed delay for all reconnect attempts (simple approach)
-    const delay = 10000; // 10 seconds
+    // Use fixed delay
+    const delay = this.options.reconnectDelay || 20000;  // 20 seconds
     
     this.log(`Scheduling reconnect attempt ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`);
     
