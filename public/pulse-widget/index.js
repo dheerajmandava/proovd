@@ -1,72 +1,116 @@
 /**
- * ProovdPulse Widget
- * -----------------
- * Real-time website visitor tracking and engagement metrics
- * Entry point for the ProovdPulse widget
+ * ProovdPulse Widget Entry Point
+ * This is the main entry point for the ProovdPulse widget
  */
-export { ProovdPulse } from './proovd-pulse';
-// Auto-initialize the widget if it's loaded directly (not imported)
-if (typeof window !== 'undefined' && !window.location.href.includes('localhost')) {
-    // Get website ID from script tag
-    const scripts = document.getElementsByTagName('script');
-    const currentScript = scripts[scripts.length - 1];
-    let websiteId = '';
-    // Extract website ID from the script URL
-    if (currentScript && currentScript.src) {
-        const match = currentScript.src.match(/\/websites\/([^\/]+)\/pulse-widget\.js/);
-        if (match && match[1]) {
-            websiteId = match[1];
-            console.log('ProovdPulse: Detected website ID:', websiteId);
+import { PulseWidget } from './pulse-ui';
+import { generateClientId } from './utils';
+console.log('🟢 ProovdPulse Widget Script Loaded');
+let widgetInstance = null;
+/**
+ * Initialize the ProovdPulse widget
+ */
+function init(websiteId, options = {}) {
+    console.log('🟢 ProovdPulse Widget Initializing...', { websiteId, options });
+    try {
+        // Check if already initialized
+        if (widgetInstance) {
+            console.log('⚠️ ProovdPulse Widget already initialized, destroying previous instance');
+            widgetInstance.destroy();
+        }
+        // Get client ID from storage or generate a new one
+        const clientId = options.clientId || generateClientId();
+        console.log('🟢 Using client ID:', clientId);
+        // Generate websocket URL
+        const socketServer = options.socketServer || 'wss://socket.proovd.in';
+        console.log('🟢 Using socket server:', socketServer);
+        // Ensure debug mode is enabled
+        options.debug = true;
+        // Create widget instance
+        widgetInstance = new PulseWidget(clientId, websiteId, socketServer, options);
+        // Connect and initialize
+        console.log('🟢 Connecting to socket server...');
+        widgetInstance.connect()
+            .then(() => {
+            console.log('✅ ProovdPulse Widget initialized successfully');
+        })
+            .catch(error => {
+            console.error('❌ Failed to initialize ProovdPulse Widget:', error);
+        });
+        // Return the instance
+        return widgetInstance;
+    }
+    catch (error) {
+        console.error('❌ Failed to initialize ProovdPulse Widget:', error);
+        return null;
+    }
+}
+/**
+ * Get the current widget instance
+ */
+function getInstance() {
+    return widgetInstance;
+}
+// Export the ProovdPulse object to the window
+window.ProovdPulse = {
+    init,
+    getInstance,
+    version: '1.0.0'
+};
+// Log info about auto init
+console.log('🟢 Checking for auto-initialization...');
+// Auto-initialize if data-website-id is present
+const scriptTags = document.querySelectorAll('script[data-website-id]');
+if (scriptTags.length > 0) {
+    try {
+        const scriptTag = scriptTags[0];
+        const websiteId = scriptTag.getAttribute('data-website-id');
+        const position = scriptTag.getAttribute('data-position') || 'bottom-right';
+        if (websiteId) {
+            console.log('🟢 Auto-initializing ProovdPulse Widget with website ID:', websiteId);
+            // Get all data attributes
+            const dataAttributes = {};
+            for (const attr of Array.from(scriptTag.attributes)) {
+                if (attr.name.startsWith('data-') && attr.name !== 'data-website-id') {
+                    // Convert kebab-case to camelCase
+                    const optionName = attr.name.substring(5).replace(/-([a-z])/g, g => g[1].toUpperCase());
+                    dataAttributes[optionName] = attr.value;
+                }
+            }
+            console.log('🟢 Auto-initialization options:', dataAttributes);
+            // Initialize with the found website ID and options
+            init(websiteId, {
+                position,
+                ...dataAttributes,
+                debug: true
+            });
         }
     }
-    if (websiteId) {
-        // Wait for DOM to be ready
-        document.addEventListener('DOMContentLoaded', async function () {
-            try {
-                console.log('ProovdPulse: Auto-initializing...');
-                // Auto import to avoid dependency on external imports
-                const { ProovdPulse } = await import('./proovd-pulse');
-                // Create instance and initialize
-                const pulse = new ProovdPulse({
-                    websiteId: websiteId,
-                    debug: true,
-                    serverUrl: 'wss://socket.proovd.in',
-                    container: 'body'
-                });
-                pulse.init().then(() => {
-                    console.log('ProovdPulse: Auto-initialization successful');
-                }).catch(err => {
-                    console.error('ProovdPulse: Auto-initialization failed:', err);
-                });
-            }
-            catch (error) {
-                console.error('ProovdPulse: Error in auto-initialization:', error);
-            }
-        });
-        // Fallback initialization for when DOMContentLoaded has already fired
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-            setTimeout(async function () {
-                try {
-                    console.log('ProovdPulse: Auto-initializing (document already loaded)...');
-                    // Auto import to avoid dependency on external imports
-                    const { ProovdPulse } = await import('./proovd-pulse');
-                    // Create instance and initialize
-                    const pulse = new ProovdPulse({
-                        websiteId: websiteId,
-                        debug: true,
-                        serverUrl: 'wss://socket.proovd.in',
-                        container: 'body'
-                    });
-                    pulse.init().then(() => {
-                        console.log('ProovdPulse: Direct initialization successful');
-                    }).catch(err => {
-                        console.error('ProovdPulse: Direct initialization failed:', err);
-                    });
-                }
-                catch (error) {
-                    console.error('ProovdPulse: Error in direct initialization:', error);
-                }
-            }, 500);
+    catch (error) {
+        console.error('❌ Error during auto-initialization:', error);
+    }
+}
+// Create a self-initializing widget for script URLs of the form: https://proovd.in/p/{websiteId}.js
+try {
+    // Get the current script
+    const currentScript = document.currentScript;
+    if (currentScript) {
+        const scriptSrc = currentScript.src;
+        console.log('🟢 Current script src:', scriptSrc);
+        // Check if it follows the pattern https://proovd.in/p/{websiteId}.js
+        const websiteIdMatch = scriptSrc.match(/\/p\/([a-zA-Z0-9]+)\.js$/);
+        if (websiteIdMatch && websiteIdMatch[1]) {
+            const websiteId = websiteIdMatch[1];
+            console.log('🟢 Detected websiteId from script URL:', websiteId);
+            // Initialize with the extracted website ID
+            init(websiteId, {
+                position: 'bottom-right',
+                debug: true
+            });
         }
     }
 }
+catch (error) {
+    console.error('❌ Error during URL-based initialization:', error);
+}
+// Export for testing
+export { init, getInstance };

@@ -60,11 +60,11 @@ export declare class PulseSocketClient {
      */
     on(type: 'stats' | 'connect' | 'disconnect' | 'error', handler: MessageHandler): void;
     /**
-     * Remove a handler for a specific message type
+     * Unregister a handler for a specific message type
      */
     off(type: 'stats' | 'connect' | 'disconnect' | 'error', handler: MessageHandler): void;
     /**
-     * Check if the connection is active
+     * Check if the socket is currently active and able to send messages
      */
     isActive(): boolean;
     /**
@@ -72,19 +72,19 @@ export declare class PulseSocketClient {
      */
     private sendMessage;
     /**
-     * Notify all handlers of a specific type
+     * Notify all registered handlers for a specific message type
      */
     private notifyHandlers;
     /**
-     * Attempt to reconnect to the server with fixed delay
+     * Attempt to reconnect to the server with exponential backoff
      */
     private attemptReconnect;
     /**
-     * Build the complete WebSocket URL with query parameters
+     * Build the WebSocket URL with query parameters
      */
     private buildWebSocketUrl;
     /**
-     * Log messages if debug is enabled
+     * Log a message to the console if debugging is enabled
      */
     private log;
 }

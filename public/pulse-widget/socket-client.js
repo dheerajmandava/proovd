@@ -16,6 +16,8 @@ export class PulseSocketClient {
         this.isConnected = false;
         this.pingInterval = null;
         this.lastPongTime = 0;
+        // Force debugging on
+        const debugEnabled = true;
         // Determine if we should use secure protocol based on server URL or explicit option
         const useSecure = options.secure !== undefined
             ? options.secure
@@ -27,9 +29,9 @@ export class PulseSocketClient {
             secure: useSecure,
             reconnectMaxAttempts: options.reconnectMaxAttempts || 10,
             reconnectDelay: options.reconnectDelay || 20000, // Fixed 20 second delay
-            debug: options.debug || false
+            debug: debugEnabled
         };
-        this.log('Initialized with options:', this.options);
+        console.log('🟢 PulseSocketClient initialized with options:', this.options);
     }
     /**
      * Connect to the WebSocket server
@@ -37,8 +39,9 @@ export class PulseSocketClient {
     connect() {
         return new Promise((resolve, reject) => {
             try {
+                console.log('🟢 Starting WebSocket connection attempt...');
                 if (this.socket && this.isConnected) {
-                    this.log('Already connected to WebSocket server');
+                    console.log('✅ Already connected to WebSocket server, reusing connection');
                     return resolve();
                 }
                 // Reset reconnection attempts if this is a manual connection
@@ -47,17 +50,31 @@ export class PulseSocketClient {
                 }
                 // Build the WebSocket URL with parameters
                 const wsUrl = this.buildWebSocketUrl();
-                this.log(`Connecting to WebSocket server: ${wsUrl}`);
-                this.socket = new WebSocket(wsUrl);
+                console.log(`🟢 Connecting to WebSocket server: ${wsUrl}`);
+                try {
+                    this.socket = new WebSocket(wsUrl);
+                    console.log('🟢 WebSocket instance created successfully');
+                }
+                catch (err) {
+                    console.error('❌ Failed to create WebSocket instance:', err);
+                    reject(err);
+                    return;
+                }
                 this.socket.onopen = () => {
-                    this.log('Connected to WebSocket server');
+                    console.log('✅ Connected to WebSocket server');
                     this.isConnected = true;
                     this.reconnectAttempts = 0;
                     // Send join message
-                    this.sendMessage('join', {
-                        clientId: this.options.clientId,
-                        websiteId: this.options.websiteId
-                    });
+                    try {
+                        this.sendMessage('join', {
+                            clientId: this.options.clientId,
+                            websiteId: this.options.websiteId
+                        });
+                        console.log('✅ Sent join message to server');
+                    }
+                    catch (err) {
+                        console.error('❌ Failed to send join message:', err);
+                    }
                     // Start ping interval for keep-alive
                     this.startPingInterval();
                     // Notify handlers
@@ -66,37 +83,52 @@ export class PulseSocketClient {
                 };
                 this.socket.onmessage = (event) => {
                     try {
+                        console.log('🟢 Received message from server:', event.data);
                         const data = JSON.parse(event.data);
                         if (data.type === 'stats') {
+                            console.log('🟢 Received stats update:', data);
                             this.notifyHandlers('stats', data);
                         }
                         else if (data.type === 'pong') {
                             this.lastPongTime = Date.now();
-                            this.log('Received pong from server');
+                            console.log('🟢 Received pong from server');
                         }
                     }
                     catch (error) {
-                        this.log('Error parsing message', error);
+                        console.error('❌ Error parsing message:', error);
                     }
                 };
                 this.socket.onclose = (event) => {
-                    this.log(`Connection closed: ${event.code} ${event.reason}`);
+                    console.log(`🔴 Connection closed: ${event.code} ${event.reason}`);
                     this.isConnected = false;
                     this.stopPingInterval();
                     this.notifyHandlers('disconnect', { connected: false, code: event.code, reason: event.reason });
                     // Try to reconnect if not closed deliberately
                     if (event.code !== 1000) {
+                        console.log('🟡 Connection closed unexpectedly, attempting to reconnect...');
                         this.attemptReconnect();
                     }
                 };
                 this.socket.onerror = (error) => {
-                    this.log('WebSocket error', error);
+                    console.error('❌ WebSocket error:', error);
                     this.notifyHandlers('error', { error });
                     reject(error);
                 };
+                // Safety timeout in case onopen never fires
+                setTimeout(() => {
+                    if (this.socket && this.socket.readyState !== WebSocket.OPEN && !this.isConnected) {
+                        console.error('❌ Connection timeout - WebSocket did not connect within 10 seconds');
+                        if (this.socket.readyState === WebSocket.CONNECTING) {
+                            console.log('🟡 Socket still in CONNECTING state, closing it...');
+                            this.socket.close();
+                            this.socket = null;
+                        }
+                        reject(new Error('Connection timeout'));
+                    }
+                }, 10000);
             }
             catch (error) {
-                this.log('Failed to connect', error);
+                console.error('❌ Failed to connect:', error);
                 this.notifyHandlers('error', { error });
                 reject(error);
             }
@@ -106,6 +138,7 @@ export class PulseSocketClient {
      * Send activity metrics to the server
      */
     sendActivity(metrics) {
+        console.log('🟢 Sending activity metrics:', metrics);
         this.sendMessage('activity', {
             clientId: this.options.clientId,
             websiteId: this.options.websiteId,
@@ -116,6 +149,7 @@ export class PulseSocketClient {
      * Send a ping to keep the connection alive
      */
     sendPing() {
+        console.log('🟢 Sending ping to server');
         this.sendMessage('ping', {
             clientId: this.options.clientId,
             timestamp: Date.now()
@@ -127,15 +161,21 @@ export class PulseSocketClient {
     startPingInterval() {
         this.stopPingInterval();
         this.lastPongTime = Date.now();
+        console.log('🟢 Starting ping interval (30s)');
         this.pingInterval = setInterval(() => {
             if (this.isActive()) {
                 this.sendPing();
                 // Check if we received a pong recently
                 const now = Date.now();
-                if (now - this.lastPongTime > 60000) {
-                    this.log('No pong received for 60 seconds, reconnecting...');
+                const timeSinceLastPong = now - this.lastPongTime;
+                console.log(`🟢 Time since last pong: ${Math.round(timeSinceLastPong / 1000)}s`);
+                if (timeSinceLastPong > 60000) {
+                    console.error('❌ No pong received for 60 seconds, reconnecting...');
                     this.reconnect();
                 }
+            }
+            else {
+                console.log('🟡 Socket not active, skipping ping');
             }
         }, 30000); // 30 seconds
     }
@@ -144,6 +184,7 @@ export class PulseSocketClient {
      */
     stopPingInterval() {
         if (this.pingInterval !== null) {
+            console.log('🟢 Stopping ping interval');
             clearInterval(this.pingInterval);
             this.pingInterval = null;
         }
@@ -152,6 +193,7 @@ export class PulseSocketClient {
      * Send a leave message and close the connection
      */
     disconnect() {
+        console.log('🟢 Disconnecting from server...');
         if (this.socket && this.isConnected) {
             this.sendMessage('leave', {
                 clientId: this.options.clientId,
@@ -169,6 +211,7 @@ export class PulseSocketClient {
      * Force a reconnection
      */
     reconnect() {
+        console.log('🟢 Forcing reconnection...');
         if (this.socket) {
             this.socket.close(1001);
         }
@@ -176,8 +219,9 @@ export class PulseSocketClient {
             clearTimeout(this.reconnectTimeout);
         }
         this.reconnectTimeout = setTimeout(() => {
+            console.log('🟢 Executing reconnection...');
             this.connect().catch(error => {
-                this.log('Reconnect failed', error);
+                console.error('❌ Reconnect failed:', error);
             });
         }, 100);
     }
@@ -189,21 +233,25 @@ export class PulseSocketClient {
             this.handlers[type] = [];
         }
         this.handlers[type].push(handler);
+        console.log(`🟢 Added handler for event type: ${type}, total handlers: ${this.handlers[type].length}`);
     }
     /**
-     * Remove a handler for a specific message type
+     * Unregister a handler for a specific message type
      */
     off(type, handler) {
         if (this.handlers[type]) {
             this.handlers[type] = this.handlers[type].filter(h => h !== handler);
+            console.log(`🟢 Removed handler for event type: ${type}, remaining handlers: ${this.handlers[type].length}`);
         }
     }
     /**
-     * Check if the connection is active
+     * Check if the socket is currently active and able to send messages
      */
     isActive() {
         var _a;
-        return this.isConnected && ((_a = this.socket) === null || _a === void 0 ? void 0 : _a.readyState) === WebSocket.OPEN;
+        const isActive = this.isConnected && ((_a = this.socket) === null || _a === void 0 ? void 0 : _a.readyState) === WebSocket.OPEN;
+        // console.log(`🟢 Socket active: ${isActive}, connected: ${this.isConnected}, readyState: ${this.socket?.readyState}`);
+        return isActive;
     }
     /**
      * Send a message to the server
@@ -211,36 +259,36 @@ export class PulseSocketClient {
     sendMessage(type, data) {
         if (this.socket && this.isConnected) {
             try {
-                this.socket.send(JSON.stringify({
-                    type,
-                    ...data
-                }));
+                const message = JSON.stringify({ type, ...data });
+                this.socket.send(message);
+                console.log(`🟢 Sent message to server: ${type}`);
             }
             catch (error) {
-                this.log('Error sending message', error);
+                console.error(`❌ Error sending message: ${type}`, error);
             }
         }
         else {
-            this.log('Cannot send message, not connected');
+            console.log(`🟡 Cannot send message "${type}", not connected (connected: ${this.isConnected}, socket: ${this.socket ? 'exists' : 'null'})`);
         }
     }
     /**
-     * Notify all handlers of a specific type
+     * Notify all registered handlers for a specific message type
      */
     notifyHandlers(type, data) {
         if (this.handlers[type]) {
+            console.log(`🟢 Notifying ${this.handlers[type].length} handlers for event type: ${type}`);
             this.handlers[type].forEach(handler => {
                 try {
                     handler(data);
                 }
                 catch (error) {
-                    this.log(`Error in ${type} handler`, error);
+                    console.error(`❌ Error in ${type} handler`, error);
                 }
             });
         }
     }
     /**
-     * Attempt to reconnect to the server with fixed delay
+     * Attempt to reconnect to the server with exponential backoff
      */
     attemptReconnect() {
         if (this.reconnectTimeout) {
@@ -248,35 +296,32 @@ export class PulseSocketClient {
         }
         const maxAttempts = this.options.reconnectMaxAttempts || 5;
         if (this.reconnectAttempts >= maxAttempts) {
-            this.log(`Maximum reconnect attempts (${maxAttempts}) reached`);
+            console.log(`🟡 Maximum reconnect attempts (${maxAttempts}) reached, giving up`);
             return;
         }
         this.reconnectAttempts++;
-        // Use fixed delay
-        const delay = this.options.reconnectDelay || 20000; // 20 seconds
-        this.log(`Scheduling reconnect attempt ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`);
+        // Use fixed delay from options
+        const delay = this.options.reconnectDelay || 20000;
+        console.log(`🟡 Scheduling reconnect attempt ${this.reconnectAttempts}/${maxAttempts} in ${delay}ms`);
         this.reconnectTimeout = setTimeout(() => {
-            this.log(`Attempting to reconnect (${this.reconnectAttempts}/${maxAttempts})...`);
+            console.log(`🟢 Attempting to reconnect (${this.reconnectAttempts}/${maxAttempts})...`);
             this.connect().catch(error => {
-                this.log('Reconnect failed', error);
+                console.error('❌ Reconnect failed:', error);
             });
         }, delay);
     }
     /**
-     * Build the complete WebSocket URL with query parameters
+     * Build the WebSocket URL with query parameters
      */
     buildWebSocketUrl() {
-        // Get base URL
-        let wsUrl = this.options.serverUrl;
-        // Build query parameters
+        let url = this.options.serverUrl;
         const params = new URLSearchParams();
         params.append('clientId', this.options.clientId);
         params.append('websiteId', this.options.websiteId);
-        // Return complete URL
-        return `${wsUrl}?${params.toString()}`;
+        return `${url}?${params.toString()}`;
     }
     /**
-     * Log messages if debug is enabled
+     * Log a message to the console if debugging is enabled
      */
     log(message, ...args) {
         if (this.options.debug) {

@@ -1,8 +1,23 @@
 /**
- * ProovdPulse Widget
- * -----------------
- * Real-time website visitor tracking and engagement metrics
- * Entry point for the ProovdPulse widget
+ * ProovdPulse Widget Entry Point
+ * This is the main entry point for the ProovdPulse widget
  */
-export { ProovdPulse } from './proovd-pulse';
-export type { PulseUIOptions } from './pulse-ui';
+import { PulseWidget } from './pulse-ui';
+declare global {
+    interface Window {
+        ProovdPulse?: {
+            init: (websiteId: string, options?: any) => void;
+            getInstance: () => PulseWidget | null;
+            version: string;
+        };
+    }
+}
+/**
+ * Initialize the ProovdPulse widget
+ */
+declare function init(websiteId: string, options?: any): PulseWidget | null;
+/**
+ * Get the current widget instance
+ */
+declare function getInstance(): PulseWidget | null;
+export { init, getInstance };

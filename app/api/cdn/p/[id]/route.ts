@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server';
-import { isValidObjectId } from 'mongoose';
+import { NextRequest, NextResponse } from 'next/server';
 import { getWebsiteById } from '@/app/lib/services/website.service';
+
+// Debug timestamp for cache busting
+const BUILD_TIMESTAMP = new Date().toISOString();
 
 /**
  * GET /api/cdn/p/[id]
@@ -8,84 +10,95 @@ import { getWebsiteById } from '@/app/lib/services/website.service';
  * Returns a simple JavaScript loader for the ProovdPulse widget
  * This is a public endpoint that users will include in their websites using a simple script tag
  */
-export async function GET(request, props) {
-  const params = await props.params;
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  console.log(`[ProovdPulse] Loading script for website ID: ${params.id}`);
+  
+  // Validate the ID format
+  if (!params.id.match(/^[0-9a-fA-F]{24}$/)) {
+    console.error(`[ProovdPulse] Invalid website ID format: ${params.id}`);
+    return NextResponse.json({ error: 'Invalid website ID format' }, { status: 400 });
+  }
+
   try {
-    // Get the website ID from the params
-    const { id } = params;
-    
-    // Validate the ID format
-    if (!id || !isValidObjectId(id)) {
-      return new NextResponse(`console.error("Invalid website ID format");`, {
-        status: 400,
-        headers: {
-          'Content-Type': 'application/javascript',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET',
-          'Access-Control-Max-Age': '86400',
-        },
-      });
+    // Check if website exists
+    const website = await getWebsiteById(params.id);
+    if (!website) {
+      console.error(`[ProovdPulse] Website not found: ${params.id}`);
+      return NextResponse.json({ error: 'Website not found' }, { status: 404 });
     }
-    
-    // Verify the website exists
-    try {
-      const website = await getWebsiteById(id);
-      if (!website) {
-        return new NextResponse(`console.error("Website ID not found");`, {
-          status: 404,
-          headers: {
-            'Content-Type': 'application/javascript',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET',
-            'Access-Control-Max-Age': '86400',
-          },
-        });
-      }
-    } catch (error) {
-      console.error('Error verifying website:', error);
-      // Continue even if website verification fails
-    }
-    
-    // Use the same domain for the widget script
-    const host = request.headers.get('host') || '';
-    const protocol = host.includes('localhost') ? 'http' : 'https';
-    const baseUrl = `${protocol}://${host}`;
-    
-    // Create a direct loader script - much simpler approach
-    const loaderScript = `
+
+    // Create the loader script with cache-busting
+    const script = `
       // ProovdPulse Widget Loader
+      // Version: 1.1.0
+      // Website ID: ${params.id}
+      // Build: ${BUILD_TIMESTAMP}
+      
       (function() {
-        // Load the widget directly from the API endpoint
+        console.log("🟢 ProovdPulse Loader Starting - Website ID: ${params.id}");
+        
+        // Load the main script with cache busting
         const script = document.createElement('script');
+        script.src = "/public/pulse-widget.min.js?t=" + new Date().getTime();
         script.async = true;
-        script.src = "${baseUrl}/api/websites/${id}/pulse-widget.js";
+        script.setAttribute('data-website-id', "${params.id}");
+        script.setAttribute('data-position', "bottom-right");
+        
+        // Handle script loading errors
+        script.onerror = function() {
+          console.error("❌ Failed to load ProovdPulse widget script");
+        };
+        
+        // Handle successful loading
+        script.onload = function() {
+          console.log("✅ ProovdPulse widget script loaded successfully");
+        };
+        
+        // Add to document
         document.head.appendChild(script);
+        
+        // Debug information
+        console.log("ℹ️ Widget configuration:", {
+          websiteId: "${params.id}",
+          timestamp: new Date().toISOString(),
+          serverTimestamp: "${BUILD_TIMESTAMP}"
+        });
       })();
     `;
-    
-    // Return the loader script with appropriate headers
-    return new NextResponse(loaderScript, {
+
+    // Create response with JavaScript content type
+    const response = new NextResponse(script, {
       headers: {
         'Content-Type': 'application/javascript',
-        'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        // CORS headers for cross-origin use
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET',
-        'Access-Control-Max-Age': '86400',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
       },
     });
-    
+
+    return response;
   } catch (error) {
-    console.error('Error generating ProovdPulse loader:', error);
-    
-    // Return an error script
-    return new NextResponse(`console.error("Error loading ProovdPulse widget");`, {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/javascript',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET',
-        'Access-Control-Max-Age': '86400',
-      },
-    });
+    console.error(`[ProovdPulse] Error serving pulse script:`, error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+// Handle preflight requests
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
 } 

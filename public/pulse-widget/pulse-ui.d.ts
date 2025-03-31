@@ -1,46 +1,62 @@
 /**
  * ProovdPulse UI Component
- * Renders the visual elements of the ProovdPulse widget
+ * Controls the display of the ProovdPulse widget UI
  */
 export interface PulseUIOptions {
-    container: string | HTMLElement;
-    theme?: 'light' | 'dark';
     position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-    showPulse?: boolean;
-    pulseColor?: string;
-    textColor?: string;
-    backgroundColor?: string;
-    fontFamily?: string;
-    fontSize?: string;
-    borderRadius?: string;
-    boxShadow?: string;
+    theme?: 'light' | 'dark' | 'auto';
+    showActiveUsers?: boolean;
+    showIcon?: boolean;
+    customCSS?: string;
     zIndex?: number;
+    debug?: boolean;
 }
-export declare class PulseUI {
+export declare class PulseWidget {
+    private socketClient;
     private container;
-    private widget;
-    private userCountElement;
     private options;
     private activeUsers;
-    constructor(options: PulseUIOptions);
+    private websiteId;
+    private clientId;
+    private serverUrl;
     /**
-     * Create and mount the widget
+     * Create a new PulseWidget instance
      */
-    mount(): void;
+    constructor(clientId: string, websiteId: string, serverUrl: string, options?: PulseUIOptions);
     /**
-     * Update the active user count
+     * Connect to the socket server and initialize the UI
      */
-    updateUserCount(count: number): void;
+    connect(): Promise<void>;
     /**
-     * Unmount the widget
+     * Initialize the UI
      */
-    unmount(): void;
+    private initUI;
     /**
-     * Apply CSS styles to an element
+     * Update the UI with the latest data
      */
-    private applyStyles;
+    private updateUI;
     /**
-     * Get position styles based on the position option
+     * Add the required styles to the document
      */
-    private getPositionStyles;
+    private addStyles;
+    /**
+     * Handle stats update from the socket server
+     */
+    private handleStatsUpdate;
+    /**
+     * Handle socket connection
+     */
+    private handleConnect;
+    /**
+     * Handle socket disconnection
+     */
+    private handleDisconnect;
+    /**
+     * Handle socket error
+     */
+    private handleError;
+    /**
+     * Destroy the widget instance
+     */
+    destroy(): void;
 }
