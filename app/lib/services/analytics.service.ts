@@ -1,12 +1,9 @@
 import { connectToDatabase, mongoose } from '../database/connection';
 import Notification from '../models/notification';
 import Metric from '../models/metric';
-import { 
-  getMetricsTimeSeries as getMetricsTimeSeriesUtil, 
-  getTopNotifications as getTopNotificationsUtil 
-} from '@/app/lib/analytics';
+import { getMetricsTimeSeries as getMetricsTimeSeriesUtil } from '@/app/lib/analytics';
 import { AnalyticsEvent, AnalyticsSummary } from '../models/analytics';
-import { startOfDay, startOfWeek, startOfMonth, endOfDay, endOfWeek, endOfMonth } from 'date-fns';
+import { startOfDay, startOfWeek, startOfMonth } from 'date-fns';
 
 // Types from analytics.ts
 type TimeRange = 'day' | 'week' | 'month' | 'year';
@@ -94,25 +91,6 @@ export async function getWebsiteTimeSeries(
     : 'day';
     
   return await getMetricsTimeSeriesUtil(websiteObjectId, validTimeRange, validGroupBy);
-}
-
-/**
- * Get top performing notifications for a website
- * @param websiteId Website ID
- * @param limit Maximum number of notifications to return
- * @returns Top notifications
- */
-export async function getTopNotifications(
-  websiteId: string,
-  limit: number = 5
-): Promise<any> {
-  if (!websiteId || !mongoose.Types.ObjectId.isValid(websiteId)) {
-    return [];
-  }
-  
-  // Convert string ID to mongoose ObjectId
-  const websiteObjectId = new mongoose.Types.ObjectId(websiteId);
-  return await getTopNotificationsUtil(websiteObjectId, limit);
 }
 
 /**
@@ -407,14 +385,14 @@ export async function getNotificationAnalytics(notificationId: string, options: 
  * Get top performing notifications
  */
 export async function getTopNotifications(websiteId: string, options: {
-  metric: 'impressions' | 'clicks' | 'conversionRate';
+  metric?: 'impressions' | 'clicks' | 'conversionRate';
   limit?: number;
   startDate?: Date;
   endDate?: Date;
-}) {
+} = {}) {
   await connectToDatabase();
 
-  const { metric, limit = 10, startDate, endDate } = options;
+  const { metric = 'impressions', limit = 10, startDate, endDate } = options;
 
   // Default to last 30 days if no dates provided
   const end = endDate || new Date();
