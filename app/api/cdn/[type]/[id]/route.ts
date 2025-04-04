@@ -29,17 +29,26 @@ export async function GET(
         // Configuration
         const websiteId = '${id}';
         const config = ${JSON.stringify(website.settings || {})};
-        const apiBase = '${process.env.NEXT_PUBLIC_API_URL || ''}';
+        const PROOVD_DOMAIN = 'https://www.proovd.in';
         
         // Tracking function
         async function track(type, notificationId) {
           try {
-            await fetch(\`\${apiBase}/api/notifications/\${notificationId}/\${type}\`, {
+            await fetch(\`\${PROOVD_DOMAIN}/api/notifications/\${notificationId}/\${type}\`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Origin': window.location.origin
+              },
               body: JSON.stringify({
                 websiteId,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                metadata: {
+                  url: window.location.href,
+                  referrer: document.referrer,
+                  userAgent: navigator.userAgent,
+                  deviceType: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
+                }
               })
             });
           } catch (error) {
@@ -95,6 +104,16 @@ export async function GET(
                 opacity: 1;
               }
             }
+            @keyframes proovdSlideOut {
+              from {
+                transform: translateY(0);
+                opacity: 1;
+              }
+              to {
+                transform: translateY(100%);
+                opacity: 0;
+              }
+            }
             .proovd-notification h4 {
               margin: 0 0 8px 0;
               font-size: 16px;
@@ -141,7 +160,7 @@ export async function GET(
         // Fetch and display notifications
         async function fetchNotifications() {
           try {
-            const response = await fetch(\`\${apiBase}/api/websites/\${websiteId}/notifications/show\`);
+            const response = await fetch(\`\${PROOVD_DOMAIN}/api/websites/\${websiteId}/notifications/show\`);
             if (!response.ok) throw new Error('Failed to fetch notifications');
             
             const data = await response.json();
