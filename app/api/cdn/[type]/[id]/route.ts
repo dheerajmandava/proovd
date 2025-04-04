@@ -31,10 +31,10 @@ export async function GET(
         const config = ${JSON.stringify(website.settings || {})};
         const PROOVD_DOMAIN = 'https://www.proovd.in';
         
-        // Tracking function
-        async function track(type, notificationId) {
+        // Tracking function with callback
+        async function track(type, notificationId, callback = null) {
           try {
-            await fetch(\`\${PROOVD_DOMAIN}/api/notifications/\${notificationId}/\${type}\`, {
+            const response = await fetch(\`\${PROOVD_DOMAIN}/api/notifications/\${notificationId}/\${type}\`, {
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json',
@@ -49,10 +49,24 @@ export async function GET(
                   userAgent: navigator.userAgent,
                   deviceType: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
                 }
-              })
+              }),
+              credentials: 'include'
             });
+
+            if (!response.ok) {
+              throw new Error(\`Tracking failed with status \${response.status}\`);
+            }
+
+            // Execute callback if provided and tracking was successful
+            if (typeof callback === 'function') {
+              callback();
+            }
           } catch (error) {
             console.error('Failed to track event:', error);
+            // If tracking fails, still execute callback
+            if (typeof callback === 'function') {
+              callback();
+            }
           }
         }
 
@@ -65,13 +79,43 @@ export async function GET(
           const theme = config.theme || 'light';
           container.classList.add(\`proovd-theme-\${theme}\`);
           
-          container.innerHTML = \`
-            <div class="proovd-content">
-              <h4>\${notification.title}</h4>
-              <p>\${notification.message}</p>
-              \${notification.link ? \`<a href="\${notification.link}" target="_blank">Learn More</a>\` : ''}
-            </div>
-          \`;
+          // Create notification content
+          const content = document.createElement('div');
+          content.className = 'proovd-content';
+          
+          // Add title
+          const title = document.createElement('h4');
+          title.textContent = notification.title;
+          content.appendChild(title);
+          
+          // Add message
+          const message = document.createElement('p');
+          message.textContent = notification.message;
+          content.appendChild(message);
+          
+          // Add link if present
+          if (notification.link) {
+            const link = document.createElement('a');
+            link.href = notification.link;
+            link.textContent = 'Learn More';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            
+            // Handle click tracking
+            link.addEventListener('click', function(e) {
+              e.preventDefault(); // Prevent immediate navigation
+              const href = this.href; // Store the URL
+              
+              // Track click then navigate
+              track('click', notification._id, function() {
+                window.open(href, '_blank');
+              });
+            });
+            
+            content.appendChild(link);
+          }
+          
+          container.appendChild(content);
 
           // Position the notification based on settings
           const position = config.position || 'bottom-right';
@@ -88,8 +132,23 @@ export async function GET(
             borderRadius: '8px',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
             maxWidth: '400px',
-            animation: 'proovdSlideIn 0.3s ease-out'
+            animation: 'proovdSlideIn 0.3s ease-out',
+            cursor: notification.link ? 'pointer' : 'default'
           });
+
+          // Make entire notification clickable if there's a link
+          if (notification.link) {
+            container.addEventListener('click', function(e) {
+              if (e.target.tagName !== 'A') { // Don't trigger twice for link clicks
+                e.preventDefault();
+                const href = notification.link;
+                
+                track('click', notification._id, function() {
+                  window.open(href, '_blank');
+                });
+              }
+            });
+          }
 
           // Add animation styles
           const style = document.createElement('style');
@@ -114,6 +173,13 @@ export async function GET(
                 opacity: 0;
               }
             }
+            .proovd-notification {
+              transition: transform 0.2s ease, box-shadow 0.2s ease;
+            }
+            .proovd-notification:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+            }
             .proovd-notification h4 {
               margin: 0 0 8px 0;
               font-size: 16px;
@@ -129,6 +195,7 @@ export async function GET(
               text-decoration: none;
               font-size: 14px;
               font-weight: 500;
+              display: inline-block;
             }
             .proovd-notification a:hover {
               text-decoration: underline;
@@ -143,13 +210,6 @@ export async function GET(
           // Track impression
           track('impression', notification._id);
 
-          // Track clicks if there's a link
-          if (notification.link) {
-            container.querySelector('a').addEventListener('click', () => {
-              track('click', notification._id);
-            });
-          }
-
           // Auto-hide after duration
           setTimeout(() => {
             container.style.animation = 'proovdSlideOut 0.3s ease-in forwards';
@@ -160,7 +220,9 @@ export async function GET(
         // Fetch and display notifications
         async function fetchNotifications() {
           try {
-            const response = await fetch(\`\${PROOVD_DOMAIN}/api/websites/\${websiteId}/notifications/show\`);
+            const response = await fetch(\`\${PROOVD_DOMAIN}/api/websites/\${websiteId}/notifications/show\`, {
+              credentials: 'include'
+            });
             if (!response.ok) throw new Error('Failed to fetch notifications');
             
             const data = await response.json();
@@ -204,7 +266,10 @@ export async function GET(
     return new NextResponse(script, {
       headers: {
         'Content-Type': 'application/javascript',
-        'Cache-Control': 'public, max-age=3600'
+        'Cache-Control': 'public, max-age=3600',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
       }
     });
   } catch (error) {
