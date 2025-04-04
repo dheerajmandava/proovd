@@ -29,23 +29,17 @@ export async function GET(
         // Configuration
         const websiteId = '${id}';
         const config = ${JSON.stringify(website.settings || {})};
+        const apiBase = '${process.env.NEXT_PUBLIC_API_URL || ''}';
         
         // Tracking function
-        async function track(event, notificationId, metadata = {}) {
+        async function track(type, notificationId) {
           try {
-            await fetch(\`/api/websites/\${websiteId}/track\`, {
+            await fetch(\`\${apiBase}/api/notifications/\${notificationId}/\${type}\`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                event,
-                notificationId,
-                timestamp: new Date().toISOString(),
-                metadata: {
-                  ...metadata,
-                  url: window.location.href,
-                  referrer: document.referrer,
-                  userAgent: navigator.userAgent
-                }
+                websiteId,
+                timestamp: new Date().toISOString()
               })
             });
           } catch (error) {
@@ -57,22 +51,74 @@ export async function GET(
         function showNotification(notification) {
           const container = document.createElement('div');
           container.className = 'proovd-notification';
+          
+          // Apply theme styles
+          const theme = config.theme || 'light';
+          container.classList.add(\`proovd-theme-\${theme}\`);
+          
           container.innerHTML = \`
             <div class="proovd-content">
               <h4>\${notification.title}</h4>
               <p>\${notification.message}</p>
-              \${notification.link ? \`<a href="\${notification.link}">Learn More</a>\` : ''}
+              \${notification.link ? \`<a href="\${notification.link}" target="_blank">Learn More</a>\` : ''}
             </div>
           \`;
 
           // Position the notification based on settings
+          const position = config.position || 'bottom-right';
+          const [vertical, horizontal] = position.split('-');
+          
           Object.assign(container.style, {
             position: 'fixed',
-            [config.position || 'bottom-right']: '20px',
+            [vertical]: '20px',
+            [horizontal]: '20px',
             zIndex: '9999',
-            // Add more styles based on theme
+            backgroundColor: theme === 'light' ? '#ffffff' : '#1a1a1a',
+            color: theme === 'light' ? '#000000' : '#ffffff',
+            padding: '15px 20px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+            maxWidth: '400px',
+            animation: 'proovdSlideIn 0.3s ease-out'
           });
 
+          // Add animation styles
+          const style = document.createElement('style');
+          style.textContent = \`
+            @keyframes proovdSlideIn {
+              from {
+                transform: translateY(100%);
+                opacity: 0;
+              }
+              to {
+                transform: translateY(0);
+                opacity: 1;
+              }
+            }
+            .proovd-notification h4 {
+              margin: 0 0 8px 0;
+              font-size: 16px;
+              font-weight: 600;
+            }
+            .proovd-notification p {
+              margin: 0 0 12px 0;
+              font-size: 14px;
+              line-height: 1.5;
+            }
+            .proovd-notification a {
+              color: #007bff;
+              text-decoration: none;
+              font-size: 14px;
+              font-weight: 500;
+            }
+            .proovd-notification a:hover {
+              text-decoration: underline;
+            }
+            .proovd-theme-dark a {
+              color: #66b3ff;
+            }
+          \`;
+          document.head.appendChild(style);
           document.body.appendChild(container);
 
           // Track impression
@@ -87,23 +133,42 @@ export async function GET(
 
           // Auto-hide after duration
           setTimeout(() => {
-            container.remove();
+            container.style.animation = 'proovdSlideOut 0.3s ease-in forwards';
+            setTimeout(() => container.remove(), 300);
           }, (config.displayDuration || 5) * 1000);
         }
 
         // Fetch and display notifications
         async function fetchNotifications() {
           try {
-            const response = await fetch(\`/api/websites/\${websiteId}/notifications\`);
+            const response = await fetch(\`\${apiBase}/api/websites/\${websiteId}/notifications/show\`);
+            if (!response.ok) throw new Error('Failed to fetch notifications');
+            
             const data = await response.json();
             
             if (data.notifications?.length) {
+              // Randomize if configured
+              let notifications = [...data.notifications];
+              if (config.randomize) {
+                notifications.sort(() => Math.random() - 0.5);
+              }
+              
+              // Limit number of notifications
+              notifications = notifications.slice(0, config.maxNotifications || 5);
+              
               // Show notifications with delay between each
-              data.notifications.forEach((notification, index) => {
+              notifications.forEach((notification, index) => {
                 setTimeout(() => {
                   showNotification(notification);
                 }, (config.delay || 5) * 1000 * index);
               });
+              
+              // Loop if configured
+              if (config.loop) {
+                setTimeout(fetchNotifications, 
+                  ((config.delay || 5) * notifications.length + (config.displayDuration || 5)) * 1000
+                );
+              }
             }
           } catch (error) {
             console.error('Failed to fetch notifications:', error);
