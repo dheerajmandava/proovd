@@ -14,7 +14,7 @@ export default function SetupGuide({ websiteId }: SetupGuideProps) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
   // Script tag that needs to be added to the customer's website
-  const scriptTag = `<script src="${origin}/api/cdn/w/${websiteId}"></script>`;
+  const scriptTag = `<script src="${origin}/api/cdn/n/${websiteId}"></script>`;
 
   // Installation steps
   const steps = [

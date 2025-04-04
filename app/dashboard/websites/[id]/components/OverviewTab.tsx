@@ -141,7 +141,7 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
   }
 
   // Generate the installation code snippet with proper website ID
-  const installationCode = `<script src="https://cdn.proovd.in/w/${websiteId}"></script>`;
+  const installationCode = `<script src="https://cdn.proovd.in/w/${websiteId}.js"></script>`;
 
   // Update the conversion rate rendering to safely handle division by zero
   const renderConversionRate = () => {
