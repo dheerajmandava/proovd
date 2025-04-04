@@ -7,53 +7,63 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const { event, notificationId, timestamp, metadata } = await request.json();
     const websiteId = params.id;
-    const body = await request.json();
-    const { event, notificationId, timestamp = new Date().toISOString() } = body;
-
-    if (!['impression', 'click'].includes(event)) {
-      return NextResponse.json(
-        { error: 'Invalid event type' },
-        { status: 400 }
-      );
-    }
 
     const { db } = await connectToDatabase();
 
-    // Record the event
-    await db.collection('analytics_events').insertOne({
+    // Validate the event type
+    if (!['impression', 'click', 'conversion'].includes(event)) {
+      return NextResponse.json({ error: 'Invalid event type' }, { status: 400 });
+    }
+
+    // Create the analytics event
+    const analyticsEvent = {
       websiteId: new ObjectId(websiteId),
-      notificationId: new ObjectId(notificationId),
+      notificationId: notificationId ? new ObjectId(notificationId) : null,
       event,
       timestamp: new Date(timestamp),
-      metadata: body.metadata || {}
-    });
+      metadata: {
+        ...metadata,
+        url: metadata.url,
+        referrer: metadata.referrer,
+        userAgent: metadata.userAgent,
+        sessionId: metadata.sessionId,
+      },
+    };
+
+    // Insert the event
+    await db.collection('analytics_events').insertOne(analyticsEvent);
 
     // Update aggregated metrics
-    const updateField = event === 'impression' ? 'impressions' : 'clicks';
-    await db.collection('notifications').updateOne(
-      { _id: new ObjectId(notificationId) },
-      { 
-        $inc: { 
-          [`metrics.${updateField}`]: 1,
-          ...(event === 'impression' ? { 'metrics.uniqueImpressions': 1 } : {})
-        } 
-      }
-    );
+    const updateQuery = {
+      $inc: {
+        [`metrics.${event}s`]: 1,
+        ...(event === 'impression' && { 'metrics.totalImpressions': 1 }),
+        ...(event === 'click' && { 'metrics.totalClicks': 1 }),
+      },
+      $set: {
+        lastUpdated: new Date(),
+      },
+    };
 
-    // Update website analytics
+    // Update website metrics
     await db.collection('websites').updateOne(
       { _id: new ObjectId(websiteId) },
-      {
-        $inc: {
-          [`analytics.total${event === 'impression' ? 'Impressions' : 'Clicks'}`]: 1
-        }
-      }
+      updateQuery
     );
+
+    // If this is for a specific notification, update its metrics too
+    if (notificationId) {
+      await db.collection('notifications').updateOne(
+        { _id: new ObjectId(notificationId) },
+        updateQuery
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error tracking event:', error);
+    console.error('Tracking error:', error);
     return NextResponse.json(
       { error: 'Failed to track event' },
       { status: 500 }
