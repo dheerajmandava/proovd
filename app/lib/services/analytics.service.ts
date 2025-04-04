@@ -5,6 +5,8 @@ import {
   getMetricsTimeSeries as getMetricsTimeSeriesUtil, 
   getTopNotifications as getTopNotificationsUtil 
 } from '@/app/lib/analytics';
+import { AnalyticsEvent, AnalyticsSummary } from '../models/analytics';
+import { startOfDay, startOfWeek, startOfMonth, endOfDay, endOfWeek, endOfMonth } from 'date-fns';
 
 // Types from analytics.ts
 type TimeRange = 'day' | 'week' | 'month' | 'year';
@@ -218,4 +220,236 @@ export async function getAnalyticsDaily(userId: string, days: number = 7): Promi
   ]);
   
   return dailyStats;
+}
+
+/**
+ * Track an analytics event (impression or click)
+ */
+export async function trackEvent(data: {
+  websiteId: string;
+  notificationId: string;
+  type: 'impression' | 'click';
+  metadata?: {
+    url?: string;
+    referrer?: string;
+    userAgent?: string;
+    deviceType?: string;
+    country?: string;
+  };
+}) {
+  await connectToDatabase();
+
+  // Create event
+  const event = new AnalyticsEvent({
+    websiteId: data.websiteId,
+    notificationId: data.notificationId,
+    type: data.type,
+    metadata: data.metadata || {}
+  });
+  await event.save();
+
+  // Update summaries
+  await Promise.all([
+    updateSummary('daily', data),
+    updateSummary('weekly', data),
+    updateSummary('monthly', data)
+  ]);
+
+  return event;
+}
+
+/**
+ * Update analytics summary for a specific granularity
+ */
+async function updateSummary(
+  granularity: 'daily' | 'weekly' | 'monthly',
+  data: {
+    websiteId: string;
+    notificationId: string;
+    type: 'impression' | 'click';
+  }
+) {
+  // Get start of period based on granularity
+  const now = new Date();
+  const periodStart = {
+    daily: startOfDay(now),
+    weekly: startOfWeek(now),
+    monthly: startOfMonth(now)
+  }[granularity];
+
+  // Find or create summary
+  let summary = await AnalyticsSummary.findOne({
+    websiteId: data.websiteId,
+    date: periodStart,
+    granularity
+  });
+
+  if (!summary) {
+    summary = new AnalyticsSummary({
+      websiteId: data.websiteId,
+      date: periodStart,
+      granularity,
+      metrics: {
+        impressions: 0,
+        clicks: 0,
+        uniqueImpressions: 0,
+        uniqueClicks: 0,
+        conversionRate: 0
+      },
+      notificationMetrics: []
+    });
+  }
+
+  // Update metrics
+  if (data.type === 'impression') {
+    summary.metrics.impressions++;
+  } else if (data.type === 'click') {
+    summary.metrics.clicks++;
+  }
+
+  // Update conversion rate
+  if (summary.metrics.impressions > 0) {
+    summary.metrics.conversionRate = (summary.metrics.clicks / summary.metrics.impressions) * 100;
+  }
+
+  // Update notification metrics
+  let notificationMetric = summary.notificationMetrics.find(
+    m => m.notificationId.toString() === data.notificationId
+  );
+
+  if (!notificationMetric) {
+    notificationMetric = {
+      notificationId: new mongoose.Types.ObjectId(data.notificationId),
+      impressions: 0,
+      clicks: 0,
+      conversionRate: 0
+    };
+    summary.notificationMetrics.push(notificationMetric);
+  }
+
+  if (data.type === 'impression') {
+    notificationMetric.impressions++;
+  } else if (data.type === 'click') {
+    notificationMetric.clicks++;
+  }
+
+  if (notificationMetric.impressions > 0) {
+    notificationMetric.conversionRate = (notificationMetric.clicks / notificationMetric.impressions) * 100;
+  }
+
+  await summary.save();
+  return summary;
+}
+
+/**
+ * Get analytics for a website
+ */
+export async function getWebsiteAnalytics(websiteId: string, options: {
+  granularity: 'daily' | 'weekly' | 'monthly';
+  startDate?: Date;
+  endDate?: Date;
+}) {
+  await connectToDatabase();
+
+  const { granularity, startDate, endDate } = options;
+
+  // Default to last 30 days if no dates provided
+  const end = endDate || new Date();
+  const start = startDate || new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const summaries = await AnalyticsSummary.find({
+    websiteId,
+    granularity,
+    date: { $gte: start, $lte: end }
+  }).sort({ date: 1 });
+
+  return summaries;
+}
+
+/**
+ * Get analytics for a specific notification
+ */
+export async function getNotificationAnalytics(notificationId: string, options: {
+  granularity: 'daily' | 'weekly' | 'monthly';
+  startDate?: Date;
+  endDate?: Date;
+}) {
+  await connectToDatabase();
+
+  const { granularity, startDate, endDate } = options;
+
+  // Default to last 30 days if no dates provided
+  const end = endDate || new Date();
+  const start = startDate || new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const summaries = await AnalyticsSummary.find({
+    'notificationMetrics.notificationId': notificationId,
+    granularity,
+    date: { $gte: start, $lte: end }
+  }).sort({ date: 1 });
+
+  return summaries.map(summary => {
+    const notificationMetric = summary.notificationMetrics.find(
+      m => m.notificationId.toString() === notificationId
+    );
+    return {
+      date: summary.date,
+      metrics: notificationMetric || {
+        impressions: 0,
+        clicks: 0,
+        conversionRate: 0
+      }
+    };
+  });
+}
+
+/**
+ * Get top performing notifications
+ */
+export async function getTopNotifications(websiteId: string, options: {
+  metric: 'impressions' | 'clicks' | 'conversionRate';
+  limit?: number;
+  startDate?: Date;
+  endDate?: Date;
+}) {
+  await connectToDatabase();
+
+  const { metric, limit = 10, startDate, endDate } = options;
+
+  // Default to last 30 days if no dates provided
+  const end = endDate || new Date();
+  const start = startDate || new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const summaries = await AnalyticsSummary.aggregate([
+    {
+      $match: {
+        websiteId: new mongoose.Types.ObjectId(websiteId),
+        date: { $gte: start, $lte: end }
+      }
+    },
+    { $unwind: '$notificationMetrics' },
+    {
+      $group: {
+        _id: '$notificationMetrics.notificationId',
+        impressions: { $sum: '$notificationMetrics.impressions' },
+        clicks: { $sum: '$notificationMetrics.clicks' },
+        conversionRate: { 
+          $avg: '$notificationMetrics.conversionRate'
+        }
+      }
+    },
+    { $sort: { [metric]: -1 } },
+    { $limit: limit },
+    {
+      $lookup: {
+        from: 'notifications',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'notification'
+      }
+    },
+    { $unwind: '$notification' }
+  ]);
+
+  return summaries;
 } 

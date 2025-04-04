@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { trackNotificationImpression } from '@/app/lib/services/notification.service';
 import { isValidObjectId } from '@/app/lib/server-utils';
+import { trackEvent } from '@/app/lib/services/analytics.service';
+import { getNotificationById } from '@/app/lib/services/notification.service';
 
 /**
  * POST /api/notifications/[id]/impression
@@ -46,11 +47,10 @@ export async function POST(request, props) {
         }
       );
     }
-    
-    // Track impression using the service
-    const result = await trackNotificationImpression(id, websiteId);
-    
-    if (!result) {
+
+    // Verify notification exists
+    const notification = await getNotificationById(id);
+    if (!notification) {
       return NextResponse.json(
         { error: 'Notification not found' },
         { 
@@ -63,6 +63,21 @@ export async function POST(request, props) {
         }
       );
     }
+
+    // Track the impression event with metadata
+    await trackEvent({
+      websiteId,
+      notificationId: id,
+      type: 'impression',
+      metadata: {
+        url: request.headers.get('referer'),
+        userAgent: request.headers.get('user-agent'),
+        // Extract country from CloudFlare headers if available
+        country: request.headers.get('cf-ipcountry'),
+        // Determine device type from user agent
+        deviceType: request.headers.get('user-agent')?.toLowerCase().includes('mobile') ? 'mobile' : 'desktop'
+      }
+    });
     
     return NextResponse.json(
       { success: true },
