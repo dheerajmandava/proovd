@@ -7,6 +7,9 @@ import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { Loader2, Clipboard, Share2, Settings, BarChart4, Activity, Users, CheckCircle2 } from 'lucide-react';
+import { useWebSocket } from '@/hooks/use-websocket';
+import { formatDuration, formatNumber } from '@/lib/utils';
+import { string } from 'zod';
 
 interface WebsiteData {
   id: string;
@@ -32,6 +35,7 @@ interface WebsiteStats {
   avgTimeOnPage: number;
   avgScrollPercentage: number;
   totalClicks: number;
+  updatedAt: string;
 }
 
 // Add a new component for the live ProovdPulse widget
@@ -188,108 +192,145 @@ function LiveProovdPulseWidget({
 
 export default function PulseDashboard() {
   const { id } = useParams<{ id: string }>();
-  const [loading, setLoading] = useState(true);
-  const [websiteData, setWebsiteData] = useState<WebsiteData | null>(null);
-  const [websiteStats, setWebsiteStats] = useState<WebsiteStats | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [websiteData, setWebsiteData] = useState<WebsiteData | null>({});
+  const [websiteStats, setWebsiteStats] = useState<WebsiteStats>({
+    id: '',
+    activeUsers: 0,
+    totalClicks: 0,
+    avgScrollPercentage: 0,
+    avgTimeOnPage: 0,
+    updatedAt: new Date().toISOString(),
+    usersByCountry: '',
+    usersByCity: '',
+  });
+
   const [activeTab, setActiveTab] = useState('overview');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
-  
+  const socketUrl = `wss://socket.proovd.in?websiteId=${id}`;
+
+  const { lastMessage} = useWebSocket(socketUrl);
+
   // Parse country and city data
-  const usersByCountry = websiteStats?.usersByCountry ? 
-    JSON.parse(websiteStats.usersByCountry) : {};
-  const usersByCity = websiteStats?.usersByCity ? 
-    JSON.parse(websiteStats.usersByCity) : {};
+  const usersByCountry = {};
+  const usersByCity = {};
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-
-        // Fetch website data from REST API
-        const websiteResponse = await fetch(`/api/websites/${id}`);
-        let websiteResponseData;
-        
+    useEffect(() => {
+   
+      if (lastMessage) {
         try {
-          websiteResponseData = await websiteResponse.json();
-        } catch (parseError) {
-          console.error('Error parsing website response:', parseError);
-          throw new Error(`Failed to parse website API response: ${websiteResponse.status}`);
-        }
-        
-        if (!websiteResponse.ok) {
-          // We've already parsed the response, so we can access the error message
-          throw new Error(websiteResponseData.error || `Error fetching website: ${websiteResponse.status}`);
-        }
-        
-        // Website API returns data directly, not wrapped in success/data properties
-        if (websiteResponseData && websiteResponseData._id) {
-          setWebsiteData({
-            id: websiteResponseData._id,
-            name: websiteResponseData.name,
-            domain: websiteResponseData.domain,
-            url: websiteResponseData.domain, // Use domain as URL if not provided
-            settings: websiteResponseData.settings || {}
-          });
-        } else {
-          throw new Error('Failed to fetch website data');
-        }
-        
-        // Fetch website stats from REST API
-        const statsResponse = await fetch(`/api/websites/${id}/pulse`);
-        
-        if (!statsResponse.ok) {
-          console.error(`Stats fetch error: ${statsResponse.status}`);
-          // Don't throw here, just log the error and continue with null stats
-        } else {
-          const statsResult = await statsResponse.json();
-          
-          if (statsResult.success) {
-            setWebsiteStats(statsResult.data);
+          const data = JSON.parse(lastMessage);
+
+          if (data.type === 'stats') {
+
+            setWebsiteStats({
+              id: data.id,
+              activeUsers: data.activeUsers || 0,
+              totalClicks: data.totalClicks || 0,
+              avgScrollPercentage: data.avgScrollPercentage || 0,
+              avgTimeOnPage: data.avgTimeOnPage || 0,
+              updatedAt: data.updatedAt || new Date().toISOString(),
+              usersByCountry: data.usersByCountry || {},
+              usersByCity: data.usersByCity || {},
+            });
             setIsSocketConnected(true);
-          } else {
-            console.error('Failed to fetch website stats:', statsResult.error);
-            // Continue with empty stats
           }
+        } catch (error) {
+          console.error('Error parsing websocket message:', error);
         }
-        
-        setError(null);
-        setLoading(false);
-      } catch (error: any) {
-        console.error('Error fetching data:', error);
-        setError(error.message || 'An error occurred while fetching data');
-        setLoading(false);
       }
-    }
+    }, [lastMessage]);
+
+  // useEffect(() => {
+  //   async function fetchData() {
+  //     try {
+  //       setLoading(true);
+
+  //       // Fetch website data from REST API
+  //       const websiteResponse = await fetch(`/api/websites/${id}`);
+  //       let websiteResponseData;
+        
+  //       try {
+  //         websiteResponseData = await websiteResponse.json();
+  //       } catch (parseError) {
+  //         console.error('Error parsing website response:', parseError);
+  //         throw new Error(`Failed to parse website API response: ${websiteResponse.status}`);
+  //       }
+        
+  //       if (!websiteResponse.ok) {
+  //         // We've already parsed the response, so we can access the error message
+  //         throw new Error(websiteResponseData.error || `Error fetching website: ${websiteResponse.status}`);
+  //       }
+        
+  //       // Website API returns data directly, not wrapped in success/data properties
+  //       if (websiteResponseData && websiteResponseData._id) {
+  //         setWebsiteData({
+  //           id: websiteResponseData._id,
+  //           name: websiteResponseData.name,
+  //           domain: websiteResponseData.domain,
+  //           url: websiteResponseData.domain, // Use domain as URL if not provided
+  //           settings: websiteResponseData.settings || {}
+  //         });
+  //       } else {
+  //         throw new Error('Failed to fetch website data');
+  //       }
+        
+  //       // Fetch website stats from REST API
+  //       const statsResponse = await fetch(`/api/websites/${id}/pulse`);
+        
+  //       if (!statsResponse.ok) {
+  //         console.error(`Stats fetch error: ${statsResponse.status}`);
+  //         // Don't throw here, just log the error and continue with null stats
+  //       } else {
+  //         const statsResult = await statsResponse.json();
+          
+  //         if (statsResult.success) {
+  //           setWebsiteStats(statsResult.data);
+  //           setIsSocketConnected(true);
+  //         } else {
+  //           console.error('Failed to fetch website stats:', statsResult.error);
+  //           // Continue with empty stats
+  //         }
+  //       }
+        
+  //       setError(null);
+  //       setLoading(false);
+  //     } catch (error: any) {
+  //       console.error('Error fetching data:', error);
+  //       setError(error.message || 'An error occurred while fetching data');
+  //       setLoading(false);
+  //     }
+  //   }
     
-    fetchData();
+  //   fetchData();
     
     // Setup a polling interval to refresh stats every 10 seconds
-    const intervalId = setInterval(async () => {
-      if (!websiteData) return; // Don't poll if we don't have website data
+  //   const intervalId = setInterval(async () => {
+  //     if (!websiteData) return; // Don't poll if we don't have website data
       
-      try {
-        const statsResponse = await fetch(`/api/websites/${id}/pulse`);
+  //     try {
+  //       const statsResponse = await fetch(`/api/websites/${id}/pulse`);
         
-        if (statsResponse.ok) {
-          const statsResult = await statsResponse.json();
+  //       if (statsResponse.ok) {
+  //         const statsResult = await statsResponse.json();
           
-          if (statsResult.success) {
-            setWebsiteStats(statsResult.data);
-            setIsSocketConnected(true);
-          }
-        }
-      } catch (error) {
-        console.error('Error refreshing stats:', error);
-        setIsSocketConnected(false);
-      }
-    }, 10000); // Refresh every 10 seconds
+  //         if (statsResult.success) {
+  //           setWebsiteStats(statsResult.data);
+  //           setIsSocketConnected(true);
+  //         }
+  //       }
+  //     } catch (error) {
+  //       console.error('Error refreshing stats:', error);
+  //       setIsSocketConnected(false);
+  //     }
+  //   }, 10000); // Refresh every 10 seconds
     
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [id]);
+  //   return () => {
+  //     clearInterval(intervalId);
+  //   };
+  // }, [id]);
   
   // Copy widget code to clipboard
   const copyWidgetCode = () => {

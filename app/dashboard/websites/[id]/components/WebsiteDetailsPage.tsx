@@ -12,6 +12,7 @@ import VerificationStatusBadge from '@/app/components/VerificationStatusBadge';
 import NotificationsTab from './NotificationsTab';
 import OverviewTab from './OverviewTab';
 import SettingsTab from './SettingsTab';
+import AnalyticsTab from './AnalyticsTab';
 import { VerificationStatus } from '@/app/lib/domain-verification';
 
 interface WebsiteDetailsPageProps {
@@ -143,6 +144,13 @@ export default function WebsiteDetailsPage({ website }: WebsiteDetailsPageProps)
         </button>
         <button 
           role="tab"
+          className={`tab ${activeTab === 'analytics' ? 'tab-active' : ''}`}
+          onClick={() => handleTabChange('analytics')}
+        >
+          Analytics
+        </button>
+        <button 
+          role="tab"
           className={`tab ${activeTab === 'proovdpulse' ? 'tab-active' : ''}`}
           onClick={() => handleTabChange('proovdpulse')}
         >
@@ -162,6 +170,7 @@ export default function WebsiteDetailsPage({ website }: WebsiteDetailsPageProps)
       {/* Tab Content */}
       {activeTab === 'overview' && <OverviewTab websiteId={websiteId} />}
       {activeTab === 'notifications' && <NotificationsTab websiteId={websiteId} />}
+      {activeTab === 'analytics' && <AnalyticsTab websiteId={websiteId} />}
       {activeTab === 'proovdpulse' && (
         <div className="grid gap-6 md:grid-cols-2">
           <div className="card bg-base-100 shadow-xl">

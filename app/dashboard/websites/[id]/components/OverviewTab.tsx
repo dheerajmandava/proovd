@@ -6,6 +6,8 @@ import { formatNumber, formatTimeAgo } from '@/app/lib/utils';
 import { ArrowTopRightOnSquareIcon, BellIcon } from '@heroicons/react/24/outline';
 import ClientStatsCard from '@/app/dashboard/components/ClientStatsCard';
 import CopyButton from '../components/CopyButton';
+import SetupGuide from './SetupGuide';
+import { Card } from '@/components/ui/card';
 
 interface OverviewTabProps {
   websiteId: string;
@@ -160,27 +162,36 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
   };
 
   return (
-    <div>
-      {/* Stats Section */}
-      <div className="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full mb-8">
-        <div className="stat">
-          <div className="stat-title">Total Impressions</div>
-          <div className="stat-value text-primary">{formatNumber(websiteData.totalImpressions || 0)}</div>
-          <div className="stat-desc">Total notification views</div>
-        </div>
-        
-        <div className="stat">
-          <div className="stat-title">Total Clicks</div>
-          <div className="stat-value text-secondary">{formatNumber(websiteData.totalClicks || 0)}</div>
-          <div className="stat-desc">Total notification clicks</div>
-        </div>
-        
-        <div className="stat">
-          <div className="stat-title">Conversion Rate</div>
-          <div className="stat-value text-accent">{renderConversionRate()}</div>
-          <div className="stat-desc">Views that led to clicks</div>
-        </div>
+    <div className="space-y-8">
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-500">Active Notifications</h3>
+          <div className="mt-2 flex items-baseline">
+            <div className="text-3xl font-semibold">{formattedNotifications.length}</div>
+            <div className="ml-2 text-sm text-gray-500">notifications</div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-500">Total Impressions</h3>
+          <div className="mt-2 flex items-baseline">
+            <div className="text-3xl font-semibold">{formatNumber(websiteData.totalImpressions || 0)}</div>
+            <div className="ml-2 text-sm text-gray-500">views today</div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-500">Conversion Rate</h3>
+          <div className="mt-2 flex items-baseline">
+            <div className="text-3xl font-semibold">{renderConversionRate()}</div>
+            <div className="ml-2 text-sm text-gray-500">avg. today</div>
+          </div>
+        </Card>
       </div>
+
+      {/* Setup Guide */}
+      <SetupGuide websiteId={websiteId} />
 
       {/* API Information */}
       <div className="card bg-base-100 shadow-xl mb-8">
