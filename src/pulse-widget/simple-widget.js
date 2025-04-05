@@ -184,9 +184,17 @@ export class PulseWidget {
       </div>
     `;
 
-    // Add click handler to toggle expanded view
-    this.container.querySelector('.proovd-pulse-content')?.addEventListener('click', () => {
+    // Add click handler to toggle expanded view, but stop propagation to prevent double counting
+    this.container.querySelector('.proovd-pulse-content')?.addEventListener('click', (event) => {
+      // Stop propagation to prevent the document click handler from also firing
+      event.stopPropagation();
+      
+      // Toggle expanded class
       this.container?.classList.toggle('proovd-pulse-expanded');
+      
+      // Manually track the click since we stopped propagation
+      socketManager.trackClick(this.activityMetrics.scrollPercentage);
+      console.log('🖱️ Widget click tracked with scroll percentage:', this.activityMetrics.scrollPercentage);
     });
   }
   

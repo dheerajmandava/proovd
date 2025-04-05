@@ -123,15 +123,16 @@ export async function POST(request, props) {
       );
     }
 
-    // Create notification using service
+    // Create notification using service - map fields to expected parameters
     const notification = await createNotification({
-      title: sanitizeInput(body.name),
+      name: sanitizeInput(body.name),
       message: sanitizeInput(body.message),
       siteId: website._id,
-      link: body.link ? sanitizeInput(body.link) : '',
+      link: body.url ? sanitizeInput(body.url) : '',
       image: body.image ? sanitizeInput(body.image) : '',
       status: body.status || 'active',
-      priority: body.priority ? parseInt(body.priority) : 0
+      type: body.type || 'custom',
+      priority: body.priority ? parseInt(body.priority) : 0,
     });
 
     // Return the new notification

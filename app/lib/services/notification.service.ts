@@ -76,31 +76,49 @@ export async function getNotificationsByWebsite(websiteId: string): Promise<Noti
  * @returns Created notification
  */
 export async function createNotification(notificationData: {
-  title: string;
+  name?: string; // Optional because might come as title
+  title?: string; // For backward compatibility
   message: string;
   siteId: string;
   link?: string;
+  url?: string;
   image?: string;
+  status?: string;
+  type?: string;
   priority?: number;
   fakeTimestamp?: Date;
 }): Promise<NotificationType> {
   await connectToDatabase();
   
-  const notification = new Notification({
-    title: notificationData.title,
-    message: notificationData.message,
-    siteId: notificationData.siteId,
-    link: notificationData.link,
-    image: notificationData.image,
-    status: 'active',
-    impressions: 0,
-    clicks: 0,
-    priority: notificationData.priority || 0,
-    fakeTimestamp: notificationData.fakeTimestamp
-  });
+  // For backward compatibility - map title to name
+  const name = notificationData.name || notificationData.title;
+  const link = notificationData.link || notificationData.url;
   
-  await notification.save();
-  return notification.toObject() as NotificationType;
+  if (!name || name.trim() === '') {
+    throw new Error('Notification name is required');
+  }
+  
+  try {
+    const notification = new Notification({
+      name: name,
+      message: notificationData.message,
+      siteId: notificationData.siteId,
+      link: link,
+      image: notificationData.image,
+      status: notificationData.status || 'active',
+      type: notificationData.type || 'custom',
+      impressions: 0,
+      clicks: 0,
+      priority: notificationData.priority || 0,
+      fakeTimestamp: notificationData.fakeTimestamp
+    });
+    
+    await notification.save();
+    return notification.toObject() as NotificationType;
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    throw error;
+  }
 }
 
 /**
