@@ -116,16 +116,16 @@ export async function POST(request, props) {
     const body = await request.json();
     
     // Validate required fields
-    if (!body.name || !body.message) {
+    if (!body.title || !body.message) {
       return NextResponse.json(
-        { error: 'Name and message are required' },
+        { error: `Title and message are required ${JSON.stringify(body)}` },
         { status: 400 }
       );
     }
 
     // Create notification using service
     const notification = await createNotification({
-      title: sanitizeInput(body.name),
+      title: sanitizeInput(body.title),
       message: sanitizeInput(body.message),
       siteId: website._id,
       link: body.link ? sanitizeInput(body.link) : '',
