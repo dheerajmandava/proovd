@@ -32,41 +32,40 @@ export async function GET(
         const PROOVD_DOMAIN = 'https://www.proovd.in';
         
         // Tracking function with callback
-        async function track(type, notificationId, callback = null) {
-          try {
-            const response = await fetch(\`\${PROOVD_DOMAIN}/api/notifications/\${notificationId}/\${type}\`, {
-              method: 'POST',
-              headers: { 
-                'Content-Type': 'application/json',
-                'Origin': window.location.origin
-              },
-              body: JSON.stringify({
-                websiteId,
-                timestamp: new Date().toISOString(),
-                metadata: {
-                  url: window.location.href,
-                  referrer: document.referrer,
-                  userAgent: navigator.userAgent,
-                  deviceType: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
-                }
-              }),
-              credentials: 'include'
-            });
-
-            if (!response.ok) {
-              throw new Error(\`Tracking failed with status \${response.status}\`);
+        function track(type, notificationId, callback = null) {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', PROOVD_DOMAIN + '/api/notifications/' + notificationId + '/' + type, true);
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                console.log('Tracked ' + type + ' successfully');
+              } else {
+                console.error('Failed to track ' + type + ': ' + xhr.status);
+              }
+              
+              // Execute callback regardless of success/failure
+              if (typeof callback === 'function') {
+                callback();
+              }
             }
-
-            // Execute callback if provided and tracking was successful
-            if (typeof callback === 'function') {
-              callback();
+          };
+          
+          xhr.send(JSON.stringify({
+            websiteId: websiteId,
+            timestamp: new Date().toISOString(),
+            metadata: {
+              url: window.location.href,
+              referrer: document.referrer,
+              userAgent: navigator.userAgent,
+              deviceType: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
             }
-          } catch (error) {
-            console.error('Failed to track event:', error);
-            // If tracking fails, still execute callback
-            if (typeof callback === 'function') {
-              callback();
-            }
+          }));
+          
+          // For impressions or if callback is null, return immediately
+          // For clicks with callback, it will execute after the XHR completes
+          if (type === 'impression' || callback === null) {
+            return true;
           }
         }
 
@@ -101,16 +100,19 @@ export async function GET(
             link.target = '_blank';
             link.rel = 'noopener noreferrer';
             
-            // Handle click tracking
-            link.addEventListener('click', function(e) {
-              e.preventDefault(); // Prevent immediate navigation
-              const href = this.href; // Store the URL
+            // Handle click tracking - using regular anchor with onclick handler
+            link.onclick = function(e) {
+              e.preventDefault();
+              const href = this.href;
               
-              // Track click then navigate
               track('click', notification._id, function() {
+                // Use window.location instead of window.open to prevent popup blocking
+                // but still open in new tab using target attribute
                 window.open(href, '_blank');
               });
-            });
+              
+              return false; // Prevent default and stop propagation
+            };
             
             content.appendChild(link);
           }
@@ -138,16 +140,19 @@ export async function GET(
 
           // Make entire notification clickable if there's a link
           if (notification.link) {
-            container.addEventListener('click', function(e) {
-              if (e.target.tagName !== 'A') { // Don't trigger twice for link clicks
+            container.onclick = function(e) {
+              // Only trigger for clicks outside the link element
+              if (e.target.tagName !== 'A') {
                 e.preventDefault();
                 const href = notification.link;
                 
                 track('click', notification._id, function() {
                   window.open(href, '_blank');
                 });
+                
+                return false;
               }
-            });
+            };
           }
 
           // Add animation styles
@@ -207,8 +212,10 @@ export async function GET(
           document.head.appendChild(style);
           document.body.appendChild(container);
 
-          // Track impression
-          track('impression', notification._id);
+          // Track impression - do this after adding to DOM
+          setTimeout(function() {
+            track('impression', notification._id);
+          }, 100);
 
           // Auto-hide after duration
           setTimeout(() => {
@@ -218,48 +225,58 @@ export async function GET(
         }
 
         // Fetch and display notifications
-        async function fetchNotifications() {
-          try {
-            const response = await fetch(\`\${PROOVD_DOMAIN}/api/websites/\${websiteId}/notifications/show\`, {
-              credentials: 'include'
-            });
-            if (!response.ok) throw new Error('Failed to fetch notifications');
-            
-            const data = await response.json();
-            
-            if (data.notifications?.length) {
-              // Randomize if configured
-              let notifications = [...data.notifications];
-              if (config.randomize) {
-                notifications.sort(() => Math.random() - 0.5);
-              }
-              
-              // Limit number of notifications
-              notifications = notifications.slice(0, config.maxNotifications || 5);
-              
-              // Show notifications with delay between each
-              notifications.forEach((notification, index) => {
-                setTimeout(() => {
-                  showNotification(notification);
-                }, (config.delay || 5) * 1000 * index);
-              });
-              
-              // Loop if configured
-              if (config.loop) {
-                setTimeout(fetchNotifications, 
-                  ((config.delay || 5) * notifications.length + (config.displayDuration || 5)) * 1000
-                );
+        function fetchNotifications() {
+          var xhr = new XMLHttpRequest();
+          xhr.open('GET', PROOVD_DOMAIN + '/api/websites/' + websiteId + '/notifications/show', true);
+          xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                  var data = JSON.parse(xhr.responseText);
+                  
+                  if (data.notifications?.length) {
+                    // Randomize if configured
+                    let notifications = [].concat(data.notifications);
+                    if (config.randomize) {
+                      notifications.sort(() => Math.random() - 0.5);
+                    }
+                    
+                    // Limit number of notifications
+                    notifications = notifications.slice(0, config.maxNotifications || 5);
+                    
+                    // Show notifications with delay between each
+                    notifications.forEach((notification, index) => {
+                      setTimeout(() => {
+                        showNotification(notification);
+                      }, (config.delay || 5) * 1000 * index);
+                    });
+                    
+                    // Loop if configured
+                    if (config.loop) {
+                      setTimeout(fetchNotifications, 
+                        ((config.delay || 5) * notifications.length + (config.displayDuration || 5)) * 1000
+                      );
+                    }
+                  }
+                } catch (error) {
+                  console.error('Failed to parse notifications:', error);
+                }
+              } else {
+                console.error('Failed to fetch notifications:', xhr.status);
               }
             }
-          } catch (error) {
-            console.error('Failed to fetch notifications:', error);
-          }
+          };
+          xhr.send();
         }
 
         // Initialize after page load
-        window.addEventListener('load', () => {
+        if (document.readyState === 'complete') {
           setTimeout(fetchNotifications, (config.initialDelay || 5) * 1000);
-        });
+        } else {
+          window.addEventListener('load', () => {
+            setTimeout(fetchNotifications, (config.initialDelay || 5) * 1000);
+          });
+        }
       })();
     `;
 
