@@ -40,7 +40,6 @@ export class PulseWidget {
     socketManager.setDebug(this.options.debug);
     
     // Bind event handlers
-    this.handleClick = this.handleClick.bind(this);
     this.handleScroll = this.handleScroll.bind(this);
     this.onMessage = this.onMessage.bind(this);
     
@@ -109,15 +108,12 @@ export class PulseWidget {
   onDisconnect(event) {
     console.log('🔴 Socket disconnected:', event.code, event.reason);
   }
-
+  
   /**
    * Start tracking user activity
    */
   startActivityTracking() {
     console.log('🟢 Starting activity tracking');
-    
-    // Track clicks
-    document.addEventListener('click', this.handleClick);
     
     // Track scroll position
     document.addEventListener('scroll', this.handleScroll);
@@ -136,14 +132,6 @@ export class PulseWidget {
         this.activityMetrics.timeOnPage
       );
     }, 10000); // Send activity metrics every 10 seconds
-  }
-  
-  /**
-   * Handle click event
-   */
-  handleClick() {
-    // Send click immediately via socket manager
-    socketManager.trackClick(this.activityMetrics.scrollPercentage);
   }
   
   /**
@@ -178,23 +166,19 @@ export class PulseWidget {
   updateUI() {
     if (!this.container) return;
     
-    const userText = this.activeUsers === 1 ? 'person' : 'people';
+    // Match the exact UI from pulse-ui.ts
     this.container.innerHTML = `
-      <div class="proovd-pulse-count">${this.activeUsers}</div>
-      <div class="proovd-pulse-label">${userText} browsing</div>
+      <div class="proovd-pulse-content">
+        <div class="proovd-pulse-dot"></div>
+        <div class="proovd-pulse-count">${this.activeUsers}</div>
+        <div class="proovd-pulse-label">active now</div>
+      </div>
     `;
-    
-    // Add pulse animation
-    const pulseEffect = document.createElement('div');
-    pulseEffect.className = 'proovd-pulse-effect';
-    this.container.appendChild(pulseEffect);
-    
-    // Remove pulse effect after animation
-    setTimeout(() => {
-      if (pulseEffect.parentNode) {
-        pulseEffect.parentNode.removeChild(pulseEffect);
-      }
-    }, 2000);
+
+    // Add click handler to toggle expanded view
+    this.container.querySelector('.proovd-pulse-content')?.addEventListener('click', () => {
+      this.container?.classList.toggle('proovd-pulse-expanded');
+    });
   }
   
   /**
@@ -204,7 +188,6 @@ export class PulseWidget {
     console.log('🟢 Destroying PulseWidget');
     
     // Remove event listeners
-    document.removeEventListener('click', this.handleClick);
     document.removeEventListener('scroll', this.handleScroll);
     
     // Clear intervals
@@ -305,19 +288,14 @@ export class PulseWidget {
    * Add styles to document
    */
   addStyles() {
-    // Don't add styles if they already exist
     if (document.getElementById('proovd-pulse-styles')) return;
     
-    const style = document.createElement('style');
-    style.id = 'proovd-pulse-styles';
-    
-    // Insert custom pulse color
-    const pulseColor = this.options.pulseColor || '#2563eb';
-    
-    style.textContent = `
+    const styleEl = document.createElement('style');
+    styleEl.id = 'proovd-pulse-styles';
+    styleEl.textContent = `
       .proovd-pulse-widget {
         position: fixed;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         font-size: 14px;
         line-height: 1.4;
         color: #333;
@@ -370,30 +348,46 @@ export class PulseWidget {
       .proovd-pulse-dot {
         width: 12px;
         height: 12px;
-        background-color: ${pulseColor};
+        background-color: #2F80ED;
         border-radius: 50%;
         position: relative;
+        display: inline-block;
+      }
+      
+      .proovd-pulse-dot:before {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        background-color: #2F80ED;
+        border-radius: 50%;
+        opacity: 0.7;
+        animation: pulse 2s ease-in-out infinite;
       }
       
       @keyframes pulse {
         0% {
           transform: scale(1);
-          box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+          opacity: 0.7;
         }
-        
         70% {
-          transform: scale(1.1);
-          box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
+          transform: scale(2);
+          opacity: 0;
         }
-        
         100% {
           transform: scale(1);
-          box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+          opacity: 0;
         }
       }
       
-      .proovd-pulse-dot.pulse {
-        animation: pulse 1s cubic-bezier(0.66, 0, 0, 1);
+      .proovd-pulse-dark .proovd-pulse-dot {
+        background-color: #60A5FA;
+      }
+      
+      .proovd-pulse-dark .proovd-pulse-dot:before {
+        background-color: #60A5FA;
       }
       
       .proovd-pulse-count {
@@ -421,7 +415,12 @@ export class PulseWidget {
       }
     `;
     
-    document.head.appendChild(style);
+    // Add custom CSS if provided
+    if (this.options.customCSS) {
+      styleEl.textContent += this.options.customCSS;
+    }
+    
+    document.head.appendChild(styleEl);
   }
 }
 
