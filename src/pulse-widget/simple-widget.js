@@ -9,7 +9,9 @@ let widgetInstance = null;
 /**
  * Widget class
  */
-class PulseWidget {
+import socketManager from './socket-manager.js';
+
+export class PulseWidget {
   constructor(options = {}) {
     this.options = {
       position: 'bottom-right',
@@ -23,25 +25,27 @@ class PulseWidget {
     this.websiteId = options.websiteId;
     this.socketUrl = options.socketUrl || 'wss://socket.proovd.in';
     this.activeUsers = 0;
-    this.socket = null;
     this.container = null;
-    this.reconnectAttempts = 0;
-    this.reconnectTimeout = null;
     this.pageLoadTime = Date.now();
     this.activityInterval = null;
     this.pulseInterval = null;
-    this.pingInterval = null; // Added for socket health checks
     
     // Activity metrics
     this.activityMetrics = {
-      clickCount: 0,
       scrollPercentage: 0,
       timeOnPage: 0
     };
     
+    // Set socket manager debug mode
+    socketManager.setDebug(this.options.debug);
+    
     // Bind event handlers
     this.handleClick = this.handleClick.bind(this);
     this.handleScroll = this.handleScroll.bind(this);
+    this.onMessage = this.onMessage.bind(this);
+    
+    // Register with socket manager
+    socketManager.addListener(this);
     
     console.log('🟢 PulseWidget created with options:', this.options);
   }
@@ -57,8 +61,8 @@ class PulseWidget {
       // Start tracking user activity
       this.startActivityTracking();
       
-      // Connect to real-time socket
-      this.connectSocket()
+      // Connect to real-time socket via socket manager
+      socketManager.connect(this.websiteId, this.socketUrl)
         .then(() => {
           console.log('✅ Socket connected successfully');
           resolve();
@@ -81,6 +85,32 @@ class PulseWidget {
   }
   
   /**
+   * Socket message handler
+   */
+  onMessage(data) {
+    try {
+      if (data.type === 'stats') {
+        if (data.activeUsers !== undefined) {
+          this.activeUsers = data.activeUsers;
+          this.updateUI();
+        } else if (data.stats && data.stats.activeUsers !== undefined) {
+          this.activeUsers = data.stats.activeUsers;
+          this.updateUI();
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error handling message:', error);
+    }
+  }
+  
+  /**
+   * Handle socket disconnection
+   */
+  onDisconnect(event) {
+    console.log('🔴 Socket disconnected:', event.code, event.reason);
+  }
+
+  /**
    * Start tracking user activity
    */
   startActivityTracking() {
@@ -95,36 +125,31 @@ class PulseWidget {
     // Initial scroll check
     this.handleScroll();
     
-    // Send activity data periodically
+    // Send activity data periodically (without clicks)
     this.activityInterval = setInterval(() => {
       // Update time on page
       this.activityMetrics.timeOnPage = Math.round((Date.now() - this.pageLoadTime) / 1000);
       
-      // Only send other metrics periodically (not clicks - clicks are sent immediately)
-      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-        const message = {
-          type: 'activity',
-          websiteId: this.websiteId,
-          clientId: this.getClientId(),
-          metrics: {
-            clickCount: 0, // Don't send clicks in the interval - they are sent immediately
-            scrollPercentage: this.activityMetrics.scrollPercentage,
-            timeOnPage: this.activityMetrics.timeOnPage
-          }
-        };
-        
-        if (this.options.debug) {
-          console.log('🟢 Sending activity metrics:', message);
-        }
-        this.sendMessage(message);
-      }
+      // Only send other metrics periodically (not clicks)
+      socketManager.sendActivity(
+        this.activityMetrics.scrollPercentage,
+        this.activityMetrics.timeOnPage
+      );
     }, 10000); // Send activity metrics every 10 seconds
+  }
+  
+  /**
+   * Handle click event
+   */
+  handleClick() {
+    // Send click immediately via socket manager
+    socketManager.trackClick(this.activityMetrics.scrollPercentage);
   }
   
   /**
    * Handle scroll event
    */
-  handleScroll = () => {
+  handleScroll() {
     // Calculate scroll percentage
     const scrollPosition = window.scrollY;
     const documentHeight = Math.max(
@@ -145,213 +170,70 @@ class PulseWidget {
     } else {
       this.activityMetrics.scrollPercentage = 0;
     }
-  };
-  
+  }
+
   /**
-   * Connect to WebSocket server
+   * Update UI
    */
-  connectSocket() {
-    return new Promise((resolve, reject) => {
-      try {
-        // First, clean up any existing connection properly
-        if (this.socket) {
-          try {
-            console.log('🟡 Cleaning up existing socket connection before creating a new one');
-            this.socket.onclose = null; // Prevent triggering reconnect on intentional close
-            this.socket.close(1000, 'Intentional close before reconnect');
-            this.socket = null;
-          } catch (e) {
-            console.error('❌ Error closing existing socket:', e);
-          }
-        }
-        
-        // Create the connection URL with both websiteId and clientId
-        const clientId = this.getClientId();
-        const url = `${this.socketUrl}?websiteId=${this.websiteId}&clientId=${clientId}`;
-        console.log('🟢 Connecting to socket:', url);
-        
-        this.socket = new WebSocket(url);
-        
-        // Set connection timeout
-        const connectionTimeout = setTimeout(() => {
-          if (this.socket && this.socket.readyState !== WebSocket.OPEN) {
-            console.error('❌ Socket connection timeout');
-            this.socket.close(1000, 'Connection timeout');
-            reject(new Error('Connection timeout'));
-          }
-        }, 10000); // 10 second timeout
-        
-        this.socket.onopen = () => {
-          console.log('✅ Socket connection opened');
-          this.reconnectAttempts = 0;
-          clearTimeout(connectionTimeout);
-          
-          // Join the website's room
-          this.sendMessage({
-            type: 'join',
-            websiteId: this.websiteId,
-            clientId: clientId
-          });
-          
-          // Request initial stats
-          this.sendMessage({
-            type: 'stats',
-            websiteId: this.websiteId
-          });
-          
-          // Send initial activity - SEND ONLY INITIAL METRICS WITHOUT CLICKS
-          const initialMetrics = { ...this.activityMetrics };
-          initialMetrics.clickCount = 0; // Reset clicks to prevent auto-counting
-          
-          this.sendMessage({
-            type: 'activity',
-            websiteId: this.websiteId,
-            clientId: clientId,
-            metrics: initialMetrics
-          });
-          
-          // Set up regular heartbeat to keep connection alive
-          if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-          }
-          
-          this.pingInterval = setInterval(() => {
-            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-              this.sendMessage({
-                type: 'ping',
-                websiteId: this.websiteId,
-                clientId: clientId,
-                timestamp: Date.now()
-              });
-            }
-          }, 30000); // 30 second ping
-          
-          resolve();
-        };
-        
-        this.socket.onmessage = (event) => {
-          try {
-            // For debugging only
-            if (this.options.debug) {
-              console.log('🟢 Received message:', event.data);
-            }
-            
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'stats') {
-              if (data.activeUsers !== undefined) {
-                this.activeUsers = data.activeUsers;
-                this.updateUI();
-              } else if (data.stats && data.stats.activeUsers !== undefined) {
-                this.activeUsers = data.stats.activeUsers;
-                this.updateUI();
-              }
-            } else if (data.type === 'pong') {
-              // For debugging only
-              if (this.options.debug) {
-                console.log('🟢 Pong received');
-              }
-            }
-          } catch (error) {
-            console.error('❌ Error parsing message:', error);
-          }
-        };
-        
-        this.socket.onclose = (event) => {
-          console.log('🔴 Socket connection closed:', event.code, event.reason);
-          clearTimeout(connectionTimeout);
-          
-          // Clear ping interval
-          if (this.pingInterval) {
-            clearInterval(this.pingInterval);
-            this.pingInterval = null;
-          }
-          
-          // Only attempt reconnect for abnormal closures
-          if (event.code !== 1000 && event.code !== 1001) {
-            this.attemptReconnect();
-          }
-        };
-        
-        this.socket.onerror = (error) => {
-          console.error('❌ Socket error:', error);
-          clearTimeout(connectionTimeout);
-          reject(error);
-        };
-        
-      } catch (error) {
-        console.error('❌ Error connecting to socket:', error);
-        reject(error);
+  updateUI() {
+    if (!this.container) return;
+    
+    const userText = this.activeUsers === 1 ? 'person' : 'people';
+    this.container.innerHTML = `
+      <div class="proovd-pulse-count">${this.activeUsers}</div>
+      <div class="proovd-pulse-label">${userText} browsing</div>
+    `;
+    
+    // Add pulse animation
+    const pulseEffect = document.createElement('div');
+    pulseEffect.className = 'proovd-pulse-effect';
+    this.container.appendChild(pulseEffect);
+    
+    // Remove pulse effect after animation
+    setTimeout(() => {
+      if (pulseEffect.parentNode) {
+        pulseEffect.parentNode.removeChild(pulseEffect);
       }
-    });
+    }, 2000);
   }
   
   /**
-   * Get or generate a unique client ID
+   * Destroy the widget
    */
-  getClientId() {
-    const storageKey = 'proovd_pulse_client_id';
-    let clientId = localStorage.getItem(storageKey);
+  destroy() {
+    console.log('🟢 Destroying PulseWidget');
     
-    if (!clientId) {
-      clientId = this.generateUUID();
-      try {
-        localStorage.setItem(storageKey, clientId);
-      } catch (e) {
-        console.error('❌ Failed to store client ID:', e);
-      }
+    // Remove event listeners
+    document.removeEventListener('click', this.handleClick);
+    document.removeEventListener('scroll', this.handleScroll);
+    
+    // Clear intervals
+    if (this.pulseInterval) {
+      clearInterval(this.pulseInterval);
+      this.pulseInterval = null;
     }
     
-    return clientId;
-  }
-  
-  /**
-   * Generate a UUID v4
-   */
-  generateUUID() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
+    if (this.activityInterval) {
+      clearInterval(this.activityInterval);
+      this.activityInterval = null;
     }
     
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  }
-  
-  /**
-   * Send message to socket
-   */
-  sendMessage(data) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify(data));
-    }
-  }
-  
-  /**
-   * Attempt reconnection
-   */
-  attemptReconnect() {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
+    // Unregister from socket manager
+    socketManager.removeListener(this);
+    
+    // Remove DOM elements
+    if (this.container && this.container.parentNode) {
+      this.container.parentNode.removeChild(this.container);
+      this.container = null;
     }
     
-    if (this.reconnectAttempts >= 5) {
-      console.log('🔴 Maximum reconnect attempts reached');
-      return;
+    // Remove styles
+    const style = document.getElementById('proovd-pulse-styles');
+    if (style && style.parentNode) {
+      style.parentNode.removeChild(style);
     }
     
-    this.reconnectAttempts++;
-    const delay = 3000 * this.reconnectAttempts;
-    
-    console.log(`🟡 Attempting reconnect in ${delay}ms (${this.reconnectAttempts}/5)`);
-    
-    this.reconnectTimeout = setTimeout(() => {
-      this.connectSocket().catch(error => {
-        console.error('❌ Reconnection failed:', error);
-      });
-    }, delay);
+    console.log('✅ PulseWidget destroyed');
   }
   
   /**
@@ -417,31 +299,6 @@ class PulseWidget {
         }, 1000);
       }
     }, 2000); // Pulse every 2 seconds
-  }
-  
-  /**
-   * Update UI with current data
-   */
-  updateUI() {
-    if (!this.container) return;
-    
-    this.container.innerHTML = `
-      <div class="proovd-pulse-content">
-        <div class="proovd-pulse-dot"></div>
-        <div class="proovd-pulse-count">${this.activeUsers}</div>
-        <div class="proovd-pulse-label">active now</div>
-      </div>
-    `;
-    
-    // Add click handler
-    const content = this.container.querySelector('.proovd-pulse-content');
-    if (content) {
-      content.addEventListener('click', () => {
-        if (this.container) {
-          this.container.classList.toggle('proovd-pulse-expanded');
-        }
-      });
-    }
   }
   
   /**
@@ -566,87 +423,6 @@ class PulseWidget {
     
     document.head.appendChild(style);
   }
-  
-  /**
-   * Destroy the widget
-   */
-  destroy() {
-    console.log('🟢 Destroying PulseWidget');
-    
-    // Send leave message if connected
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.sendMessage({
-        type: 'leave', 
-        websiteId: this.websiteId,
-        clientId: this.getClientId()
-      });
-    }
-    
-    // Remove event listeners
-    document.removeEventListener('click', this.handleClick);
-    document.removeEventListener('scroll', this.handleScroll);
-    
-    // Clear intervals
-    if (this.pulseInterval) {
-      clearInterval(this.pulseInterval);
-      this.pulseInterval = null;
-    }
-    
-    if (this.activityInterval) {
-      clearInterval(this.activityInterval);
-      this.activityInterval = null;
-    }
-    
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
-    
-    // Close socket
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
-    
-    // Remove DOM elements
-    if (this.container && this.container.parentNode) {
-      this.container.parentNode.removeChild(this.container);
-      this.container = null;
-    }
-    
-    // Remove styles
-    const style = document.getElementById('proovd-pulse-styles');
-    if (style && style.parentNode) {
-      style.parentNode.removeChild(style);
-    }
-    
-    console.log('✅ PulseWidget destroyed');
-  }
-
-  /**
-   * Handle click event
-   */
-  handleClick = () => {
-    this.activityMetrics.clickCount += 1;
-    
-    // Immediately send click event if socket is open
-    // This ensures clicks are sent as they happen and not batched
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.sendMessage({
-        type: 'activity',
-        websiteId: this.websiteId,
-        clientId: this.getClientId(),
-        metrics: {
-          clickCount: 1,  // Send only this single click
-          scrollPercentage: this.activityMetrics.scrollPercentage,
-          timeOnPage: Math.round((Date.now() - this.pageLoadTime) / 1000)
-        }
-      });
-      
-      // Reset click count after sending
-      this.activityMetrics.clickCount = 0;
-    }
-  };
 }
 
 /**

@@ -1,23 +1,20 @@
-const typescript = require('@rollup/plugin-typescript');
-const { nodeResolve } = require('@rollup/plugin-node-resolve');
-const commonjs = require('@rollup/plugin-commonjs');
-const terser = require('@rollup/plugin-terser');
+import resolve from '@rollup/plugin-node-resolve';
+import commonjs from '@rollup/plugin-commonjs';
+import terser from '@rollup/plugin-terser';
 
-const production = !process.env.ROLLUP_WATCH;
-
-module.exports = {
-  input: 'src/pulse-widget/simple-widget.js',
+export default {
+  input: 'src/pulse-widget/index.js',
   output: {
-    file: 'public/pulse-widget.min.js',
+    file: 'dist/proovd-pulse-widget.js',
     format: 'iife',
     name: 'ProovdPulse',
-    sourcemap: !production
+    sourcemap: true
   },
   plugins: [
-    nodeResolve({
+    resolve({
       browser: true
     }),
     commonjs(),
-    production && terser()
+    terser()
   ]
 }; 

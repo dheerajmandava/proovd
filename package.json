@@ -19,7 +19,7 @@
     "db:stop": "docker-compose down",
     "db:logs": "docker-compose logs -f",
     "db:test-transactions": "chmod +x ./scripts/test-transactions.js && node ./scripts/test-transactions.js",
-    "build:widget": "rollup -c",
+    "build:widget": "rollup -c rollup.config.js && cp dist/proovd-pulse-widget.js public/widget.js",
     "dev:widget": "rollup -c -w"
   },
   "dependencies": {
