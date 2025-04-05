@@ -155,8 +155,12 @@ export class PulseWidget {
       const scrollableHeight = documentHeight - windowHeight;
       const scrollPercentage = Math.min(100, Math.round((scrollPosition / scrollableHeight) * 100));
       this.activityMetrics.scrollPercentage = scrollPercentage;
+      
+      // Update the socket manager with the current scroll percentage
+      socketManager.updateScrollPercentage(scrollPercentage);
     } else {
       this.activityMetrics.scrollPercentage = 0;
+      socketManager.updateScrollPercentage(0);
     }
   }
 
