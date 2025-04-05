@@ -111,14 +111,14 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     const settings = website.settings || {
       position: 'bottom-left',
       delay: 5,
-        displayDuration: 5,
-        maxNotifications: 5,
+      displayDuration: 5,
+      maxNotifications: 5,
       theme: 'light',
     };
     
     // Get the API URL from the current request
     const host = request.headers.get('host') || '';
-    const protocol = 'https';
+    const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
     const apiUrl = `${protocol}://${host}`;
     
     // Build the widget script
@@ -212,6 +212,45 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           return element.innerHTML;
         }
         
+        // Analytics tracking (impressions and clicks)
+        function trackEvent(notificationId, eventType, callback) {
+          // Create XHR request for better browser compatibility
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', apiBaseUrl + '/api/notifications/' + notificationId + '/' + eventType, true);
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          
+          // Handle response
+          xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                console.log('Tracked ' + eventType + ' successfully');
+              } else {
+                console.error('Failed to track ' + eventType + ': ' + xhr.status);
+              }
+              
+              // Execute callback if provided
+              if (typeof callback === 'function') {
+                callback();
+              }
+            }
+          };
+          
+          // Prepare and send data
+          xhr.send(JSON.stringify({
+            websiteId: websiteId,
+            timestamp: new Date().toISOString(),
+            metadata: {
+              url: window.location.href,
+              referrer: document.referrer,
+              userAgent: navigator.userAgent,
+              deviceType: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop'
+            }
+          }));
+          
+          // For impression tracking or if no callback, return immediately
+          return eventType === 'impression' || !callback;
+        }
+        
         // Load all notifications at startup
         async function loadNotifications() {
           try {
@@ -248,218 +287,176 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           }
         }
         
-        // Fisher-Yates shuffle algorithm for randomizing order
-        function shuffleArray(array) {
-          for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-          }
-        }
-        
         // Process notification queue
         function processQueue() {
-          if (isDisplaying || notificationQueue.length === 0) return;
+          if (notificationQueue.length === 0 || isDisplaying) {
+            return;
+          }
           
           // Get the next notification
           currentNotification = notificationQueue.shift();
           
-          // If using a loop setting, push notification back to end of queue
-          if (widgetSettings.loop && notificationQueue.length < widgetSettings.maxNotifications) {
-            const notificationFrequency = currentNotification.displayFrequency || 'always';
-            if (notificationFrequency === 'always') {
-              notificationQueue.push(currentNotification);
-            }
-          }
-          
-          // Display the notification
+          // Display notification
           displayNotification(currentNotification);
+          
+          // If loop is enabled, add it back to the end
+          if (widgetSettings.loop && notificationQueue.length < widgetSettings.maxNotifications) {
+            notificationQueue.push(currentNotification);
+          }
         }
         
         // Display a notification
         function displayNotification(notification) {
           isDisplaying = true;
           
-          // Mark as seen based on frequency setting
+          // Create notification element
+          const notifElement = document.createElement('div');
+          notifElement.className = 'proovd-notification';
+          
+          // Apply theme styles
+          const theme = widgetSettings.theme || 'light';
+          
+          // Set styles based on theme
+          const themeStyles = {
+            light: {
+              background: '#FFFFFF',
+              color: '#333333',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              linkColor: '#007bff'
+            },
+            dark: {
+              background: '#1F2937',
+              color: '#F9FAFB',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              linkColor: '#60A5FA'
+            }
+          };
+          
+          const style = themeStyles[theme] || themeStyles.light;
+          
+          // Apply styles
+          Object.assign(notifElement.style, {
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            maxWidth: '320px',
+            marginBottom: '12px',
+            backgroundColor: style.background,
+            color: style.color,
+            boxShadow: style.boxShadow,
+            animation: 'proovdFadeIn 0.3s ease forwards',
+            overflow: 'hidden',
+            opacity: '0',
+            transition: 'all 0.3s ease',
+            cursor: notification.link ? 'pointer' : 'default'
+          });
+          
+          // Set cursor style for clickable notifications
+          if (notification.link) {
+            notifElement.style.cursor = 'pointer';
+          }
+          
+          // Create content
+          let content = '';
+          
+          if (notification.image) {
+            content += \`<div style="display:flex;margin-bottom:8px;align-items:center;">
+              <img src="\${sanitizeText(notification.image)}" alt="" style="width:40px;height:40px;border-radius:50%;margin-right:10px;object-fit:cover;">
+            </div>\`;
+          }
+          
+          content += \`<div style="display:flex;flex-direction:column;">
+            <h3 style="margin:0 0 4px;font-size:14px;font-weight:600;">\${sanitizeText(notification.title)}</h3>
+            <p style="margin:0 0 6px;font-size:13px;">\${sanitizeText(notification.message)}</p>
+          </div>\`;
+          
+          if (notification.timeAgo || notification.fakeTimestamp) {
+            const timestamp = notification.fakeTimestamp || notification.createdAt;
+            const timeAgo = formatTimeAgo(timestamp);
+            content += \`<div style="font-size:11px;color:#718096;margin-top:4px;">\${timeAgo}</div>\`;
+          }
+          
+          notifElement.innerHTML = content;
+          
+          // Add click handler for the entire notification if there's a link
+          if (notification.link) {
+            notifElement.addEventListener('click', function(event) {
+              // Track the click
+              trackEvent(notification._id, 'click', function() {
+                // Open the link in a new tab
+                window.open(notification.link, '_blank');
+              });
+            });
+          }
+          
+          // Add to container
+          container.appendChild(notifElement);
+          
+          // Add animation styles if not already added
+          if (!document.getElementById('proovd-animations')) {
+            const styleElement = document.createElement('style');
+            styleElement.id = 'proovd-animations';
+            styleElement.textContent = \`
+              @keyframes proovdFadeIn {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+              @keyframes proovdFadeOut {
+                from { opacity: 1; transform: translateY(0); }
+                to { opacity: 0; transform: translateY(-20px); }
+              }
+            \`;
+            document.head.appendChild(styleElement);
+          }
+          
+          // Trigger fade in
+          setTimeout(() => {
+            notifElement.style.opacity = '1';
+            notifElement.style.transform = 'translateY(0)';
+          }, 10);
+          
+          // Track impression after the notification is visible
+          setTimeout(() => {
+            trackEvent(notification._id, 'impression');
+          }, 200);
+          
+          // Store the frequency of viewing
           const frequency = notification.displayFrequency || 'always';
           if (frequency !== 'always') {
             storage.markNotificationSeen(notification._id, frequency);
           }
           
-          // Create notification element
-          const notificationEl = document.createElement('div');
-          notificationEl.className = 'proovd-notification';
-          notificationEl.style.backgroundColor = widgetSettings.theme === 'dark' ? '#333' : '#fff';
-          notificationEl.style.color = widgetSettings.theme === 'dark' ? '#fff' : '#333';
-          notificationEl.style.borderRadius = '8px';
-          notificationEl.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-          notificationEl.style.padding = '12px';
-          notificationEl.style.marginTop = '10px';
-          notificationEl.style.width = '300px';
-          notificationEl.style.maxWidth = '90vw';
-          notificationEl.style.opacity = '0';
-          notificationEl.style.transform = 'translateY(20px)';
-          notificationEl.style.transition = 'opacity 0.3s, transform 0.3s';
-          notificationEl.style.cursor = notification.url ? 'pointer' : 'default';
-          
-          // Create content based on notification type
-          let content = '';
-          
-          switch(notification.type) {
-            case 'conversion':
-              content = \`
-                <div style="display: flex; align-items: center;">
-                  <div style="margin-right: 10px;">
-                    <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Someone').charAt(0) + '</div>'}
-                    </div>
-                  </div>
-                  <div>
-                    <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Someone')}</div>
-                    <div>\${sanitizeText(notification.message || 'purchased recently')}</div>
-                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp || notification.createdAt)}</div>
-                  </div>
-                </div>
-              \`;
-              break;
-              
-            case 'signup':
-              content = \`
-                <div style="display: flex; align-items: center;">
-                  <div style="margin-right: 10px;">
-                    <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Someone').charAt(0) + '</div>'}
-                    </div>
-                  </div>
-                  <div>
-                    <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Someone')}</div>
-                    <div>\${sanitizeText(notification.message || 'signed up recently')}</div>
-                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp || notification.createdAt)}</div>
-                  </div>
-                </div>
-              \`;
-              break;
-              
-            case 'custom':
-            default:
-              content = \`
-                <div style="display: flex; align-items: center;">
-                  <div style="margin-right: 10px;">
-                    <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Someone').charAt(0) + '</div>'}
-                    </div>
-                  </div>
-                  <div>
-                    <div style="font-weight: bold;">\${sanitizeText(notification.title || notification.name || '')}</div>
-                    <div>\${sanitizeText(notification.message || '')}</div>
-                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp || notification.createdAt)}</div>
-                  </div>
-                </div>
-              \`;
-          }
-          
-          // Add close button
-          const closeButton = document.createElement('div');
-          closeButton.style.position = 'absolute';
-          closeButton.style.top = '8px';
-          closeButton.style.right = '8px';
-          closeButton.style.fontSize = '16px';
-          closeButton.style.fontWeight = 'bold';
-          closeButton.style.cursor = 'pointer';
-          closeButton.style.color = widgetSettings.theme === 'dark' ? '#ccc' : '#888';
-          closeButton.innerHTML = '×';
-          closeButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            hideNotification(notificationEl);
-          });
-          
-          notificationEl.innerHTML = content;
-          notificationEl.style.position = 'relative';
-          notificationEl.appendChild(closeButton);
-          
-          // Add URL handler
-          if (notification.url) {
-            notificationEl.addEventListener('click', () => {
-              // Track click
-              trackClick(notification._id);
-              
-              // Open URL
-              if (notification.urlTarget === '_blank' || notification.urlTarget === 'new') {
-                window.open(notification.url, '_blank');
-              } else {
-                window.location.href = notification.url;
-              }
-            });
-          }
-          
-          // Display with animation
-          container.appendChild(notificationEl);
-          
-          // Forces a reflow, allowing the transition to take effect
-          void notificationEl.offsetWidth;
-          
-          // Show notification with animation
-          notificationEl.style.opacity = '1';
-          notificationEl.style.transform = 'translateY(0)';
-          
-          // Track impression
-          trackImpression(notification._id);
-          
-          // Set display duration
-          const duration = notification.displayDuration || widgetSettings.displayDuration || 5;
+          // Set timer to remove notification
           displayTimer = setTimeout(() => {
-            hideNotification(notificationEl);
-          }, duration * 1000);
-        }
-        
-        // Hide notification with animation
-        function hideNotification(el) {
-          clearTimeout(displayTimer);
-          
-          el.style.opacity = '0';
-          el.style.transform = 'translateY(20px)';
-          
-          setTimeout(() => {
-            if (el.parentNode) el.parentNode.removeChild(el);
-            isDisplaying = false;
+            // Trigger fade out
+            notifElement.style.opacity = '0';
+            notifElement.style.transform = 'translateY(-20px)';
             
-            // Schedule next notification
+            // Remove after animation completes
             setTimeout(() => {
-              processQueue();
-            }, (widgetSettings.delay || 5) * 1000);
-          }, 300); // Animation duration
+              if (container.contains(notifElement)) {
+                container.removeChild(notifElement);
+              }
+              isDisplaying = false;
+              currentNotification = null;
+              
+              // Process next notification after delay
+              setTimeout(processQueue, (widgetSettings.delay || 5) * 1000);
+            }, 300);
+          }, (widgetSettings.displayDuration || 5) * 1000);
         }
         
-        // Track impression
-        function trackImpression(notificationId) {
-          try {
-            fetch(\`\${apiBaseUrl}/api/notifications/\${notificationId}/impression\`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ websiteId }),
-            });
-          } catch (error) {
-            console.error('Error tracking impression:', error);
+        // Helper to shuffle array for randomization
+        function shuffleArray(array) {
+          for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
           }
+          return array;
         }
         
-        // Track click
-        function trackClick(notificationId) {
-          try {
-            fetch(\`\${apiBaseUrl}/api/notifications/\${notificationId}/click\`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ websiteId }),
-            });
-          } catch (error) {
-            console.error('Error tracking click:', error);
-          }
-        }
-        
-        // Initialize when DOM is fully loaded
+        // Start loading after DOM is ready
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', loadNotifications);
         } else {
@@ -467,25 +464,21 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
         }
       })();
     `;
-
+    
     // Return the widget script with appropriate headers
     return new NextResponse(widgetScript, {
       headers: {
         'Content-Type': 'application/javascript',
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET',
+        'Access-Control-Max-Age': '86400',
       },
     });
-
+    
   } catch (error) {
     console.error('Error generating widget script:', error);
-    
-    // Return an error script
-    return new NextResponse(`console.error("Error loading Proovd widget");`, {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/javascript',
-      },
-    });
+    return handleApiError(error);
   }
 }
 
