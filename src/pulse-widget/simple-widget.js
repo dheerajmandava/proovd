@@ -524,4 +524,4 @@ try {
 }
 
 // Export for module usage
-export { init, getInstance, PulseWidget }; 
+export { init, getInstance }; 
