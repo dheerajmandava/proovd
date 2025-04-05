@@ -5,7 +5,7 @@ import useSWR from 'swr';
 
 export type Notification = {
   _id: string;
-  title: string;
+  name: string;
   message: string;
   link?: string;
   image?: string;
@@ -76,7 +76,7 @@ export function useCreateNotification() {
   const createNotification = async (
     websiteId: string,
     notificationData: {
-      title: string;
+      name: string;
       message: string;
       link?: string;
       image?: string;

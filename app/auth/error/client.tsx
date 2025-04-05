@@ -77,9 +77,9 @@ export default function AuthErrorClient() {
         </div>
       </div>
       
-      <div className="mt-8 text-sm text-base-content/60">
+      {/* <div className="mt-8 text-sm text-base-content/60">
         <p>Need help? <Link href="/help" className="link link-primary">Contact support</Link></p>
-      </div>
+      </div> */}
     </div>
   );
 } 

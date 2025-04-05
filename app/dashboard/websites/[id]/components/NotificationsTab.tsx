@@ -9,7 +9,7 @@ import type { Notification as NotificationType } from '@/app/lib/hooks';
 // Define notification type interface
 interface Notification {
   _id: string;
-  title: string;
+  name: string;
   message: string;
   link?: string;
   image?: string;
@@ -178,7 +178,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
             <tbody>
               {notifications.map((notification) => (
                 <tr key={notification._id}>
-                  <td className="font-medium">{notification.title}</td>
+                  <td className="font-medium">{notification.name}</td>
                   <td className="max-w-xs truncate">{notification.message}</td>
                   <td>{notification.impressions}</td>
                   <td>{notification.clicks}</td>

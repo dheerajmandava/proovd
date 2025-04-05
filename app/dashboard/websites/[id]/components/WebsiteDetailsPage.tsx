@@ -149,13 +149,13 @@ export default function WebsiteDetailsPage({ website }: WebsiteDetailsPageProps)
         >
           Analytics
         </button>
-        <button 
+        {/* <button 
           role="tab"
           className={`tab ${activeTab === 'proovdpulse' ? 'tab-active' : ''}`}
           onClick={() => handleTabChange('proovdpulse')}
         >
           ProovdPulse
-        </button>
+        </button> */}
         <button 
           role="tab"
           className={`tab ${activeTab === 'settings' ? 'tab-active' : ''}`}

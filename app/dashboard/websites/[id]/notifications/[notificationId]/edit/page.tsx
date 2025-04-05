@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { isValidUrl } from '@/app/lib/utils';
+import { useUpdateNotification } from '@/app/lib/hooks';
 
 // Define notification types
 const notificationTypes = [
@@ -29,10 +30,11 @@ interface FormData {
   }
 }
 
-export default function NewNotificationPage() {
+export default function EditNotificationPage() {
   const router = useRouter();
   const params = useParams();
   const websiteId = params.id as string;
+  const notificationId = params.notificationId as string;
   
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -51,8 +53,60 @@ export default function NewNotificationPage() {
   });
   
   const [customPages, setCustomPages] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
+  
+  const { 
+    updateNotification,
+    isUpdating,
+    error: updateError
+  } = useUpdateNotification();
+
+  // Fetch notification data
+  useEffect(() => {
+    async function fetchNotification() {
+      try {
+        const response = await fetch(`/api/notifications/${notificationId}`);
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch notification');
+        }
+        
+        const notification = await response.json();
+        
+        // Convert to form data format
+        setFormData({
+          name: notification.name || '',
+          type: notification.type || 'custom',
+          location: notification.displayRules?.pages?.length ? 'specific' : 'global',
+          productName: notification.productName || '',
+          message: notification.message || '',
+          url: notification.link || '',
+          image: notification.image || '',
+          status: notification.status || 'active',
+          displayRules: {
+            pages: notification.displayRules?.pages || [],
+            frequency: notification.displayRules?.frequency || 'always',
+            delay: notification.displayRules?.delay || 0,
+          }
+        });
+        
+        // Set custom pages
+        if (notification.displayRules?.pages?.length) {
+          setCustomPages(notification.displayRules.pages.join('\n'));
+        }
+        
+        setIsLoading(false);
+      } catch (err: any) {
+        console.error('Error fetching notification:', err);
+        setFetchError(err.message || 'Failed to load notification');
+        setIsLoading(false);
+      }
+    }
+    
+    fetchNotification();
+  }, [notificationId]);
 
   // Handle input changes
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -82,21 +136,21 @@ export default function NewNotificationPage() {
   // Handle form submission
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
+    setFetchError('');
 
     // Validate inputs
     if (!formData.name.trim()) {
-      setError('Notification name is required');
+      setFetchError('Notification name is required');
       return;
     }
 
     if (formData.type === 'purchase' && !formData.productName.trim()) {
-      setError('Product name is required for purchase notifications');
+      setFetchError('Product name is required for purchase notifications');
       return;
     }
 
     if (formData.url && !isValidUrl(formData.url)) {
-      setError('Please enter a valid URL');
+      setFetchError('Please enter a valid URL');
       return;
     }
 
@@ -108,44 +162,56 @@ export default function NewNotificationPage() {
         .filter(page => page);
     }
 
-    // Start submission
-    setIsSubmitting(true);
-
     try {
-      const response = await fetch(`/api/websites/${websiteId}/notifications`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          displayRules: {
-            ...formData.displayRules,
-            pages
-          }
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create notification');
+      // Create an update payload that matches the Notification type
+      const updatePayload: any = {
+        name: formData.name,
+        message: formData.message,
+        link: formData.url, // link is used in backend, url in frontend
+        image: formData.image,
+        status: formData.status,
+        displayRules: {
+          pages,
+          frequency: formData.displayRules.frequency,
+          delay: formData.displayRules.delay
+        }
+      };
+      
+      // Only add these fields if they exist in the form
+      if (formData.productName) {
+        updatePayload.productName = formData.productName;
       }
+      
+      if (formData.type) {
+        updatePayload.type = formData.type;
+      }
+      
+      await updateNotification(notificationId, updatePayload);
 
-      // Redirect to the website details page, not the notifications page
+      // Redirect to the website details page instead of notifications page
       router.push(`/dashboard/websites/${websiteId}`);
     } catch (err: any) {
-      setError(err.message || 'An error occurred while creating the notification');
-      setIsSubmitting(false);
+      console.error('Failed to update notification:', err);
+      setFetchError(err.message || 'An error occurred while updating the notification');
     }
   }
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <span className="loading loading-spinner loading-lg text-primary"></span>
+      </div>
+    );
+  }
+
+  const error = fetchError || updateError?.message;
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold mb-1">Add New Notification</h1>
+        <h1 className="text-2xl font-bold mb-1">Edit Notification</h1>
         <p className="text-neutral-content">
-          Create a new social proof notification for your website
+          Update the details of your social proof notification
         </p>
       </div>
 
@@ -171,7 +237,7 @@ export default function NewNotificationPage() {
                 onChange={handleChange}
                 placeholder="Black Friday Sale"
                 className="input input-bordered w-full"
-                disabled={isSubmitting}
+                disabled={isUpdating}
               />
               <label className="label">
                 <span className="label-text-alt">For your reference only</span>
@@ -188,7 +254,7 @@ export default function NewNotificationPage() {
                 value={formData.type}
                 onChange={handleChange}
                 className="select select-bordered w-full"
-                disabled={isSubmitting}
+                disabled={isUpdating}
               >
                 {notificationTypes.map(type => (
                   <option key={type.id} value={type.id}>
@@ -208,7 +274,7 @@ export default function NewNotificationPage() {
                 value={formData.location}
                 onChange={handleChange}
                 className="select select-bordered w-full"
-                disabled={isSubmitting}
+                disabled={isUpdating}
               >
                 <option value="global">All Pages</option>
                 <option value="specific">Specific Pages</option>
@@ -226,7 +292,7 @@ export default function NewNotificationPage() {
                   onChange={(e) => setCustomPages(e.target.value)}
                   placeholder="Enter each URL or path on a new line&#10;e.g., /products&#10;https://example.com/about"
                   className="textarea textarea-bordered h-24"
-                  disabled={isSubmitting}
+                  disabled={isUpdating}
                 />
                 <label className="label">
                   <span className="label-text-alt">Enter one URL per line</span>
@@ -247,36 +313,29 @@ export default function NewNotificationPage() {
                   onChange={handleChange}
                   placeholder="Premium Plan"
                   className="input input-bordered w-full"
-                  disabled={isSubmitting}
+                  disabled={isUpdating}
                 />
               </div>
             )}
 
             <div className="form-control mb-4">
               <label className="label" htmlFor="message">
-                <span className="label-text font-medium">
-                  {formData.type === 'custom' ? 'Message' : 'Additional Message (Optional)'}
-                </span>
+                <span className="label-text font-medium">Message</span>
               </label>
               <textarea
                 id="message"
                 name="message"
                 value={formData.message}
                 onChange={handleChange}
-                placeholder={
-                  formData.type === 'custom'
-                    ? 'John just joined our community!'
-                    : 'Add additional context (optional)'
-                }
-                className="textarea textarea-bordered h-20"
-                disabled={isSubmitting}
-                required={formData.type === 'custom'}
+                placeholder="John from New York just purchased our Premium Plan"
+                className="textarea textarea-bordered h-24"
+                disabled={isUpdating}
               />
             </div>
 
             <div className="form-control mb-4">
               <label className="label" htmlFor="url">
-                <span className="label-text font-medium">Destination URL (Optional)</span>
+                <span className="label-text font-medium">URL (Optional)</span>
               </label>
               <input
                 type="text"
@@ -284,12 +343,12 @@ export default function NewNotificationPage() {
                 name="url"
                 value={formData.url}
                 onChange={handleChange}
-                placeholder="https://example.com/product-page"
+                placeholder="https://example.com/product"
                 className="input input-bordered w-full"
-                disabled={isSubmitting}
+                disabled={isUpdating}
               />
               <label className="label">
-                <span className="label-text-alt">Where users will go when clicking the notification</span>
+                <span className="label-text-alt">Where users will go when they click the notification</span>
               </label>
             </div>
 
@@ -305,11 +364,8 @@ export default function NewNotificationPage() {
                 onChange={handleChange}
                 placeholder="https://example.com/image.jpg"
                 className="input input-bordered w-full"
-                disabled={isSubmitting}
+                disabled={isUpdating}
               />
-              <label className="label">
-                <span className="label-text-alt">Avatar image URL (we'll use a default if not provided)</span>
-              </label>
             </div>
 
             <div className="form-control mb-4">
@@ -322,15 +378,13 @@ export default function NewNotificationPage() {
                 value={formData.status}
                 onChange={handleChange}
                 className="select select-bordered w-full"
-                disabled={isSubmitting}
+                disabled={isUpdating}
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
                 <option value="draft">Draft</option>
               </select>
             </div>
-
-            <h3 className="font-bold text-lg mt-8 mb-4">Display Settings</h3>
 
             <div className="form-control mb-4">
               <label className="label" htmlFor="displayRules.frequency">
@@ -342,7 +396,7 @@ export default function NewNotificationPage() {
                 value={formData.displayRules.frequency}
                 onChange={handleChange}
                 className="select select-bordered w-full"
-                disabled={isSubmitting}
+                disabled={isUpdating}
               >
                 <option value="always">Always (show every time)</option>
                 <option value="once">Once per visitor</option>
@@ -352,7 +406,7 @@ export default function NewNotificationPage() {
 
             <div className="form-control mb-6">
               <label className="label" htmlFor="displayRules.delay">
-                <span className="label-text font-medium">Delay (seconds)</span>
+                <span className="label-text font-medium">Display Delay (seconds)</span>
               </label>
               <input
                 type="number"
@@ -361,25 +415,33 @@ export default function NewNotificationPage() {
                 value={formData.displayRules.delay}
                 onChange={handleChange}
                 min="0"
-                max="300"
+                max="60"
                 className="input input-bordered w-full"
-                disabled={isSubmitting}
+                disabled={isUpdating}
               />
               <label className="label">
-                <span className="label-text-alt">How long to wait before showing this notification (0-300 seconds)</span>
+                <span className="label-text-alt">Wait this many seconds before showing the notification</span>
               </label>
             </div>
 
-            <div className="flex justify-between mt-6">
-              <Link href={`/dashboard/websites/${websiteId}`} className="btn btn-outline">
+            <div className="flex gap-3 justify-end">
+              <Link 
+                href={`/dashboard/websites/${websiteId}`}
+                className="btn btn-outline"
+              >
                 Cancel
               </Link>
               <button 
                 type="submit" 
-                className={`btn btn-primary ${isSubmitting ? 'loading' : ''}`}
-                disabled={isSubmitting}
+                className="btn btn-primary"
+                disabled={isUpdating}
               >
-                {isSubmitting ? 'Creating...' : 'Create Notification'}
+                {isUpdating ? (
+                  <>
+                    <span className="loading loading-spinner loading-xs"></span>
+                    Saving...
+                  </>
+                ) : 'Save Changes'}
               </button>
             </div>
           </form>

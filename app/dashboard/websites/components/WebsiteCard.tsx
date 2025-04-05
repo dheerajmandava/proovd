@@ -41,9 +41,9 @@ export default function WebsiteCard({ website }: WebsiteCardProps) {
               <div>
                 <h2 className="card-title">{website.name}</h2>
                 <p className="text-sm text-gray-700 mb-2">{website.domain}</p>
-                <div className={`badge badge-${website.status === 'active' ? 'success' : 'error'} gap-1 mb-4`}>
-                  <div className={`w-2 h-2 rounded-full bg-${website.status === 'active' ? 'success' : 'error'}-content`}></div>
-                  {website.status === 'active' ? 'Active' : 'Inactive'}
+                <div className={`badge badge-${website.status === 'verified' ? 'success' : 'error'} gap-1 mb-4`}>
+                  <div className={`w-2 h-2 rounded-full bg-${website.status === 'verified' ? 'success' : 'error'}-content`}></div>
+                  {website.status === 'verified' ? 'Active' : 'Inactive'}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 mt-4 md:mt-0">

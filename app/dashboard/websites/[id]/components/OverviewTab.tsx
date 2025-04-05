@@ -20,6 +20,8 @@ interface Notification {
   location: string;
   timestamp: string;
   timeAgo: string;
+  impressions: number;
+  clicks: number;
 }
 
 interface WebsiteData {
@@ -88,6 +90,8 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
             location: notification.location || 'Global',
             timestamp: notification.createdAt,
             timeAgo: formatTimeAgo(notification.createdAt),
+            impressions: notification.impressions,
+            clicks: notification.clicks,
           }));
           setFormattedNotifications(formatted);
         } else {
@@ -139,6 +143,10 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
       </div>
     );
   }
+  let impressionsTOTAL = 0;
+  impressionsTOTAL = formattedNotifications.map((e) => e.impressions).reduce((a, b) => a + b, 0);
+  let clicksTOTAL = 0;
+  clicksTOTAL = formattedNotifications.map((e) => e.clicks).reduce((a, b) => a + b, 0);
 
   // Generate the installation code snippet with proper website ID
   const installationCode = `<script src="https://cdn.proovd.in/w/${websiteId}.js"></script>`;
@@ -153,8 +161,8 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
     }
     
     // Calculate on the fly with safety check for division by zero
-    const impressions = websiteData.totalImpressions || 0;
-    const clicks = websiteData.totalClicks || 0;
+    const impressions = formattedNotifications.map((e) => e.impressions).reduce((a, b) => a + b, 0);
+    const clicks = formattedNotifications.map((e) => e.clicks).reduce((a, b) => a + b, 0);
     
     if (impressions === 0) return '0.00%';
     
@@ -176,8 +184,8 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
         <Card className="p-6">
           <h3 className="text-sm font-medium text-gray-500">Total Impressions</h3>
           <div className="mt-2 flex items-baseline">
-            <div className="text-3xl font-semibold">{formatNumber(websiteData.totalImpressions || 0)}</div>
-            <div className="ml-2 text-sm text-gray-500">views today</div>
+            <div className="text-3xl font-semibold">{formatNumber(impressionsTOTAL || 0)}</div>
+            <div className="ml-2 text-sm text-gray-500">impressions</div>
           </div>
         </Card>
 
@@ -194,7 +202,7 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
       <SetupGuide websiteId={websiteId} />
 
       {/* API Information */}
-      <div className="card bg-base-100 shadow-xl mb-8">
+      {/* <div className="card bg-base-100 shadow-xl mb-8">
         <div className="card-body">
           <h2 className="card-title">Integration Details</h2>
           
@@ -213,20 +221,20 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Recent Notifications */}
       <div className="card bg-base-100 shadow-xl">
         <div className="card-body">
           <div className="flex items-center justify-between">
             <h2 className="card-title">Recent Notifications</h2>
-            <Link 
-              href={`/dashboard/websites/${websiteData.id}/notifications`}
+            {/* <Link 
+              href={`/dashboard/websites/${websiteData.id}/?tab=notifications`}
               className="btn btn-sm btn-ghost gap-2"
             >
               View All 
               <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-            </Link>
+            </Link> */}
           </div>
 
           {formattedNotifications.length > 0 ? (

@@ -14,7 +14,7 @@ export default function SetupGuide({ websiteId }: SetupGuideProps) {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
   // Script tag that needs to be added to the customer's website
-  const scriptTag = `<script src="${origin}/api/cdn/n/${websiteId}"></script>`;
+  const scriptTag = `<script src="${origin}/api/cdn/w/${websiteId}"></script>`;
 
   // Installation steps
   const steps = [
@@ -97,7 +97,7 @@ export default function SetupGuide({ websiteId }: SetupGuideProps) {
           </Card>
         ))}
       </div>
-
+{/* 
       <Card className="p-6 bg-blue-50 border-blue-200">
         <h3 className="text-lg font-semibold mb-2">Need Help?</h3>
         <p className="text-gray-600">
@@ -106,7 +106,7 @@ export default function SetupGuide({ websiteId }: SetupGuideProps) {
         <div className="mt-4">
           <Button variant="default">Contact Support</Button>
         </div>
-      </Card>
+      </Card> */}
 
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
         <p className="text-sm text-yellow-800">

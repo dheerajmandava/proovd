@@ -44,20 +44,20 @@ export default function Sidebar() {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'Websites', href: '/dashboard/websites', icon: GlobeAltIcon },
-    { 
-      name: 'Analytics', 
-      href: activeWebsiteId 
-        ? `/dashboard/websites/${activeWebsiteId}/analytics` 
-        : '/dashboard/analytics', 
-      icon: ChartBarIcon 
-    },
-    { 
-      name: 'Events', 
-      href: '/dashboard/events/list', 
-      icon: ClockIcon,
-      badge: 'New'
-    },
-    { name: 'Billing', href: '/dashboard/billing', icon: CreditCardIcon },
+    // { 
+    //   name: 'Analytics', 
+    //   href: activeWebsiteId 
+    //     ? `/dashboard/websites/${activeWebsiteId}/analytics` 
+    //     : '/dashboard/analytics', 
+    //   icon: ChartBarIcon 
+    // },
+    // { 
+    //   name: 'Events', 
+    //   href: '/dashboard/events/list', 
+    //   icon: ClockIcon,
+    //   badge: 'New'
+    // },
+    // { name: 'Billing', href: '/dashboard/billing', icon: CreditCardIcon },
     { name: 'Help', href: '/dashboard/help', icon: QuestionMarkCircleIcon },
   ];
   
