@@ -26,9 +26,9 @@ export async function GET(request, props) {
       });
     }
     
-    // Use the same domain for the widget script
-    const host = request.headers.get('host') || '';
-    const protocol = 'https';
+    // Get host from request or use default
+    const host = request.headers.get('host') || 'www.proovd.in';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
     const baseUrl = `${protocol}://${host}`;
     
     // Create a simple loader script that loads the main widget script
@@ -37,13 +37,26 @@ export async function GET(request, props) {
       (function() {
         const websiteId = "${id}";
         
+        console.log("🟢 Proovd Widget Loader Starting - Website ID: ${id}");
+        
         // Create and append the main widget script
         const widgetScript = document.createElement('script');
         widgetScript.async = true;
-        widgetScript.src = "${baseUrl}/api/websites/${id}/widget.js";
-        widgetScript.onerror = function() {
-          console.error('Failed to load Proovd widget script');
+        widgetScript.src = "${baseUrl}/api/websites/${id}/widget.js?t=" + new Date().getTime();
+        widgetScript.onerror = function(err) {
+          console.error("❌ Failed to load Proovd widget script:", err);
         };
+        
+        widgetScript.onload = function() {
+          console.log("✅ Proovd widget script loaded successfully");
+        };
+        
+        // Debug information
+        console.log("ℹ️ Widget configuration:", {
+          websiteId: "${id}",
+          apiEndpoint: "${baseUrl}/api/websites/${id}/widget.js",
+          timestamp: new Date().toISOString()
+        });
         
         // Insert the script into the page
         document.head.appendChild(widgetScript);
@@ -54,7 +67,9 @@ export async function GET(request, props) {
     return new NextResponse(loaderScript, {
       headers: {
         'Content-Type': 'application/javascript',
-        'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET',
         'Access-Control-Max-Age': '86400',

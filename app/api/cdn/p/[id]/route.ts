@@ -30,6 +30,11 @@ export async function GET(
       return NextResponse.json({ error: 'Website not found' }, { status: 404 });
     }
 
+    // Get host from request or use default
+    const host = request.headers.get('host') || 'www.proovd.in';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${host}`;
+
     // Create the loader script with cache-busting
     const script = `
       // ProovdPulse Widget Loader
@@ -40,9 +45,9 @@ export async function GET(
       (function() {
         console.log("🟢 ProovdPulse Loader Starting - Website ID: ${params.id}");
         
-        // Load the main script with cache busting from proovd.in
+        // Load the main script with cache busting
         const script = document.createElement('script');
-        script.src = "https://www.proovd.in/api/websites/${params.id}/pulse-widget.js?t=" + new Date().getTime();
+        script.src = "${baseUrl}/api/websites/${params.id}/pulse-widget.js?t=" + new Date().getTime();
         script.async = true;
         script.setAttribute('data-website-id', "${params.id}");
         script.setAttribute('data-position', "bottom-right");
@@ -63,7 +68,7 @@ export async function GET(
         // Debug information
         console.log("ℹ️ Widget configuration:", {
           websiteId: "${params.id}",
-          apiEndpoint: "https://www.proovd.in/api/websites/${params.id}/pulse-widget.js",
+          apiEndpoint: "${baseUrl}/api/websites/${params.id}/pulse-widget.js",
           timestamp: new Date().toISOString(),
           serverTimestamp: "${BUILD_TIMESTAMP}"
         });

@@ -49,7 +49,7 @@ export async function GET(
     }
     
     // Get the bundled widget file from the public directory
-    const widgetFilePath = path.join(process.cwd(), 'public', 'pulse-widget.min.js');
+    const widgetFilePath = path.join(process.cwd(), 'public', 'widget.js');
     
     let widgetJs;
     try {
@@ -103,7 +103,7 @@ console.log('ℹ️ Widget configuration: ' + JSON.stringify({
         position: "${position}",
         theme: "${theme}",
         debug: true,
-        serverUrl: "wss://socket.proovd.in"
+        socketUrl: "wss://socket.proovd.in"
       });
       console.log('✅ ProovdPulse widget script loaded successfully');
     } catch (e) {
