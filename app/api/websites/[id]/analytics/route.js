@@ -82,6 +82,7 @@ export async function GET(request, { params }) {
         clicks: item.clicks || 0
       }));
 
+      console.log('formattedTimeSeries', topNotifications);
       // Process top notifications to add conversion rate
       const formattedTopNotifications = topNotifications.map(notification => ({
         id: notification._id || notification.notificationId || '',

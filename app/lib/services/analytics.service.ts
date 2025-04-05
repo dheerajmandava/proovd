@@ -595,7 +595,7 @@ export async function getTopNotifications(websiteId: string, limit: number = 5):
         $project: {
           _id: 1,
           notificationId: '$_id',
-          title: { $ifNull: ['$notification.title', 'Unknown Notification'] },
+          title: { $ifNull: ['$notification.name', 'Unknown Notification'] },
           type: { $ifNull: ['$notification.type', 'custom'] },
           impressions: 1,
           clicks: 1,
@@ -684,7 +684,7 @@ export async function getTopNotifications(websiteId: string, limit: number = 5):
         $project: {
           _id: 1,
           notificationId: 1,
-          title: { $ifNull: ['$notification.title', 'Unknown Notification'] },
+          title: { $ifNull: ['$notification.name', 'Unknown Notification'] },
           type: { $ifNull: ['$notification.type', 'custom'] },
           impressions: 1,
           clicks: 1,
