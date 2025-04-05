@@ -10,6 +10,8 @@ import { connectToDatabase } from './database/connection';
 import Website from './models/website';
 import Notification from './models/notification';
 import Metric from './models/metric';
+import { AnalyticsEvent, AnalyticsSummary } from './models/analytics';
+import { startOfDay, startOfWeek, startOfMonth, subDays } from 'date-fns';
 
 interface StatsSummary {
   totalImpressions: number;
@@ -269,17 +271,189 @@ export async function calculateNotificationStats(websiteId?: string) {
 }
 
 /**
- * Run all background analytics processes
+ * Process analytics events and update analytics summaries
+ * This function aggregates analytics events into summary records for faster dashboard queries
  */
-export async function runAllAnalytics() {
-  console.log('Starting analytics background processing...');
-  await calculateWebsiteStats();
-  await calculateNotificationStats();
-  console.log('Completed analytics background processing');
+export async function processAnalyticsEvents(websiteId?: string, days: number = 30) {
+  try {
+    await connectToDatabase();
+    
+    console.log(`Processing analytics events${websiteId ? ` for website ${websiteId}` : ''}`);
+    
+    const startDate = subDays(new Date(), days);
+    
+    // Get all websites or a specific one
+    const websiteQuery = websiteId 
+      ? { _id: new mongoose.Types.ObjectId(websiteId) } 
+      : {};
+    
+    const websites = await Website.find(websiteQuery);
+    
+    for (const website of websites) {
+      console.log(`Processing events for website ${website._id}`);
+      
+      // Get all events for this website in the time range
+      const events = await AnalyticsEvent.find({
+        websiteId: website._id,
+        timestamp: { $gte: startDate }
+      }).sort({ timestamp: 1 });
+      
+      if (events.length === 0) {
+        console.log(`No events found for website ${website._id}`);
+        continue;
+      }
+      
+      console.log(`Found ${events.length} events for website ${website._id}`);
+      
+      // Group events by day
+      const dailyEvents = groupEventsByTimeframe(events, 'day');
+      // Group events by week
+      const weeklyEvents = groupEventsByTimeframe(events, 'week');
+      // Group events by month
+      const monthlyEvents = groupEventsByTimeframe(events, 'month');
+      
+      // Process daily summaries
+      await processTimeframeSummaries(website._id, dailyEvents, 'daily');
+      // Process weekly summaries
+      await processTimeframeSummaries(website._id, weeklyEvents, 'weekly');
+      // Process monthly summaries
+      await processTimeframeSummaries(website._id, monthlyEvents, 'monthly');
+      
+      console.log(`Completed processing for website ${website._id}`);
+    }
+    
+    return { success: true, message: 'Analytics events processed successfully' };
+  } catch (error) {
+    console.error('Error processing analytics events:', error);
+    return { success: false, error: 'Failed to process analytics events' };
+  }
+}
+
+/**
+ * Group events by a specific timeframe (day, week, month)
+ */
+function groupEventsByTimeframe(events: any[], timeframe: 'day' | 'week' | 'month') {
+  const grouped = new Map();
+  
+  for (const event of events) {
+    let key;
+    const timestamp = new Date(event.timestamp);
+    
+    if (timeframe === 'day') {
+      key = startOfDay(timestamp).toISOString();
+    } else if (timeframe === 'week') {
+      key = startOfWeek(timestamp, { weekStartsOn: 1 }).toISOString();
+    } else if (timeframe === 'month') {
+      key = startOfMonth(timestamp).toISOString();
+    }
+    
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        date: new Date(key),
+        events: [],
+        byNotification: new Map()
+      });
+    }
+    
+    const group = grouped.get(key);
+    group.events.push(event);
+    
+    // Group by notification as well
+    const notificationId = event.notificationId.toString();
+    if (!group.byNotification.has(notificationId)) {
+      group.byNotification.set(notificationId, []);
+    }
+    
+    group.byNotification.get(notificationId).push(event);
+  }
+  
+  return grouped;
+}
+
+/**
+ * Process summaries for a specific timeframe
+ */
+async function processTimeframeSummaries(
+  websiteId: mongoose.Types.ObjectId, 
+  groupedEvents: Map<string, any>, 
+  granularity: 'daily' | 'weekly' | 'monthly'
+) {
+  for (const [key, group] of groupedEvents.entries()) {
+    const { date, events, byNotification } = group;
+    
+    // Count impressions and clicks
+    const impressions = events.filter(e => e.type === 'impression').length;
+    const clicks = events.filter(e => e.type === 'click').length;
+    
+    // Calculate conversion rate
+    const conversionRate = impressions > 0 ? (clicks / impressions) * 100 : 0;
+    
+    // Prepare notification metrics
+    const notificationMetrics = [];
+    
+    for (const [notificationId, notificationEvents] of byNotification.entries()) {
+      const notificationImpressions = notificationEvents.filter(e => e.type === 'impression').length;
+      const notificationClicks = notificationEvents.filter(e => e.type === 'click').length;
+      const notificationConversionRate = notificationImpressions > 0 
+        ? (notificationClicks / notificationImpressions) * 100 
+        : 0;
+      
+      notificationMetrics.push({
+        notificationId: new mongoose.Types.ObjectId(notificationId),
+        impressions: notificationImpressions,
+        clicks: notificationClicks,
+        conversionRate: notificationConversionRate
+      });
+    }
+    
+    // Upsert the summary document
+    await AnalyticsSummary.updateOne(
+      {
+        websiteId,
+        date,
+        granularity
+      },
+      {
+        $set: {
+          metrics: {
+            impressions,
+            clicks,
+            conversionRate
+          },
+          notificationMetrics
+        }
+      },
+      { upsert: true }
+    );
+  }
+}
+
+/**
+ * Run all analytics processing functions
+ */
+export async function runAllAnalytics(websiteId?: string) {
+  try {
+    await connectToDatabase();
+    
+    console.log('Starting analytics processing jobs...');
+    
+    // Process legacy metrics
+    await calculateWebsiteStats(websiteId);
+    await calculateNotificationStats(websiteId);
+    
+    // Process new analytics events
+    await processAnalyticsEvents(websiteId);
+    
+    console.log('All analytics processing jobs completed successfully');
+    
+    return { success: true, message: 'Analytics processed successfully' };
+  } catch (error) {
+    console.error('Error running analytics jobs:', error);
+    return { success: false, error: 'Failed to process analytics: ' + error.message };
+  }
 }
 
 // Export directly for serverless function execution
 export default async function handler() {
-  await runAllAnalytics();
-  return { success: true };
+  return await runAllAnalytics();
 } 

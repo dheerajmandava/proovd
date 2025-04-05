@@ -31,34 +31,81 @@ export async function getWebsiteMetricsSummary(websiteId: string): Promise<{
   
   await connectToDatabase();
   
-  // Get total impressions
-  const totalImpressions = await Metric.countDocuments({
-    siteId: websiteId,
-    type: 'impression'
-  });
+  try {
+    // First try to get from AnalyticsSummary collection
+    const summaries = await AnalyticsSummary.find({
+      websiteId: new mongoose.Types.ObjectId(websiteId),
+      granularity: 'monthly' // Use monthly for overall summary
+    }).sort({ date: -1 }).limit(1);
+    
+    if (summaries && summaries.length > 0) {
+      // Get impression and click counts from AnalyticsEvent
+      const impressionCount = await AnalyticsEvent.countDocuments({
+        websiteId: new mongoose.Types.ObjectId(websiteId),
+        type: 'impression'
+      });
+      
+      const clickCount = await AnalyticsEvent.countDocuments({
+        websiteId: new mongoose.Types.ObjectId(websiteId),
+        type: 'click'
+      });
+      
+      // Get notification count
+      const totalNotifications = await Notification.countDocuments({
+        siteId: websiteId
+      });
+      
+      // Calculate conversion rate
+      const conversionRate = impressionCount > 0 
+        ? ((clickCount / impressionCount) * 100).toFixed(2) 
+        : '0.00';
+      
+      return {
+        totalImpressions: impressionCount,
+        totalClicks: clickCount,
+        conversionRate,
+        totalNotifications
+      };
+    }
+    
+    // Fall back to old method if no analytics summary found
+    // Get total impressions
+    const totalImpressions = await Metric.countDocuments({
+      siteId: websiteId,
+      type: 'impression'
+    });
 
-  // Get total clicks
-  const totalClicks = await Metric.countDocuments({
-    siteId: websiteId,
-    type: 'click'
-  });
+    // Get total clicks
+    const totalClicks = await Metric.countDocuments({
+      siteId: websiteId,
+      type: 'click'
+    });
 
-  // Calculate conversion rate
-  const conversionRate = totalImpressions > 0 
-    ? ((totalClicks / totalImpressions) * 100).toFixed(2) 
-    : '0.00';
+    // Calculate conversion rate
+    const conversionRate = totalImpressions > 0 
+      ? ((totalClicks / totalImpressions) * 100).toFixed(2) 
+      : '0.00';
 
-  // Get total notifications
-  const totalNotifications = await Notification.countDocuments({
-    siteId: websiteId
-  });
-  
-  return {
-    totalImpressions,
-    totalClicks,
-    conversionRate,
-    totalNotifications
-  };
+    // Get total notifications
+    const totalNotifications = await Notification.countDocuments({
+      siteId: websiteId
+    });
+    
+    return {
+      totalImpressions,
+      totalClicks,
+      conversionRate,
+      totalNotifications
+    };
+  } catch (error) {
+    console.error('Error getting metrics summary:', error);
+    return {
+      totalImpressions: 0,
+      totalClicks: 0,
+      conversionRate: '0.00',
+      totalNotifications: 0
+    };
+  }
 }
 
 /**
@@ -77,20 +124,135 @@ export async function getWebsiteTimeSeries(
     return [];
   }
   
-  // Convert string ID to mongoose ObjectId
-  const websiteObjectId = new mongoose.Types.ObjectId(websiteId);
+  await connectToDatabase();
   
-  // Validate and convert timeRange
-  const validTimeRange = ['day', 'week', 'month', 'year'].includes(timeRange) 
-    ? timeRange as TimeRange 
-    : 'week';
+  try {
+    // Determine time range
+    const now = new Date();
+    let startDate: Date;
     
-  // Validate and convert groupBy
-  const validGroupBy = ['hour', 'day', 'week', 'month'].includes(groupBy) 
-    ? groupBy as GroupBy 
-    : 'day';
+    switch (timeRange) {
+      case 'day':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 1);
+        break;
+      case 'week':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'year':
+        startDate = new Date(now);
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      default:
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+    }
     
-  return await getMetricsTimeSeriesUtil(websiteObjectId, validTimeRange, validGroupBy);
+    // Determine granularity based on groupBy
+    let granularity: 'daily' | 'weekly' | 'monthly';
+    switch (groupBy) {
+      case 'hour':
+      case 'day':
+        granularity = 'daily';
+        break;
+      case 'week':
+        granularity = 'weekly';
+        break;
+      case 'month':
+        granularity = 'monthly';
+        break;
+      default:
+        granularity = 'daily';
+    }
+    
+    // Get analytics from AnalyticsSummary
+    const summaries = await AnalyticsSummary.find({
+      websiteId: new mongoose.Types.ObjectId(websiteId),
+      granularity,
+      date: { $gte: startDate }
+    }).sort({ date: 1 });
+    
+    if (summaries && summaries.length > 0) {
+      return summaries.map(summary => ({
+        date: summary.date,
+        impressions: summary.metrics.impressions,
+        clicks: summary.metrics.clicks,
+        conversionRate: summary.metrics.conversionRate
+      }));
+    }
+    
+    // If no data in AnalyticsSummary, try to generate from AnalyticsEvent
+    const events = await AnalyticsEvent.aggregate([
+      {
+        $match: {
+          websiteId: new mongoose.Types.ObjectId(websiteId),
+          timestamp: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            date: groupBy === 'hour' ? { $dateToString: { format: "%Y-%m-%d-%H", date: "$timestamp" } } :
+                 groupBy === 'day' ? { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } } :
+                 groupBy === 'week' ? { $dateToString: { format: "%Y-%U", date: "$timestamp" } } :
+                                      { $dateToString: { format: "%Y-%m", date: "$timestamp" } },
+            type: "$type"
+          },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $group: {
+          _id: "$_id.date",
+          metrics: {
+            $push: {
+              k: "$_id.type",
+              v: "$count"
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          date: "$_id",
+          metrics: { $arrayToObject: "$metrics" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          date: 1,
+          impressions: { $ifNull: ["$metrics.impression", 0] },
+          clicks: { $ifNull: ["$metrics.click", 0] }
+        }
+      },
+      {
+        $sort: { date: 1 }
+      }
+    ]);
+    
+    if (events && events.length > 0) {
+      return events.map(event => ({
+        ...event,
+        conversionRate: event.impressions > 0 ? (event.clicks / event.impressions) * 100 : 0
+      }));
+    }
+    
+    // Fall back to old method if no data found in both collections
+    return await getMetricsTimeSeriesUtil(
+      new mongoose.Types.ObjectId(websiteId), 
+      timeRange as TimeRange, 
+      groupBy as GroupBy
+    );
+  } catch (error) {
+    console.error('Error getting time series data:', error);
+    return [];
+  }
 }
 
 /**
@@ -384,50 +546,161 @@ export async function getNotificationAnalytics(notificationId: string, options: 
 /**
  * Get top performing notifications
  */
-export async function getTopNotifications(websiteId: string, options: {
-  metric?: 'impressions' | 'clicks' | 'conversionRate';
-  limit?: number;
-  startDate?: Date;
-  endDate?: Date;
-} = {}) {
+export async function getTopNotifications(websiteId: string, limit: number = 5): Promise<any> {
+  if (!websiteId || !mongoose.Types.ObjectId.isValid(websiteId)) {
+    return [];
+  }
+  
   await connectToDatabase();
-
-  const { metric = 'impressions', limit = 10, startDate, endDate } = options;
-
-  // Default to last 30 days if no dates provided
-  const end = endDate || new Date();
-  const start = startDate || new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-  const summaries = await AnalyticsSummary.aggregate([
-    {
-      $match: {
-        websiteId: new mongoose.Types.ObjectId(websiteId),
-        date: { $gte: start, $lte: end }
-      }
-    },
-    { $unwind: '$notificationMetrics' },
-    {
-      $group: {
-        _id: '$notificationMetrics.notificationId',
-        impressions: { $sum: '$notificationMetrics.impressions' },
-        clicks: { $sum: '$notificationMetrics.clicks' },
-        conversionRate: { 
-          $avg: '$notificationMetrics.conversionRate'
+  
+  try {
+    // First try to get from AnalyticsSummary
+    const topNotifications = await AnalyticsSummary.aggregate([
+      {
+        $match: {
+          websiteId: new mongoose.Types.ObjectId(websiteId),
+          granularity: 'monthly' // Use monthly for larger dataset
+        }
+      },
+      { $unwind: '$notificationMetrics' },
+      {
+        $group: {
+          _id: '$notificationMetrics.notificationId',
+          impressions: { $sum: '$notificationMetrics.impressions' },
+          clicks: { $sum: '$notificationMetrics.clicks' },
+          conversionRate: { $avg: '$notificationMetrics.conversionRate' }
+        }
+      },
+      {
+        $sort: { impressions: -1 }
+      },
+      {
+        $limit: limit
+      },
+      {
+        $lookup: {
+          from: 'notifications',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'notification'
+        }
+      },
+      {
+        $unwind: { 
+          path: '$notification',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          notificationId: '$_id',
+          title: { $ifNull: ['$notification.title', 'Unknown Notification'] },
+          type: { $ifNull: ['$notification.type', 'custom'] },
+          impressions: 1,
+          clicks: 1,
+          conversionRate: 1
         }
       }
-    },
-    { $sort: { [metric]: -1 } },
-    { $limit: limit },
-    {
-      $lookup: {
-        from: 'notifications',
-        localField: '_id',
-        foreignField: '_id',
-        as: 'notification'
+    ]);
+    
+    if (topNotifications && topNotifications.length > 0) {
+      return topNotifications;
+    }
+    
+    // If no data in AnalyticsSummary, try to generate from AnalyticsEvent
+    const events = await AnalyticsEvent.aggregate([
+      {
+        $match: {
+          websiteId: new mongoose.Types.ObjectId(websiteId)
+        }
+      },
+      {
+        $group: {
+          _id: {
+            notificationId: '$notificationId',
+            type: '$type'
+          },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.notificationId',
+          metrics: {
+            $push: {
+              k: '$_id.type',
+              v: '$count'
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          notificationId: '$_id',
+          metrics: { $arrayToObject: '$metrics' }
+        }
+      },
+      {
+        $project: {
+          _id: '$notificationId',
+          notificationId: '$notificationId',
+          impressions: { $ifNull: ['$metrics.impression', 0] },
+          clicks: { $ifNull: ['$metrics.click', 0] }
+        }
+      },
+      {
+        $addFields: {
+          conversionRate: {
+            $cond: [
+              { $gt: ['$impressions', 0] },
+              { $multiply: [{ $divide: ['$clicks', '$impressions'] }, 100] },
+              0
+            ]
+          }
+        }
+      },
+      {
+        $sort: { impressions: -1 }
+      },
+      {
+        $limit: limit
+      },
+      {
+        $lookup: {
+          from: 'notifications',
+          localField: 'notificationId',
+          foreignField: '_id',
+          as: 'notification'
+        }
+      },
+      {
+        $unwind: { 
+          path: '$notification',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          notificationId: 1,
+          title: { $ifNull: ['$notification.title', 'Unknown Notification'] },
+          type: { $ifNull: ['$notification.type', 'custom'] },
+          impressions: 1,
+          clicks: 1,
+          conversionRate: 1
+        }
       }
-    },
-    { $unwind: '$notification' }
-  ]);
-
-  return summaries;
+    ]);
+    
+    if (events && events.length > 0) {
+      return events;
+    }
+    
+    // Fall back to empty array if no data found
+    return [];
+  } catch (error) {
+    console.error('Error getting top notifications:', error);
+    return [];
+  }
 } 

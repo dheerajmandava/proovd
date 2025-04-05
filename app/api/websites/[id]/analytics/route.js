@@ -84,13 +84,16 @@ export async function GET(request, { params }) {
 
       // Process top notifications to add conversion rate
       const formattedTopNotifications = topNotifications.map(notification => ({
-        id: notification._id || notification.notificationId,
-        type: notification.type || 'Unknown',
-        views: notification.impressions || 0,
+        id: notification._id || notification.notificationId || '',
+        name: notification.title || 'Unknown Notification',
+        type: notification.type || 'custom',
+        impressions: notification.impressions || 0,
         clicks: notification.clicks || 0,
-        conversionRate: notification.impressions > 0 
-          ? notification.clicks / notification.impressions 
-          : 0
+        conversionRate: notification.conversionRate || (notification.impressions > 0 
+          ? (notification.clicks / notification.impressions) * 100
+          : 0),
+        displayCount: notification.impressions || 0,
+        uniqueImpressionCount: notification.impressions || 0
       }));
 
       return NextResponse.json({
