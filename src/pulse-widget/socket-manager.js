@@ -19,11 +19,6 @@ class SocketManager {
     this.heartbeatInterval = null;
     this.socketUrl = 'wss://socket.proovd.in';
     this.debug = false;
-    this.clickHandlerAdded = false;
-    this.scrollPercentage = 0;
-    
-    // Bind methods
-    this.handleDocumentClick = this.handleDocumentClick.bind(this);
   }
 
   /**
@@ -96,13 +91,6 @@ class SocketManager {
     
     this.websiteId = websiteId;
     this.isConnecting = true;
-    
-    // Add global click handler if not already added
-    if (!this.clickHandlerAdded) {
-      document.addEventListener('click', this.handleDocumentClick);
-      this.clickHandlerAdded = true;
-      this.log('🟢 Global click tracking enabled');
-    }
     
     return new Promise((resolve, reject) => {
       // Close existing socket if any
@@ -229,12 +217,6 @@ class SocketManager {
           });
         }
         
-        // Remove click handler when disconnecting
-        if (this.clickHandlerAdded) {
-          document.removeEventListener('click', this.handleDocumentClick);
-          this.clickHandlerAdded = false;
-        }
-        
         this.socket.close(1000, 'Intentional disconnect');
         this.socket = null;
       } catch (error) {
@@ -350,21 +332,6 @@ class SocketManager {
         timeOnPage: timeOnPage || Math.round((Date.now() - (window.performance.timeOrigin || Date.now())) / 1000)
       }
     });
-  }
-
-  /**
-   * Handle document click event
-   */
-  handleDocumentClick() {
-    this.log('🟢 Click detected, sending to server');
-    this.trackClick(this.scrollPercentage);
-  }
-  
-  /**
-   * Update current scroll percentage for tracking
-   */
-  updateScrollPercentage(percentage) {
-    this.scrollPercentage = percentage;
   }
 }
 

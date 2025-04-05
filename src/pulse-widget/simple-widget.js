@@ -88,16 +88,16 @@ export class PulseWidget {
    */
   onMessage(data) {
     try {
-      if (data.type === 'stats') {
-        if (data.activeUsers !== undefined) {
-          this.activeUsers = data.activeUsers;
-          this.updateUI();
-        } else if (data.stats && data.stats.activeUsers !== undefined) {
-          this.activeUsers = data.stats.activeUsers;
-          this.updateUI();
-        }
-      }
-    } catch (error) {
+            if (data.type === 'stats') {
+              if (data.activeUsers !== undefined) {
+                this.activeUsers = data.activeUsers;
+                this.updateUI();
+              } else if (data.stats && data.stats.activeUsers !== undefined) {
+                this.activeUsers = data.stats.activeUsers;
+                this.updateUI();
+              }
+            }
+          } catch (error) {
       console.error('❌ Error handling message:', error);
     }
   }
@@ -155,12 +155,8 @@ export class PulseWidget {
       const scrollableHeight = documentHeight - windowHeight;
       const scrollPercentage = Math.min(100, Math.round((scrollPosition / scrollableHeight) * 100));
       this.activityMetrics.scrollPercentage = scrollPercentage;
-      
-      // Update the socket manager with the current scroll percentage
-      socketManager.updateScrollPercentage(scrollPercentage);
     } else {
       this.activityMetrics.scrollPercentage = 0;
-      socketManager.updateScrollPercentage(0);
     }
   }
 
