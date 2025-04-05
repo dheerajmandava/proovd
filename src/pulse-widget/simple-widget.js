@@ -11,32 +11,37 @@ let widgetInstance = null;
  */
 class PulseWidget {
   constructor(options = {}) {
-    this.container = null;
-    this.activeUsers = 0;
-    this.pulseInterval = null;
-    this.websiteId = options.websiteId || '';
-    this.socketUrl = options.serverUrl || 'wss://socket.proovd.in';
-    this.socket = null;
-    this.reconnectTimeout = null;
-    this.reconnectAttempts = 0;
+    this.options = {
+      position: 'bottom-right',
+      theme: 'light',
+      socketUrl: 'wss://socket.proovd.in',
+      updateInterval: 5000,
+      debug: false,
+      ...options
+    };
     
-    // Activity tracking
+    this.websiteId = options.websiteId;
+    this.socketUrl = options.socketUrl || 'wss://socket.proovd.in';
+    this.activeUsers = 0;
+    this.socket = null;
+    this.container = null;
+    this.reconnectAttempts = 0;
+    this.reconnectTimeout = null;
+    this.pageLoadTime = Date.now();
     this.activityInterval = null;
+    this.pulseInterval = null;
+    this.pingInterval = null; // Added for socket health checks
+    
+    // Activity metrics
     this.activityMetrics = {
       clickCount: 0,
       scrollPercentage: 0,
       timeOnPage: 0
     };
-    this.pageLoadTime = Date.now();
     
-    this.options = {
-      position: options.position || 'bottom-right',
-      theme: options.theme || 'auto',
-      zIndex: options.zIndex || 999999,
-      pulseColor: options.pulseColor || '#2563eb', // Default blue color
-      updateInterval: options.updateInterval || 3000, // Faster updates: 3 seconds
-      debug: options.debug || false
-    };
+    // Bind event handlers
+    this.handleClick = this.handleClick.bind(this);
+    this.handleScroll = this.handleScroll.bind(this);
     
     console.log('🟢 PulseWidget created with options:', this.options);
   }
@@ -82,42 +87,65 @@ class PulseWidget {
     console.log('🟢 Starting activity tracking');
     
     // Track clicks
-    document.addEventListener('click', () => {
-      this.activityMetrics.clickCount++;
-      console.log('🟢 Click tracked, total:', this.activityMetrics.clickCount);
-    });
+    document.addEventListener('click', this.handleClick);
     
-    // Track scrolling
-    let maxScroll = 0;
-    document.addEventListener('scroll', () => {
-      const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (scrollHeight > 0) {
-        const scrollPercent = Math.round((window.scrollY / scrollHeight) * 100);
-        if (scrollPercent > maxScroll) {
-          maxScroll = scrollPercent;
-          this.activityMetrics.scrollPercentage = maxScroll;
-          console.log('🟢 Max scroll updated:', this.activityMetrics.scrollPercentage + '%');
-        }
-      }
-    });
+    // Track scroll position
+    document.addEventListener('scroll', this.handleScroll);
+    
+    // Initial scroll check
+    this.handleScroll();
     
     // Send activity data periodically
     this.activityInterval = setInterval(() => {
       // Update time on page
       this.activityMetrics.timeOnPage = Math.round((Date.now() - this.pageLoadTime) / 1000);
       
+      // Only send other metrics periodically (not clicks - clicks are sent immediately)
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
         const message = {
           type: 'activity',
           websiteId: this.websiteId,
-          metrics: { ...this.activityMetrics }
+          clientId: this.getClientId(),
+          metrics: {
+            clickCount: 0, // Don't send clicks in the interval - they are sent immediately
+            scrollPercentage: this.activityMetrics.scrollPercentage,
+            timeOnPage: this.activityMetrics.timeOnPage
+          }
         };
         
-        console.log('🟢 Sending activity metrics:', message);
+        if (this.options.debug) {
+          console.log('🟢 Sending activity metrics:', message);
+        }
         this.sendMessage(message);
       }
     }, 10000); // Send activity metrics every 10 seconds
   }
+  
+  /**
+   * Handle scroll event
+   */
+  handleScroll = () => {
+    // Calculate scroll percentage
+    const scrollPosition = window.scrollY;
+    const documentHeight = Math.max(
+      document.body.scrollHeight,
+      document.documentElement.scrollHeight,
+      document.body.offsetHeight,
+      document.documentElement.offsetHeight,
+      document.body.clientHeight,
+      document.documentElement.clientHeight
+    );
+    const windowHeight = window.innerHeight;
+    
+    // Calculate percentage (prevent division by zero)
+    if (documentHeight > windowHeight) {
+      const scrollableHeight = documentHeight - windowHeight;
+      const scrollPercentage = Math.min(100, Math.round((scrollPosition / scrollableHeight) * 100));
+      this.activityMetrics.scrollPercentage = scrollPercentage;
+    } else {
+      this.activityMetrics.scrollPercentage = 0;
+    }
+  };
   
   /**
    * Connect to WebSocket server
@@ -125,20 +153,44 @@ class PulseWidget {
   connectSocket() {
     return new Promise((resolve, reject) => {
       try {
-        const url = `${this.socketUrl}?websiteId=${this.websiteId}`;
+        // First, clean up any existing connection properly
+        if (this.socket) {
+          try {
+            console.log('🟡 Cleaning up existing socket connection before creating a new one');
+            this.socket.onclose = null; // Prevent triggering reconnect on intentional close
+            this.socket.close(1000, 'Intentional close before reconnect');
+            this.socket = null;
+          } catch (e) {
+            console.error('❌ Error closing existing socket:', e);
+          }
+        }
+        
+        // Create the connection URL with both websiteId and clientId
+        const clientId = this.getClientId();
+        const url = `${this.socketUrl}?websiteId=${this.websiteId}&clientId=${clientId}`;
         console.log('🟢 Connecting to socket:', url);
         
         this.socket = new WebSocket(url);
         
+        // Set connection timeout
+        const connectionTimeout = setTimeout(() => {
+          if (this.socket && this.socket.readyState !== WebSocket.OPEN) {
+            console.error('❌ Socket connection timeout');
+            this.socket.close(1000, 'Connection timeout');
+            reject(new Error('Connection timeout'));
+          }
+        }, 10000); // 10 second timeout
+        
         this.socket.onopen = () => {
           console.log('✅ Socket connection opened');
           this.reconnectAttempts = 0;
+          clearTimeout(connectionTimeout);
           
           // Join the website's room
           this.sendMessage({
             type: 'join',
             websiteId: this.websiteId,
-            clientId: this.getClientId()
+            clientId: clientId
           });
           
           // Request initial stats
@@ -147,29 +199,43 @@ class PulseWidget {
             websiteId: this.websiteId
           });
           
-          // Send initial activity
+          // Send initial activity - SEND ONLY INITIAL METRICS WITHOUT CLICKS
+          const initialMetrics = { ...this.activityMetrics };
+          initialMetrics.clickCount = 0; // Reset clicks to prevent auto-counting
+          
           this.sendMessage({
             type: 'activity',
             websiteId: this.websiteId,
-            metrics: { ...this.activityMetrics }
+            clientId: clientId,
+            metrics: initialMetrics
           });
           
-          // Set up regular stats polling
-          setInterval(() => {
+          // Set up regular heartbeat to keep connection alive
+          if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+          }
+          
+          this.pingInterval = setInterval(() => {
             if (this.socket && this.socket.readyState === WebSocket.OPEN) {
               this.sendMessage({
-                type: 'stats',
-                websiteId: this.websiteId
+                type: 'ping',
+                websiteId: this.websiteId,
+                clientId: clientId,
+                timestamp: Date.now()
               });
             }
-          }, this.options.updateInterval);
+          }, 30000); // 30 second ping
           
           resolve();
         };
         
         this.socket.onmessage = (event) => {
           try {
-            console.log('🟢 Received message:', event.data);
+            // For debugging only
+            if (this.options.debug) {
+              console.log('🟢 Received message:', event.data);
+            }
+            
             const data = JSON.parse(event.data);
             
             if (data.type === 'stats') {
@@ -180,6 +246,11 @@ class PulseWidget {
                 this.activeUsers = data.stats.activeUsers;
                 this.updateUI();
               }
+            } else if (data.type === 'pong') {
+              // For debugging only
+              if (this.options.debug) {
+                console.log('🟢 Pong received');
+              }
             }
           } catch (error) {
             console.error('❌ Error parsing message:', error);
@@ -188,11 +259,23 @@ class PulseWidget {
         
         this.socket.onclose = (event) => {
           console.log('🔴 Socket connection closed:', event.code, event.reason);
-          this.attemptReconnect();
+          clearTimeout(connectionTimeout);
+          
+          // Clear ping interval
+          if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+          }
+          
+          // Only attempt reconnect for abnormal closures
+          if (event.code !== 1000 && event.code !== 1001) {
+            this.attemptReconnect();
+          }
         };
         
         this.socket.onerror = (error) => {
           console.error('❌ Socket error:', error);
+          clearTimeout(connectionTimeout);
           reject(error);
         };
         
@@ -539,6 +622,31 @@ class PulseWidget {
     
     console.log('✅ PulseWidget destroyed');
   }
+
+  /**
+   * Handle click event
+   */
+  handleClick = () => {
+    this.activityMetrics.clickCount += 1;
+    
+    // Immediately send click event if socket is open
+    // This ensures clicks are sent as they happen and not batched
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.sendMessage({
+        type: 'activity',
+        websiteId: this.websiteId,
+        clientId: this.getClientId(),
+        metrics: {
+          clickCount: 1,  // Send only this single click
+          scrollPercentage: this.activityMetrics.scrollPercentage,
+          timeOnPage: Math.round((Date.now() - this.pageLoadTime) / 1000)
+        }
+      });
+      
+      // Reset click count after sending
+      this.activityMetrics.clickCount = 0;
+    }
+  };
 }
 
 /**
