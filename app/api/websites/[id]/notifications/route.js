@@ -125,7 +125,7 @@ export async function POST(request, props) {
 
     // Create notification using service
     const notification = await createNotification({
-      name: sanitizeInput(body.name),
+      title: sanitizeInput(body.name),
       message: sanitizeInput(body.message),
       siteId: website._id,
       link: body.link ? sanitizeInput(body.link) : '',
