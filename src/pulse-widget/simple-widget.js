@@ -29,6 +29,7 @@ export class PulseWidget {
     this.pageLoadTime = Date.now();
     this.activityInterval = null;
     this.pulseInterval = null;
+    this.clickHandler = null;
     
     // Activity metrics
     this.activityMetrics = {
@@ -115,6 +116,14 @@ export class PulseWidget {
   startActivityTracking() {
     console.log('🟢 Starting activity tracking');
     
+    // Track clicks - use a proper event listener that calls socket manager directly
+    this.clickHandler = () => {
+      socketManager.trackClick(this.activityMetrics.scrollPercentage);
+      console.log('🖱️ Click tracked with scroll percentage:', this.activityMetrics.scrollPercentage);
+    };
+    
+    document.addEventListener('click', this.clickHandler);
+    
     // Track scroll position
     document.addEventListener('scroll', this.handleScroll);
     
@@ -182,13 +191,19 @@ export class PulseWidget {
   }
   
   /**
-   * Destroy the widget
+   * Cleanup and destroy widget
    */
   destroy() {
     console.log('🟢 Destroying PulseWidget');
     
     // Remove event listeners
     document.removeEventListener('scroll', this.handleScroll);
+    
+    // Remove click listener using the stored reference
+    if (this.clickHandler) {
+      document.removeEventListener('click', this.clickHandler);
+      this.clickHandler = null;
+    }
     
     // Clear intervals
     if (this.pulseInterval) {
@@ -204,16 +219,16 @@ export class PulseWidget {
     // Unregister from socket manager
     socketManager.removeListener(this);
     
-    // Remove DOM elements
+    // Remove the widget from DOM
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
       this.container = null;
     }
     
-    // Remove styles
-    const style = document.getElementById('proovd-pulse-styles');
-    if (style && style.parentNode) {
-      style.parentNode.removeChild(style);
+    // Remove style element
+    const styleEl = document.getElementById('proovd-pulse-styles');
+    if (styleEl && styleEl.parentNode) {
+      styleEl.parentNode.removeChild(styleEl);
     }
     
     console.log('✅ PulseWidget destroyed');
