@@ -33,19 +33,19 @@ interface Website {
 
 interface NotificationsTabProps {
   websiteId: string;
+  website: Website;
+  initialNotifications: Notification[];
 }
 
-export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
-  const [website, setWebsite] = useState<Website | null>(null);
-  const [fetchError, setFetchError] = useState('');
-  
+export default function NotificationsTab({ websiteId , website, initialNotifications}: NotificationsTabProps) {
+
   // Use custom hooks for notifications data and deletion
-  const { 
-    notifications, 
-    isLoading, 
-    error: notificationsError, 
-    refreshNotifications 
-  } = useNotifications(websiteId);
+  // const { 
+  //   notifications, 
+  //   isLoading, 
+  //   error: notificationsError, 
+  //   refreshNotifications 
+  // } = useNotifications(websiteId);
   
   const { 
     deleteNotification, 
@@ -56,73 +56,36 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
   // Track which notifications are being deleted
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   
-  // Fetch website data
-  useEffect(() => {
-    async function fetchWebsiteData() {
-      try {
-        if (!websiteId) return;
-        
-        const websiteResponse = await fetch(`/api/websites/${websiteId}`);
-        if (!websiteResponse.ok) throw new Error('Failed to load website');
-        const websiteData = await websiteResponse.json();
-        setWebsite(websiteData);
-      } catch (err: any) {
-        console.error('Error fetching website data:', err);
-        setFetchError(err.message || 'Failed to load website');
-      }
-    }
-    
-    fetchWebsiteData();
-  }, [websiteId]);
-  
   // Handle notification delete
-  async function handleDelete(notificationId: string) {
-    if (!confirm('Are you sure you want to delete this notification?')) {
-      return;
-    }
+  // async function handleDelete(notificationId: string) {
+  //   if (!confirm('Are you sure you want to delete this notification?')) {
+  //     return;
+  //   }
     
-    try {
-      setDeletingIds(prev => new Set(prev).add(notificationId));
+  //   try {
+  //     setDeletingIds(prev => new Set(prev).add(notificationId));
       
-      await deleteNotification(notificationId);
+  //     await deleteNotification(notificationId);
       
-      // Refresh the notifications list
-      refreshNotifications();
-    } catch (err: any) {
-      console.error('Failed to delete notification:', err);
-      alert('Failed to delete notification. Please try again.');
-    } finally {
-      setDeletingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(notificationId);
-        return newSet;
-      });
-    }
-  }
+  //     // Refresh the notifications list
+  //     refreshNotifications();
+  //   } catch (err: any) {
+  //     console.error('Failed to delete notification:', err);
+  //     alert('Failed to delete notification. Please try again.');
+  //   } finally {
+  //     setDeletingIds(prev => {
+  //       const newSet = new Set(prev);
+  //       newSet.delete(notificationId);
+  //       return newSet;
+  //     });
+  //   }
+  // }
   
   // Show loading state
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <span className="loading loading-spinner loading-lg text-primary"></span>
-      </div>
-    );
-  }
+
   
   // Show error state
-  const error = notificationsError || fetchError || deleteError;
-  if (error) {
-    return (
-      <div className="alert alert-error shadow-lg">
-        <div>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>{error.toString()}</span>
-        </div>
-      </div>
-    );
-  }
+
   
   return (
     <div>
@@ -141,7 +104,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
         </Link>
       </div>
       
-      {notifications.length === 0 ? (
+      {initialNotifications.length === 0 ? (
         <div className="card bg-base-100 shadow-lg">
           <div className="card-body items-center text-center">
             <div className="w-16 h-16 bg-base-200 rounded-full flex items-center justify-center text-base-content/40 mb-4">
@@ -176,7 +139,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
               </tr>
             </thead>
             <tbody>
-              {notifications.map((notification) => (
+              {initialNotifications.map((notification) => (
                 <tr key={notification._id}>
                   <td className="font-medium">{notification.name}</td>
                   <td className="max-w-xs truncate">{notification.message}</td>
@@ -196,7 +159,7 @@ export default function NotificationsTab({ websiteId }: NotificationsTabProps) {
                       Edit
                     </Link>
                     <button 
-                      onClick={() => handleDelete(notification._id)}
+                      onClick={() => console.log(notification._id)}
                       className="btn btn-xs btn-error btn-outline"
                       disabled={deletingIds.has(notification._id)}
                     >

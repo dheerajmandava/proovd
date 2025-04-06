@@ -1,3 +1,5 @@
+'use server';
+
 import { connectToDatabase } from '@/app/lib/database/connection';
 import { 
   getUserById, 

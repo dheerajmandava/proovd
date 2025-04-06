@@ -1,43 +1,75 @@
-import { auth } from '@/auth';
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
-import ServerHydratedWebsiteDetails from './components/ServerHydratedWebsiteDetails';
-import Link from 'next/link';
+import ServerHydratedOverviewTab from './components/ServerHydratedOverviewTab';
+import ServerHydratedNotificationsTab from './components/ServerHydratedNotificationsTab';
+import ServerHydratedSettingsTab from './components/ServerHydratedSettingsTab';
+import ServerHydratedAnalyticsTab from './components/ServerHydratedAnalyticsTab';
+import TabNavigation from './components/TabNavigation';
+import { auth } from '@/auth';
+import { getServerSideWebsite } from '@/app/lib/server/data-fetchers';
 
-export default async function WebsitePage(
-  props: {
-    params: Promise<{ id: string }>
+export default async function WebsitePage({ 
+  params, 
+  searchParams 
+}: { 
+  params: { id: string }; 
+  searchParams: { tab?: string }; 
+}) {
+  if (!params || !params.id) {
+    return notFound();
   }
-) {
-  const params = await props.params;
+
   const session = await auth();
-
-  if (!session?.user?.email) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <span className="loading loading-spinner loading-lg text-primary"></span>
-      </div>
-    );
+  
+  if (!session || !session.user || !session.user.id) {
+    return notFound();
   }
-
+  
   try {
     const websiteId = params.id;
+    const activeTab = searchParams.tab || 'overview';
     
+    // Fetch website data for the header
+    const website = await getServerSideWebsite(websiteId);
+    
+    if (!website) {
+      return notFound();
+    }
+    
+    // Serialize the website data for the client component
+    const serializedWebsite = {
+      _id: website._id.toString(),
+      name: website.name || '',
+      domain: website.domain || '',
+      status: website.status || 'pending'
+    };
+ 
     return (
-      <>
-        <ServerHydratedWebsiteDetails websiteId={websiteId} />
-      </>
-    );
-  } catch (error) {
-    console.error('Error loading website:', error);
-    return (
-      <div className="container mx-auto p-6">
-        <div className="alert alert-error">
-          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>Failed to load website. Please try again later.</span>
-        </div>
+      <div className="space-y-6">
+        <TabNavigation 
+          websiteId={websiteId} 
+          activeTab={activeTab} 
+          initialWebsite={serializedWebsite} 
+        />
+        
+        <Suspense fallback={<div className="flex justify-center p-8"><span className="loading loading-spinner loading-lg"></span></div>}>
+          {activeTab === 'overview' && (
+            <ServerHydratedOverviewTab websiteId={websiteId} />
+          )}
+          {activeTab === 'notifications' && (
+            <ServerHydratedNotificationsTab websiteId={websiteId} />
+          )}
+          {activeTab === 'analytics' && (
+            <ServerHydratedAnalyticsTab websiteId={websiteId} />
+          )}
+          {activeTab === 'settings' && (
+            <ServerHydratedSettingsTab websiteId={websiteId} />
+          )}
+        </Suspense>
       </div>
     );
+  } catch (error) {
+    console.error('Error rendering website page:', error);
+    return notFound();
   }
 } 

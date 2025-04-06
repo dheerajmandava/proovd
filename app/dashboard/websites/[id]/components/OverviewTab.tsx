@@ -8,9 +8,12 @@ import ClientStatsCard from '@/app/dashboard/components/ClientStatsCard';
 import CopyButton from '../components/CopyButton';
 import SetupGuide from './SetupGuide';
 import { Card } from '@/components/ui/card';
+import { getServerSideNotifications, getServerSideWebsite } from '@/app/lib/server/data-fetchers';
 
 interface OverviewTabProps {
   websiteId: string;
+  websiteData: WebsiteData;
+  formattedNotifications: Notification[];
 }
 
 interface Notification {
@@ -25,12 +28,14 @@ interface Notification {
 }
 
 interface WebsiteData {
-  id: string;
+  _id: string;
   name: string;
   domain: string;
-  totalImpressions: number;
-  totalClicks: number;
-  conversionRate: number;
+  analytics?: {
+    totalImpressions: number;
+    totalClicks: number;
+    conversionRate: number;
+  };
   cachedStats?: {
     totalImpressions: number;
     totalUniqueImpressions: number;
@@ -60,76 +65,7 @@ interface WebsiteData {
   };
 }
 
-export default function OverviewTab({ websiteId }: OverviewTabProps) {
-  const [websiteData, setWebsiteData] = useState<WebsiteData | null>(null);
-  const [formattedNotifications, setFormattedNotifications] = useState<Notification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        // Fetch website data
-        const websiteResponse = await fetch(`/api/websites/${websiteId}`);
-        if (!websiteResponse.ok) throw new Error('Failed to load website');
-        const websiteData = await websiteResponse.json();
-        setWebsiteData(websiteData);
-        
-        // Fetch recent notifications
-        const notificationsResponse = await fetch(`/api/websites/${websiteId}/notifications?limit=5`);
-        if (!notificationsResponse.ok) throw new Error('Failed to load notifications');
-        const notificationsData = await notificationsResponse.json();
-        
-        // Format notifications for display with safety check
-        if (notificationsData && notificationsData.notifications && Array.isArray(notificationsData.notifications)) {
-          const formatted = notificationsData.notifications.map((notification: any) => ({
-            id: notification.id,
-            name: notification.name,
-            action: notification.type === 'purchase' ? 'Purchased' : 
-                    notification.type === 'signup' ? 'Signed up' : 'Custom',
-            location: notification.location || 'Global',
-            timestamp: notification.createdAt,
-            timeAgo: formatTimeAgo(notification.createdAt),
-            impressions: notification.impressions,
-            clicks: notification.clicks,
-          }));
-          setFormattedNotifications(formatted);
-        } else {
-          console.error('Unexpected notifications data format:', notificationsData);
-          setFormattedNotifications([]);
-        }
-      } catch (err: any) {
-        setError(err.message || 'An error occurred');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    
-    fetchData();
-  }, [websiteId]);
-  
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <span className="loading loading-spinner loading-lg text-primary"></span>
-      </div>
-    );
-  }
-  
-  // Show error state
-  if (error) {
-    return (
-      <div className="alert alert-error shadow-lg">
-        <div>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>{error}</span>
-        </div>
-      </div>
-    );
-  }
+export default function OverviewTab({ websiteId , websiteData, formattedNotifications}: OverviewTabProps) {
 
   if (!websiteData) {
     return (
@@ -148,8 +84,7 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
   let clicksTOTAL = 0;
   clicksTOTAL = formattedNotifications.map((e) => e.clicks).reduce((a, b) => a + b, 0);
 
-  // Generate the installation code snippet with proper website ID
-  const installationCode = `<script src="https://cdn.proovd.in/w/${websiteId}.js"></script>`;
+
 
   // Update the conversion rate rendering to safely handle division by zero
   const renderConversionRate = () => {
@@ -199,7 +134,7 @@ export default function OverviewTab({ websiteId }: OverviewTabProps) {
       </div>
 
       {/* Setup Guide */}
-      <SetupGuide websiteId={websiteId} />
+      {/* <SetupGuide websiteId={websiteId} /> */}
 
       {/* API Information */}
       {/* <div className="card bg-base-100 shadow-xl mb-8">

@@ -106,9 +106,6 @@ export default function Sidebar() {
                       aria-hidden="true"
                     />
                     {item.name}
-                    {item.badge && (
-                      <span className="badge badge-sm badge-primary">{item.badge}</span>
-                    )}
                   </Link>
                 </li>
               );

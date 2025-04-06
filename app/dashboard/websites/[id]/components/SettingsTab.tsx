@@ -1,26 +1,23 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useWebsiteData, useWebsiteSettings, WebsiteData, WebsiteSettings } from '@/app/lib/hooks';
+import { UserData, useWebsiteData, useWebsiteSettings, WebsiteData, WebsiteSettings } from '@/app/lib/hooks';
 import { useUserData, useUpdateUserPreferences } from '@/app/lib/hooks';
+
 
 interface SettingsTabProps {
   websiteId: string;
+  initialWebsite: WebsiteData;
+  initialUserData: UserData;
 }
 
-export default function SettingsTab({ websiteId }: SettingsTabProps) {
+export default function SettingsTab({ websiteId, initialWebsite, initialUserData }: SettingsTabProps) {
   // State for new domain input
   const [newDomain, setNewDomain] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
   
   // Custom hook for fetching website data
-  const { 
-    website, 
-    isLoading: isLoadingWebsite, 
-    error: websiteError,
-    refreshWebsite 
-  } = useWebsiteData(websiteId);
-  
+
   // Custom hook for updating website settings
   const { 
     updateSettings, 
@@ -41,21 +38,21 @@ export default function SettingsTab({ websiteId }: SettingsTabProps) {
   } = useUpdateUserPreferences();
   
   // Combined loading state
-  const isLoading = isLoadingWebsite || isLoadingUser;
+ 
   
   // Prepare settings object combining website settings and user preferences
   const combinedSettings = {
     // Website settings with defaults
-    position: website?.settings?.position || 'bottom-left',
-    delay: website?.settings?.delay || 5,
-    displayDuration: website?.settings?.displayDuration || 5,
-    maxNotifications: website?.settings?.maxNotifications || 5,
-    theme: website?.settings?.theme || 'light',
-    displayOrder: website?.settings?.displayOrder || 'newest',
-    randomize: website?.settings?.randomize || false,
-    initialDelay: website?.settings?.initialDelay || 5,
-    loop: website?.settings?.loop || false,
-    customStyles: website?.settings?.customStyles || '',
+    position: initialWebsite?.settings?.position || 'bottom-left',
+    delay: initialWebsite?.settings?.delay || 5,
+    displayDuration: initialWebsite?.settings?.displayDuration || 5,
+    maxNotifications: initialWebsite?.settings?.maxNotifications || 5,
+    theme: initialWebsite?.settings?.theme || 'light',
+    displayOrder: initialWebsite?.settings?.displayOrder || 'newest',
+    randomize: initialWebsite?.settings?.randomize || false,
+    initialDelay: initialWebsite?.settings?.initialDelay || 5,
+    loop: initialWebsite?.settings?.loop || false,
+    customStyles: initialWebsite?.settings?.customStyles || '',
     
     // User data with defaults
     email: userData?.email || '',
@@ -65,7 +62,7 @@ export default function SettingsTab({ websiteId }: SettingsTabProps) {
     notificationDigest: userData?.notificationDigest || 'daily',
     
     // Allowed domains
-    allowedDomains: website?.allowedDomains || [],
+    allowedDomains: initialWebsite?.allowedDomains || [],
   };
   
   // New state for tracking local changes
@@ -104,8 +101,7 @@ export default function SettingsTab({ websiteId }: SettingsTabProps) {
     if (!hasChanges) return;
     
     updateSettings(websiteId, localSettings)
-      .then(() => {
-        refreshWebsite();
+      .then(() => {   
         setLocalSettings({});
         setHasChanges(false);
         setMessage({ type: 'success', text: 'Settings saved successfully' });
@@ -166,30 +162,6 @@ export default function SettingsTab({ websiteId }: SettingsTabProps) {
     ...combinedSettings,
     ...localSettings
   };
-
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <span className="loading loading-spinner loading-lg text-primary"></span>
-      </div>
-    );
-  }
-  
-  // Show error state
-  if (websiteError || userError || updateSettingsError) {
-    const errorMessage = websiteError?.message || userError?.message || updateSettingsError?.message || 'Failed to load settings';
-    console.error('Settings tab error:', errorMessage);
-    
-    return (
-      <div className="alert alert-error">
-        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <span>{errorMessage}</span>
-      </div>
-    );
-  }
   
   return (
     <div>
@@ -431,7 +403,7 @@ export default function SettingsTab({ websiteId }: SettingsTabProps) {
               </h2>
               
               <p className="text-sm text-gray-600 mt-2">
-                By default, your widget will only load on {website?.domain}. Add additional domains where you want to display notifications.
+                By default, your widget will only load on {initialWebsite?.domain}. Add additional domains where you want to display notifications.
               </p>
               
               {/* Allowed Domains List */}

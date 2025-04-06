@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { GlobeAltIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { getServerSideWebsites } from '@/app/lib/server/data-fetchers';
 
 interface Website {
   _id: string;
@@ -30,34 +31,31 @@ export default function WebsiteSelector({ activeWebsiteId, onSelect }: WebsiteSe
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch('/api/websites', {
-          headers: { 'Cache-Control': 'no-cache' }
-        });
+        const websites = await getServerSideWebsites();
         
-        if (!response.ok) {
-          throw new Error(`Error ${response.status}: ${response.statusText}`);
+        if (!websites) {
+          throw new Error(`Error fetching websites`);
         }
         
-        const data = await response.json();
-        console.log('Fetched websites data:', data);
+        console.log('Fetched websites data:', websites);
         
-        if (data.websites && Array.isArray(data.websites)) {
-          setWebsites(data.websites);
+        if (websites && Array.isArray(websites)) {
+          setWebsites(websites);
           
           // If we have websites but no active ID, set the first one
-          if (data.websites.length > 0 && !activeWebsiteId) {
-            onSelect(data.websites[0]._id);
+          if (websites.length > 0 && !activeWebsiteId) {
+            onSelect(websites[0]._id);
           }
-        } else if (data && Array.isArray(data)) {
+        } else if (websites && Array.isArray(websites)) {
           // Handle case where API returns array directly
-          setWebsites(data);
+          setWebsites(websites);
           
           // If we have websites but no active ID, set the first one
-          if (data.length > 0 && !activeWebsiteId) {
-            onSelect(data[0]._id);
+          if (websites.length > 0 && !activeWebsiteId) {
+            onSelect(websites[0]._id);
           }
         } else {
-          console.error('Unexpected API response format:', data);
+          console.error('Unexpected API response format:', websites);
           setError('Unexpected data format from API');
           setWebsites([]);
         }

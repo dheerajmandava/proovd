@@ -28,6 +28,13 @@ type WebsiteWithAnalytics = {
     [key: string]: any;
   };
   allowedDomains?: string[];
+  cachedStats?: {
+    totalImpressions: number;
+    totalClicks: number;
+    conversionRate: number;
+  };
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 // Helper function to convert MongoDB document to WebsiteWithAnalytics
@@ -56,7 +63,9 @@ function convertToWebsiteWithAnalytics(website: any): WebsiteWithAnalytics {
       loop: false,
       customStyles: ''
     },
-    allowedDomains: website.allowedDomains || []
+    allowedDomains: website.allowedDomains || [],
+    createdAt: website.createdAt,
+    updatedAt: website.updatedAt
   };
 }
 

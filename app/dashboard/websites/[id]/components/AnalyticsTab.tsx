@@ -1,280 +1,210 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { LineChart } from '@/components/ui/line-chart';
-import { formatNumber } from '@/lib/utils';
-
-interface NotificationMetrics {
-  id: string;
-  name: string;
-  type: string;
-  impressions: number;
-  clicks: number;
-  conversionRate: number;
-  displayCount: number;
-  uniqueImpressionCount: number;
-}
-
-interface AnalyticsData {
-  summary: {
-    totalImpressions: number;
-    totalClicks: number;
-    totalNotifications: number;
-    conversionRate: number;
-  };
-  timeSeriesData: {
-    date: string;
-    impressions: number;
-    clicks: number;
-  }[];
-  topNotifications: NotificationMetrics[];
-}
+import { useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { formatNumber } from '@/app/lib/utils';
 
 interface AnalyticsTabProps {
   websiteId: string;
+  website: {
+    _id: string;
+    name: string;
+    domain: string;
+    status: string;
+  };
+  metrics: {
+    totalImpressions: number;
+    totalClicks: number;
+    totalNotifications: number;
+    conversionRate: string;
+    period: string;
+  };
+  timeSeriesData: Array<{
+    date: string;
+    impressions: number;
+    clicks: number;
+    conversionRate: string;
+  }>;
+  notificationMetrics: Array<{
+    id: string;
+    name: string;
+    impressions: number;
+    clicks: number;
+    conversionRate: string;
+    createdAt: string;
+  }>;
+  topNotifications: Array<{
+    id: string;
+    name: string;
+    impressions: number;
+    clicks: number;
+    conversionRate: string;
+  }>;
+  totals: {
+    impressions: number;
+    clicks: number;
+    conversionRate: string;
+  };
 }
 
-export default function AnalyticsTab({ websiteId }: AnalyticsTabProps) {
-  const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month' | 'year'>('day');
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<AnalyticsData>({
-    summary: {
-      totalImpressions: 0,
-      totalClicks: 0,
-      totalNotifications: 0,
-      conversionRate: 0
-    },
-    timeSeriesData: [],
-    topNotifications: []
-  });
-
-  // Fetch analytics data
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/websites/${websiteId}/analytics?timeRange=${timeRange}`);
-        const result = await response.json();
-        
-        if (result.success && result.data) {
-          setData(result.data);
-        } else {
-          console.error('API returned unsuccessful response:', result);
-        }
-      } catch (error) {
-        console.error('Error fetching analytics:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, [websiteId, timeRange]);
-
-  // Helper function to get display text for time range
-  const getTimeRangeDisplay = (range: string) => {
-    switch (range) {
-      case 'day': return 'Daily';
-      case 'week': return 'Weekly';
-      case 'month': return 'Monthly';
-      case 'year': return 'Yearly';
-      default: return range;
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  // Calculate notification types from topNotifications
-  const notificationTypes = data.topNotifications.reduce((acc, notification) => {
-    const existingType = acc.find(t => t.type === notification.type);
-    if (existingType) {
-      existingType.count += 1;
-    } else {
-      acc.push({ type: notification.type, count: 1, percentage: 0 });
-    }
-    return acc;
-  }, [] as { type: string; count: number; percentage: number }[])
-  .map(type => ({
-    ...type,
-    percentage: (type.count / data.topNotifications.length * 100) || 0
+export default function AnalyticsTab({
+  websiteId,
+  website,
+  metrics,
+  timeSeriesData,
+  notificationMetrics,
+  topNotifications,
+  totals
+}: AnalyticsTabProps) {
+  const [timeRange, setTimeRange] = useState('week');
+  
+  // Format dates for chart display
+  const formattedChartData = timeSeriesData.map(point => ({
+    ...point,
+    date: new Date(point.date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    })
   }));
-
+  
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold">Analytics</h2>
-          <p className="text-gray-500 text-sm">Notification performance metrics</p>
-        </div>
-        <div className="flex gap-2">
-          {(['day', 'week', 'month', 'year'] as const).map((range) => (
-            <Button
-              key={range}
-              variant={timeRange === range ? 'default' : 'outline'}
-              onClick={() => setTimeRange(range)}
-              className="text-sm"
-            >
-              {getTimeRangeDisplay(range)}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="p-6">
-          <div className="space-y-2">
+      {/* Summary Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="card bg-base-100 shadow-lg">
+          <div className="card-body">
             <h3 className="text-sm font-medium text-gray-500">Total Impressions</h3>
-            <div className="text-3xl font-bold">{formatNumber(data.summary.totalImpressions)}</div>
-            <p className="text-xs text-gray-500">Total notification views</p>
+            <div className="stat-value text-2xl">{formatNumber(metrics.totalImpressions)}</div>
           </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="space-y-2">
+        </div>
+        
+        <div className="card bg-base-100 shadow-lg">
+          <div className="card-body">
             <h3 className="text-sm font-medium text-gray-500">Total Clicks</h3>
-            <div className="text-3xl font-bold">{formatNumber(data.summary.totalClicks)}</div>
-            <p className="text-xs text-gray-500">Total notification clicks</p>
+            <div className="stat-value text-2xl">{formatNumber(metrics.totalClicks)}</div>
           </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="space-y-2">
+        </div>
+        
+        <div className="card bg-base-100 shadow-lg">
+          <div className="card-body">
             <h3 className="text-sm font-medium text-gray-500">Conversion Rate</h3>
-            <div className="text-3xl font-bold">{(data.summary.conversionRate || 0).toFixed(1)}%</div>
-            <p className="text-xs text-gray-500">Click-through rate</p>
+            <div className="stat-value text-2xl">{metrics.conversionRate}%</div>
           </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-500">Total Notifications</h3>
-            <div className="text-3xl font-bold">{formatNumber(data.summary.totalNotifications)}</div>
-            <p className="text-xs text-gray-500">Active notifications</p>
+        </div>
+        
+        <div className="card bg-base-100 shadow-lg">
+          <div className="card-body">
+            <h3 className="text-sm font-medium text-gray-500">Active Notifications</h3>
+            <div className="stat-value text-2xl">{metrics.totalNotifications}</div>
           </div>
-        </Card>
+        </div>
       </div>
-
-      {/* Performance Overview */}
-      <Card className="p-6">
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-semibold">Performance Overview</h2>
-              <p className="text-sm text-gray-500">Impressions and clicks over time</p>
-            </div>
-          </div>
-          <div className="h-[300px]">
-            {data.timeSeriesData?.length > 0 ? (
-              <LineChart data={data.timeSeriesData} />
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                No data available for the selected time period
-              </div>
-            )}
+      
+      {/* Time Range Selector */}
+      <div className="flex justify-end mb-4">
+        <div className="btn-group">
+          <button 
+            className={`btn btn-sm ${timeRange === 'day' ? 'btn-active' : ''}`}
+            onClick={() => setTimeRange('day')}
+          >
+            Day
+          </button>
+          <button 
+            className={`btn btn-sm ${timeRange === 'week' ? 'btn-active' : ''}`}
+            onClick={() => setTimeRange('week')}
+          >
+            Week
+          </button>
+          <button 
+            className={`btn btn-sm ${timeRange === 'month' ? 'btn-active' : ''}`}
+            onClick={() => setTimeRange('month')}
+          >
+            Month
+          </button>
+        </div>
+      </div>
+      
+      {/* Analytics Chart */}
+      <div className="card bg-base-100 shadow-lg">
+        <div className="card-body">
+          <h2 className="card-title">Performance Over Time</h2>
+          
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={formattedChartData}
+                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis yAxisId="left" />
+                <YAxis yAxisId="right" orientation="right" />
+                <Tooltip />
+                <Legend />
+                <Line 
+                  yAxisId="left"
+                  type="monotone" 
+                  dataKey="impressions" 
+                  stroke="#8884d8" 
+                  activeDot={{ r: 8 }} 
+                  name="Impressions"
+                />
+                <Line 
+                  yAxisId="left"
+                  type="monotone" 
+                  dataKey="clicks" 
+                  stroke="#82ca9d" 
+                  name="Clicks"
+                />
+                <Line 
+                  yAxisId="right"
+                  type="monotone" 
+                  dataKey="conversionRate" 
+                  stroke="#ff7300" 
+                  name="Conversion Rate (%)"
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
-      </Card>
-
+      </div>
+      
       {/* Top Performing Notifications */}
-      <Card className="p-6">
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-semibold">Top Performing Notifications</h2>
-              <p className="text-sm text-gray-500">Notifications with highest engagement</p>
-            </div>
-            <Button variant="outline" size="sm">
-              Export
-            </Button>
-          </div>
-          {data.topNotifications?.length > 0 ? (
-            <div className="divide-y">
-              {data.topNotifications.map((notification) => (
-                <div key={notification.id} className="py-4 flex justify-between items-center">
-                  <div>
-                    <h3 className="font-medium">{notification.name}</h3>
-                    <p className="text-sm text-gray-500">
-                      {notification.type} • {formatNumber(notification.impressions)} views • {formatNumber(notification.clicks)} clicks
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-medium">{(notification.conversionRate || 0).toFixed(1)}%</div>
-                    <p className="text-sm text-gray-500">conversion rate</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              No notification data available
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Bottom Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Notification Types */}
-        <Card className="p-6">
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold">Notification Types</h2>
-              <p className="text-sm text-gray-500">Distribution by notification type</p>
-            </div>
-            {notificationTypes.length > 0 ? (
-              <div className="space-y-4">
-                {notificationTypes.map((type) => (
-                  <div key={type.type} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="capitalize">{type.type}</span>
-                      <span className="font-medium">{type.percentage.toFixed(1)}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${type.percentage}%` }}
-                      />
-                    </div>
-                  </div>
+      <div className="card bg-base-100 shadow-lg">
+        <div className="card-body">
+          <h2 className="card-title">Top Performing Notifications</h2>
+          
+          <div className="overflow-x-auto">
+            <table className="table table-zebra w-full">
+              <thead>
+                <tr>
+                  <th>Notification</th>
+                  <th>Impressions</th>
+                  <th>Clicks</th>
+                  <th>Conversion Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topNotifications.map(notification => (
+                  <tr key={notification.id}>
+                    <td>{notification.name}</td>
+                    <td>{formatNumber(notification.impressions)}</td>
+                    <td>{formatNumber(notification.clicks)}</td>
+                    <td>{notification.conversionRate}%</td>
+                  </tr>
                 ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                No notification type data available
-              </div>
-            )}
+              </tbody>
+              <tfoot>
+                <tr className="font-bold">
+                  <td>Total</td>
+                  <td>{formatNumber(totals.impressions)}</td>
+                  <td>{formatNumber(totals.clicks)}</td>
+                  <td>{totals.conversionRate}%</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
-        </Card>
-
-        {/* Engagement Metrics */}
-        <Card className="p-6">
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold">Engagement Details</h2>
-              <p className="text-sm text-gray-500">Detailed notification metrics</p>
-            </div>
-            <div className="space-y-4">
-              {data.topNotifications?.slice(0, 5).map((notification) => (
-                <div key={notification.id} className="flex justify-between items-center">
-                  <span className="text-sm truncate max-w-[200px]">{notification.name}</span>
-                  <div className="text-right">
-                    <div className="font-medium">{formatNumber(notification.uniqueImpressionCount)}</div>
-                    <p className="text-sm text-gray-500">unique views</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
+        </div>
       </div>
     </div>
   );

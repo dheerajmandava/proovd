@@ -5,9 +5,9 @@ import { incrementWebsiteImpressions, incrementWebsiteClicks } from './website.s
 
 type NotificationType = {
   _id: string;
-  title: string;
+  name: string;
   message: string;
-  link?: string;
+  url?: string;
   image?: string;
   status: string;
   siteId: string;
@@ -18,6 +18,8 @@ type NotificationType = {
   priority?: number;
   fakeTimestamp?: Date;
   timeAgo?: string;
+  type?: string;
+  location?: string;
 };
 
 /**
@@ -76,8 +78,7 @@ export async function getNotificationsByWebsite(websiteId: string): Promise<Noti
  * @returns Created notification
  */
 export async function createNotification(notificationData: {
-  name?: string; // Optional because might come as title
-  title?: string; // For backward compatibility
+  name?: string; 
   message: string;
   siteId: string;
   url?: string;
@@ -89,8 +90,7 @@ export async function createNotification(notificationData: {
 }): Promise<NotificationType> {
   await connectToDatabase();
   
-  // For backward compatibility - map title to name
-  const name = notificationData.name || notificationData.title;
+  const name = notificationData.name;
   
   if (!name || name.trim() === '') {
     throw new Error('Notification name is required');
