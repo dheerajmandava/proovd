@@ -6,6 +6,7 @@ export default function Home() {
     <div className="min-h-screen bg-base-100 flex flex-col">
       {/* Minimal Header */}
       <header className="py-6 border-b border-base-200">
+        
         <div className="container mx-auto px-4">
           <Link href="/" className="flex items-center gap-2 w-fit">
               <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
