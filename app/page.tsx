@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import WaitlistForm from './components/WaitlistForm';
-
+import { GoogleAnalytics } from '@next/third-parties/google'
 export default function Home() {
   return (
     <div className="min-h-screen bg-base-100 flex flex-col">
