@@ -163,8 +163,31 @@ export default function NewWebsitePage() {
         setCurrentStep(STEPS.VERIFICATION_FAILED);
         return;
       }
+      
+      // First, verify the domain's TXT record before creating the website
+      const verifyResponse = await fetch(`/api/websites/verify-dns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: validationResult?.domain || formData.domain,
+          token: verificationDetails.token
+        })
+      });
+      
+      const verifyData = await verifyResponse.json();
+      
+      // If verification failed, show error and stay on verification step
+      if (!verifyResponse.ok || !verifyData.verified) {
+        setVerificationDetails({
+          ...verificationDetails,
+          status: 'failed'
+        });
+        setError(verifyData.error || 'Domain verification failed. Please check your DNS settings and try again.');
+        setCurrentStep(STEPS.VERIFICATION_FAILED);
+        return;
+      }
 
-      // Create the website (will verify domain first on server)
+      // Create the website only if verification passed
       const response = await fetch('/api/websites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,14 +195,14 @@ export default function NewWebsitePage() {
           name: formData.name,
           domain: validationResult?.domain || formData.domain,
           verificationMethod: formData.verificationMethod,
-          verificationToken: verificationDetails.token // Send the existing token to use it
+          verificationToken: verificationDetails.token
         })
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        // If verification failed but we got verification details
+        // If verification still failed but we got verification details
         if (response.status === 400 && data.verification) {
           setVerificationDetails({
             ...data.verification,
@@ -208,8 +231,8 @@ export default function NewWebsitePage() {
   function renderVerificationInstructions() {
     if (!verificationDetails) return null;
     
-    const { token, status } = verificationDetails;
-    const domain = formData.domain;
+    const { token } = verificationDetails;
+    const domain = formData.domain.replace(/^https?:\/\//, '').replace(/^www\./, '');
     
     return (
       <div className="mt-6 border rounded-lg p-6 bg-base-200">
@@ -229,7 +252,7 @@ export default function NewWebsitePage() {
             <tbody>
               <tr>
                 <td className="border px-4 py-2">TXT</td>
-                <td className="border px-4 py-2 font-mono">_proovd.{domain.replace(/^https?:\/\//, '').replace(/^www\./, '')}</td>
+                <td className="border px-4 py-2 font-mono">_proovd.{domain}</td>
                 <td className="border px-4 py-2 font-mono">{token}</td>
                 <td className="border px-4 py-2">3600 (or default)</td>
               </tr>
@@ -238,6 +261,7 @@ export default function NewWebsitePage() {
         </div>
         
         <div className="mt-4 text-sm opacity-80">
+          <p className="mt-2"><strong>Note:</strong> Some DNS providers might require you to enter just <span className="font-mono">_proovd</span> as the host name and they'll automatically append your domain.</p>
           <p>DNS changes can take 5-30 minutes to propagate, but may take up to 24 hours in some cases.</p>
           <p className="mt-2">After adding the TXT record, click the "Verify Domain" button below.</p>
           

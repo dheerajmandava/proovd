@@ -121,20 +121,16 @@ async function verifyByDNS(domain: string, token: string): Promise<boolean> {
     try {
       console.log(`DNS verification attempt ${attempt}/${MAX_ATTEMPTS} for ${domain}`);
       
-      // Check both with and without www prefix to be flexible
-      const dnsResults = await Promise.allSettled([
-        dns.resolveTxt(`_proovd.${domain}`),
-        domain.includes('.') ? dns.resolveTxt(`_proovd.www.${domain}`) : Promise.reject('Invalid domain')
-      ]);
+      // Check for TXT record with correct subdomain format _proovd.domain.com
+      const lookupDomain = `_proovd.${domain}`;
+      console.log(`Looking up TXT record at: ${lookupDomain}`);
       
-      // Combine successful results
-      const records = dnsResults
-        .filter(result => result.status === 'fulfilled')
-        .map(result => (result as PromiseFulfilledResult<string[][]>).value)
-        .flat();
-      
-      if (records.length === 0) {
-        console.log(`No DNS TXT records found for _proovd.${domain}`);
+      let records;
+      try {
+        records = await dns.resolveTxt(lookupDomain);
+        console.log(`Found DNS records:`, records);
+      } catch (error) {
+        console.log(`No TXT records found at ${lookupDomain}:`, error.message);
         if (attempt < MAX_ATTEMPTS) {
           console.log(`Waiting ${RETRY_DELAY}ms before next attempt...`);
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
@@ -142,14 +138,12 @@ async function verifyByDNS(domain: string, token: string): Promise<boolean> {
         continue;
       }
       
-      console.log(`Found DNS records:`, records);
-      
       // Check for token match (case insensitive to be more forgiving)
       const isVerified = records.some(record => 
         record.some(value => {
-          console.log('value', value);
-          console.log('token', token);
-          return value.trim().toLowerCase() === token.toLowerCase()
+          console.log('Comparing value:', value);
+          console.log('With token:', token);
+          return value.trim().toLowerCase() === token.toLowerCase();
         })
       );
       

@@ -6,7 +6,8 @@ import {
   getWebsitesByUserId, 
   getWebsiteById,
   deleteWebsite, 
-  getWebsiteByDomain 
+  getWebsiteByDomain,
+  updateWebsiteVerificationStatus
 } from '@/app/lib/services';
 import { 
   CustomError, 
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
     
-    // Create the website with status active and verification complete
+    // Only create the website if verification has passed
     const websiteData = {
       name: name.trim(),
       domain: normalizedDomain,
@@ -117,6 +118,9 @@ export async function POST(req: NextRequest) {
     
     // Create new website
     const website = await createWebsite(websiteData);
+    
+    // Explicitly update verification status to ensure it's properly saved
+    await updateWebsiteVerificationStatus(website._id.toString(), true);
     
     return NextResponse.json({
       id: website._id,

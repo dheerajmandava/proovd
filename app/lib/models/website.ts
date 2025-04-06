@@ -286,10 +286,17 @@ websiteSchema.pre('save', function(next) {
     }
   }
   
+  // Only create/modify verification data if not already verified
+  if (this.verification && this.verification.status === 'verified') {
+    // Don't modify verification data if already verified
+    next();
+    return;
+  }
+  
   // If verification object exists but token is missing, set a default token
   if (this.verification && (!this.verification.token || this.verification.token.length === 0)) {
     const crypto = require('crypto');
-    this.verification.token = crypto.randomBytes(16).toString('hex');
+    this.verification.token = crypto.randomBytes(6).toString('hex');
   }
   
   // If verification object doesn't exist, create it with defaults
@@ -298,9 +305,14 @@ websiteSchema.pre('save', function(next) {
     this.verification = {
       status: 'pending',
       method: VerificationMethod.DNS,
-      token: crypto.randomBytes(16).toString('hex'),
+      token: crypto.randomBytes(6).toString('hex'),
       attempts: 0
     };
+  }
+  
+  // Ensure website status reflects verification status
+  if (this.verification.status === 'verified' && this.status === 'pending') {
+    this.status = 'active';
   }
   
   next();

@@ -124,6 +124,8 @@ export async function createWebsite(websiteData: {
   name: string;
   domain: string;
   userId: string;
+  status?: string;
+  verification?: any;
   settings?: Record<string, any>;
 }): Promise<WebsiteWithAnalytics> {
   await connectToDatabase();
@@ -132,6 +134,13 @@ export async function createWebsite(websiteData: {
     name: websiteData.name,
     domain: websiteData.domain.toLowerCase(),
     userId: websiteData.userId,
+    status: websiteData.status || 'pending',
+    verification: websiteData.verification || {
+      status: VerificationStatus.PENDING,
+      method: VerificationMethod.DNS,
+      token: '',
+      attempts: 0
+    },
     settings: websiteData.settings || {},
     analytics: {
       totalImpressions: 0,

@@ -25,11 +25,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Initialize domain verification (generate token, etc.)
-    const verificationData = await initializeDomainVerification(domain, method);
+    const verificationData = initializeDomainVerification(domain);
+    const token = verificationData.token;
+
+    console.log('Generated verification token:', token); // Log for debugging
 
     // Generate user-friendly instructions based on the verification method
     let instructions = '';
-    const token = verificationData.token;
 
     if (method === 'DNS') {
       instructions = `
@@ -38,6 +40,9 @@ Host/Name: _proovd.${domain}
 Value/Content: ${token}
 
 This may take up to 24 hours to propagate, though it often happens within minutes.
+
+Note: Some DNS providers might require you to enter just "_proovd" as the host name 
+and they'll automatically append your domain.
 `;
     } else if (method === 'FILE') {
       instructions = `
@@ -54,7 +59,7 @@ Add the following meta tag to the <head> section of your website's homepage:
 `;
     }
 
-    // Return the verification data with instructions
+    // Return the verification data with instructions - pass the exact same token
     return NextResponse.json({
       domain,
       method,
