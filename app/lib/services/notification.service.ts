@@ -80,7 +80,6 @@ export async function createNotification(notificationData: {
   title?: string; // For backward compatibility
   message: string;
   siteId: string;
-  link?: string;
   url?: string;
   image?: string;
   status?: string;
@@ -92,7 +91,6 @@ export async function createNotification(notificationData: {
   
   // For backward compatibility - map title to name
   const name = notificationData.name || notificationData.title;
-  const link = notificationData.link || notificationData.url;
   
   if (!name || name.trim() === '') {
     throw new Error('Notification name is required');
@@ -103,7 +101,7 @@ export async function createNotification(notificationData: {
       name: name,
       message: notificationData.message,
       siteId: notificationData.siteId,
-      link: link,
+      url: notificationData.url,
       image: notificationData.image,
       status: notificationData.status || 'active',
       type: notificationData.type || 'custom',

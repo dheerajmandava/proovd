@@ -92,13 +92,13 @@ export default function DashboardContent({ userData, websites }: DashboardConten
   return (
     <div className="grid gap-6">
       {/* Analytics and Stats */}
-      <div className={isLoading ? "p-6 bg-base-200 rounded-xl animate-pulse" : ""}>
+      {/* <div className={isLoading ? "p-6 bg-base-200 rounded-xl animate-pulse" : ""}>
         <RealTimeStats
           websiteId={website._id.toString()}
           initialStats={initialStats}
           onLoadingChange={setIsLoading}
         />
-      </div>
+      </div> */}
       
       <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
         <div className="rounded-xl border bg-card p-6">

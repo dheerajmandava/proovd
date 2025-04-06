@@ -329,7 +329,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           notificationEl.style.opacity = '0';
           notificationEl.style.transform = 'translateY(20px)';
           notificationEl.style.transition = 'opacity 0.3s, transform 0.3s';
-          notificationEl.style.cursor = notification.link ? 'pointer' : 'default';
+          notificationEl.style.cursor = notification.url ? 'pointer' : 'default';
           
           // Create content based on notification type
           let content = '';
@@ -389,12 +389,12 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           notificationEl.appendChild(closeButton);
           
           // Add link handler
-          if (notification.link) {
+          if (notification.url) {
             notificationEl.addEventListener('click', () => {
               // Track click then navigate
               trackEvent(notification._id, 'click', function() {
                 // Open the link in a new tab
-                window.open(notification.link, '_blank');
+                window.open(notification.url, '_blank');
               });
             });
           }

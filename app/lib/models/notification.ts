@@ -41,6 +41,11 @@ const notificationSchema = new Schema(
       type: String,
       trim: true,
     },
+    // @deprecated - Only kept for backward compatibility, use 'url' instead
+    link: {
+      type: String,
+      trim: true,
+    },
     urlTarget: {
       type: String,
       enum: ['_self', '_blank', 'new'],
@@ -126,6 +131,15 @@ notificationSchema.index({ siteId: 1, status: 1 });
 notificationSchema.index({ siteId: 1, location: 1 });
 notificationSchema.index({ siteId: 1, priority: -1 }); // For priority order
 
+// Pre-save middleware to handle backward compatibility with link field
+notificationSchema.pre('save', function(next) {
+  // If link is set but url is not, copy link to url (backward compatibility)
+  if (this.link && !this.url) {
+    this.url = this.link;
+  }
+  next();
+});
+
 // Method to create a formatted response object
 notificationSchema.methods.toResponse = function () {
   return {
@@ -136,7 +150,7 @@ notificationSchema.methods.toResponse = function () {
     location: this.location,
     productName: this.productName,
     message: this.message,
-    url: this.url,
+    url: this.url || this.link, // Ensure URL is returned, fallback to link for legacy data
     urlTarget: this.urlTarget,
     image: this.image,
     displayRules: this.displayRules,

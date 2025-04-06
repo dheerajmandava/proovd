@@ -128,7 +128,7 @@ export async function POST(request, props) {
       name: sanitizeInput(body.name),
       message: sanitizeInput(body.message),
       siteId: website._id,
-      link: body.url ? sanitizeInput(body.url) : '',
+      url: body.url ? sanitizeInput(body.url) : '',
       image: body.image ? sanitizeInput(body.image) : '',
       status: body.status || 'active',
       type: body.type || 'custom',

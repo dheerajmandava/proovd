@@ -128,6 +128,11 @@ export async function GET(request, props) {
           website.settings?.displayDuration || 5;
       }
       
+      // Handle legacy data - use link as fallback if url is not available
+      if (!notification.url && notification.link) {
+        notification.url = notification.link;
+      }
+      
       return notification;
     });
 

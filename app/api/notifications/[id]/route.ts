@@ -82,8 +82,9 @@ export async function PATCH(
     
     if (body.name !== undefined) updateData.name = sanitizeInput(body.name);
     if (body.message !== undefined) updateData.message = sanitizeInput(body.message);
-    if (body.link !== undefined) updateData.link = sanitizeInput(body.link);
-    if (body.url !== undefined) updateData.link = sanitizeInput(body.url); // Map url to link
+    // Handle both url and link for backward compatibility, but always store as url
+    if (body.link !== undefined) updateData.url = sanitizeInput(body.link);
+    if (body.url !== undefined) updateData.url = sanitizeInput(body.url);
     if (body.image !== undefined) updateData.image = sanitizeInput(body.image);
     if (body.status !== undefined) updateData.status = body.status;
     if (body.type !== undefined) updateData.type = body.type;
