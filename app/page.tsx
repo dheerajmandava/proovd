@@ -66,21 +66,27 @@ export default function Home() {
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 rounded-full bg-green-100 flex-shrink-0 flex items-center justify-center text-green-600 mt-1">✓</div>
                     <div>
-                      <span className="font-medium block">Recent Purchases</span>
-                      <span className="text-sm text-base-content/70">Show when visitors purchase your products</span>
+                      <span className="font-medium block">Simple Custom Notifications</span>
+                      <span className="text-sm text-base-content/70">Create basic notifications with your own content</span>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 rounded-full bg-green-100 flex-shrink-0 flex items-center justify-center text-green-600 mt-1">✓</div>
                     <div>
-                      <span className="font-medium block">Sign-ups & Registrations</span>
-                      <span className="text-sm text-base-content/70">Display new user registrations to build momentum</span>
+                      <span className="font-medium flex items-center gap-2">
+                        Event-based Notifications
+                        <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded text-[10px]">Coming Soon</span>
+                      </span>
+                      <span className="text-sm text-base-content/70">Display notifications based on specific events</span>
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
                     <div className="w-6 h-6 rounded-full bg-green-100 flex-shrink-0 flex items-center justify-center text-green-600 mt-1">✓</div>
                     <div>
-                      <span className="font-medium block">Live Visitor Activity</span>
+                      <span className="font-medium flex items-center gap-2">
+                        Live Visitor Activity
+                        <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded text-[10px]">Coming Soon</span>
+                      </span>
                       <span className="text-sm text-base-content/70">Show real-time browsing and engagement</span>
                     </div>
                   </li>
