@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import WaitlistForm from './components/WaitlistForm';
 import { GoogleAnalytics } from '@next/third-parties/google'
+import SampleNotification from './components/SampleNotification';
 
 export default function Home() {
   return (
@@ -35,11 +36,11 @@ export default function Home() {
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-12">
               <div className="inline-block px-3 py-1 text-xs font-medium text-primary bg-primary/10 rounded-full mb-6">
-                Boost Conversions with Social Proof
+                Try Demo for free
               </div>
             
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-                Visitor momentum that <span className="text-primary">drives conversion</span>
+                Boost conversions with <span className="text-primary">notifications</span>
               </h1>
             
               <p className="text-lg text-base-content/70 mb-12 max-w-2xl mx-auto">
@@ -94,7 +95,7 @@ export default function Home() {
                 
                 <div className="mt-8">
                   <Link href="/dashboard" className="btn btn-primary">
-                    Get Started Free
+                    Try Demo for free
                   </Link>
                 </div>
               </div>
@@ -127,28 +128,16 @@ export default function Home() {
                   </div>
                 </div>
                 
-                {/* Notification Examples */}
-                <div className="absolute -bottom-4 -left-4 bg-white rounded-lg shadow-lg border border-gray-200 p-3 w-64 transform rotate-2 transition-all animate-pulse">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">J</div>
-                    <div>
-                      <div className="font-medium text-sm">John from California</div>
-                      <div className="text-xs text-base-content/70">Just purchased Premium Plan</div>
-                      <div className="text-xs text-base-content/50">2 minutes ago</div>
-                    </div>
-                  </div>
+                {/* Live Sample Notification (replaces the static examples) */}
+                <div className="absolute -bottom-8 -left-4">
+                  <SampleNotification />
                 </div>
                 
-                <div className="absolute top-4 -right-4 bg-white rounded-lg shadow-lg border border-gray-200 p-3 w-64 transform -rotate-1 transition-all animate-pulse" style={{ animationDelay: '1s' }}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold">S</div>
-                    <div>
-                      <div className="font-medium text-sm">Sarah from New York</div>
-                      <div className="text-xs text-base-content/70">Just signed up</div>
-                      <div className="text-xs text-base-content/50">45 seconds ago</div>
-                    </div>
-                  </div>
+                {/* Second Sample Notification (staggered) */}
+                <div className="absolute top-4 -right-4">
+                  <SampleNotification secondaryNotification={true} />
                 </div>
+                
               </div>
             </div>
           </div>

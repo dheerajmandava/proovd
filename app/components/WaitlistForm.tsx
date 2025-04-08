@@ -91,7 +91,7 @@ export default function WaitlistForm() {
             </button>
             
             <p className="mt-3 text-xs text-center text-base-content/60">
-              No spam. We'll only notify you when we launch.
+              No spam, we promise.
             </p>
           </form>
         </>
