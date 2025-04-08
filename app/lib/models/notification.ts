@@ -122,6 +122,7 @@ const notificationSchema = new Schema(
     components: {
       type: Array,
       default: [],
+      select: true,
     },
   },
   {
@@ -146,7 +147,7 @@ notificationSchema.pre('save', function(next) {
 
 // Method to create a formatted response object
 notificationSchema.methods.toResponse = function () {
-  return {
+  const response = {
     id: this._id.toString(),
     name: this.name,
     type: this.type,
@@ -169,6 +170,13 @@ notificationSchema.methods.toResponse = function () {
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };
+  
+  // Debug log to ensure components are included
+  if (this.components && this.components.length > 0) {
+    console.log(`toResponse: Including ${this.components.length} components for notification ${this._id}`);
+  }
+  
+  return response;
 };
 
 // Use existing model or create a new one

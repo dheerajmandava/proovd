@@ -47,22 +47,35 @@ export const getNotificationsByWebsiteId = cache(
     if (!websiteId || !mongoose.Types.ObjectId.isValid(websiteId)) return [];
     
     await connectToDatabase();
-    // Use .select('+components') to ensure components are included in the result
-    const notifications = await Notification.find({ siteId: websiteId, status: 'active' })
-      .select('+components')  
+    
+    // Explicitly include components field and make sure it's returned
+    try {
+      // First try with explicit select
+      const notifications = await Notification.find({ 
+        siteId: websiteId, 
+        status: 'active' 
+      })
+      .select('+components') 
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
-    
-    console.log(`getNotificationsByWebsiteId found ${notifications.length} notifications`);
-    if (notifications.length > 0) {
-      console.log('First notification has components?', !!notifications[0].components);
-      if (notifications[0].components) {
-        console.log('Component count:', notifications[0].components.length);
-      }
+      
+      console.log(`getNotificationsByWebsiteId found ${notifications.length} notifications`);
+      
+      // Add debug logging for components
+      notifications.forEach((notification, index) => {
+        if (notification.components) {
+          console.log(`Notification #${index + 1} (${notification.name}) has ${notification.components.length} components`);
+        } else {
+          console.log(`Notification #${index + 1} (${notification.name}) has NO components array`);
+        }
+      });
+      
+      return notifications as NotificationType[];
+    } catch (error) {
+      console.error('Error getting notifications with components:', error);
+      throw error;
     }
-    
-    return notifications as NotificationType[];
   }
 );
 

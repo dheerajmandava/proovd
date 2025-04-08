@@ -91,6 +91,9 @@ export async function GET(request, props) {
 
     // Format notifications for response
     const formattedNotifications = notifications.map(notification => {
+      // Log the entire notification object for debugging
+      console.log(`NOTIFICATION FULL OBJECT: ${JSON.stringify(notification, null, 2)}`);
+      
       // Use fake timestamp if available
       if (notification.fakeTimestamp) {
         notification.timestamp = notification.fakeTimestamp;
@@ -139,10 +142,10 @@ export async function GET(request, props) {
         notification.isComponentBased = true;
         
         // Make sure components are explicitly included (sometimes MongoDB objects need explicit inclusion)
-        const componentsCopy = [...notification.components];
+        const componentsCopy = JSON.parse(JSON.stringify(notification.components));
         notification.components = componentsCopy;
         
-        console.log('Components sample:', componentsCopy.slice(0, 2));
+        console.log('COMPONENTS STRINGIFIED FOR CLIENT:', JSON.stringify(componentsCopy));
       } else {
         notification.isComponentBased = false;
         console.log(`Found traditional notification: ${notification.name} (non-component based)`);

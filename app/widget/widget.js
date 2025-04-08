@@ -185,7 +185,7 @@ class proovd {
       }
       
       const data = await response.json();
-      console.log('proovd: Received data:', data);
+      console.log('proovd: Received data:', JSON.stringify(data, null, 2));
       
       // Apply settings from server if available
       if (data.settings) {
@@ -227,7 +227,23 @@ class proovd {
       }
       
       this.notifications = data.notifications || [];
-      console.log('proovd: Loaded notifications:', this.notifications);
+      
+      // Log each notification to inspect them
+      if (this.notifications.length > 0) {
+        console.log(`proovd: Loaded ${this.notifications.length} notifications`);
+        this.notifications.forEach((notification, index) => {
+          console.log(`proovd: Notification #${index+1}: ${notification.name || 'Unnamed'}`);
+          console.log(`proovd: Is component based? ${notification.isComponentBased}`);
+          if (notification.components) {
+            console.log(`proovd: Has ${notification.components.length} components`);
+            console.log(`proovd: First component: ${JSON.stringify(notification.components[0])}`);
+          } else {
+            console.log('proovd: No components array found!');
+          }
+        });
+      } else {
+        console.log('proovd: No notifications received');
+      }
     } catch (error) {
       console.error('Error fetching notifications:', error);
       throw error;
