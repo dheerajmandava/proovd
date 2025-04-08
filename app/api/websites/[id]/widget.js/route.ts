@@ -324,49 +324,57 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           notificationEl.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
           notificationEl.style.padding = '12px';
           notificationEl.style.marginTop = '10px';
-          notificationEl.style.width = '300px';
+          notificationEl.style.width = '384px'; // Updated to match Real Estate template width
           notificationEl.style.maxWidth = '90vw';
           notificationEl.style.opacity = '0';
           notificationEl.style.transform = 'translateY(20px)';
           notificationEl.style.transition = 'opacity 0.3s, transform 0.3s';
           notificationEl.style.cursor = notification.url ? 'pointer' : 'default';
           
-          // Create content based on notification type
-          let content = '';
-          
-          switch(notification.type) {
-            case 'conversion':
-              content = \`
-                <div style="display: flex; align-items: center;">
-                  <div style="margin-right: 10px;">
-                    <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Someone').charAt(0) + '</div>'}
+          // Check if this is a component-based notification
+          if (notification.isComponentBased && notification.components && notification.components.length > 0) {
+            console.log('Rendering component-based notification:', notification.name);
+            renderComponentBasedNotification(notificationEl, notification);
+          } else {
+            // Traditional notification rendering
+            let content = '';
+            
+            switch(notification.type) {
+              case 'conversion':
+                content = \`
+                  <div style="display: flex; align-items: center;">
+                    <div style="margin-right: 10px;">
+                      <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                        \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.name || 'Someone').charAt(0) + '</div>'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Someone')}</div>
+                      <div>\${sanitizeText(notification.message || 'purchased recently')}</div>
+                      <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp || notification.createdAt)}</div>
                     </div>
                   </div>
-                  <div>
-                    <div style="font-weight: bold;">\${sanitizeText(notification.name || 'Someone')}</div>
-                    <div>\${sanitizeText(notification.message || 'purchased recently')}</div>
-                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.timestamp || notification.createdAt)}</div>
-                  </div>
-                </div>
-              \`;
-              break;
-              
-            default:
-              content = \`
-                <div style="display: flex; align-items: center;">
-                  <div style="margin-right: 10px;">
-                    <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-                      \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.title || notification.name || 'Notification').charAt(0) + '</div>'}
+                \`;
+                break;
+                
+              default:
+                content = \`
+                  <div style="display: flex; align-items: center;">
+                    <div style="margin-right: 10px;">
+                      <div style="width: 40px; height: 40px; border-radius: 50%; background-color: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                        \${notification.image ? \`<img src="\${notification.image}" style="width: 100%; height: 100%; object-fit: cover;">\` : '<div style="font-size: 16px; font-weight: bold;">' + (notification.title || notification.name || 'Notification').charAt(0) + '</div>'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style="font-weight: bold;">\${sanitizeText(notification.title || notification.name || '')}</div>
+                      <div>\${sanitizeText(notification.message || '')}</div>
+                      <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.fakeTimestamp || notification.timestamp || notification.createdAt)}</div>
                     </div>
                   </div>
-                  <div>
-                    <div style="font-weight: bold;">\${sanitizeText(notification.title || notification.name || '')}</div>
-                    <div>\${sanitizeText(notification.message || '')}</div>
-                    <div style="font-size: 12px; margin-top: 4px; color: #999;">\${formatTimeAgo(notification.fakeTimestamp || notification.timestamp || notification.createdAt)}</div>
-                  </div>
-                </div>
-              \`;
+                \`;
+            }
+            
+            notificationEl.innerHTML = content;
           }
           
           // Add close button
@@ -384,9 +392,12 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
             hideNotification(notificationEl);
           });
           
-          notificationEl.innerHTML = content;
           notificationEl.style.position = 'relative';
-          notificationEl.appendChild(closeButton);
+          
+          // Only append close button if not already in the notification
+          if (!notificationEl.querySelector('.proovd-close-btn')) {
+            notificationEl.appendChild(closeButton);
+          }
           
           // Add link handler
           if (notification.url) {
@@ -419,6 +430,142 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
           displayTimer = setTimeout(() => {
             hideNotification(notificationEl);
           }, duration * 1000);
+        }
+        
+        // Render component-based notification
+        function renderComponentBasedNotification(container, notification) {
+          console.log('Components:', notification.components);
+          
+          // Set container as relative positioning context
+          container.style.position = 'relative';
+          container.style.minHeight = '100px'; // Ensure minimum height
+          
+          // Calculate bounding box to adjust for negative coordinates
+          let minX = 0, minY = 0;
+          notification.components.forEach(component => {
+            if (component && component.position) {
+              minX = Math.min(minX, component.position.x || 0);
+              minY = Math.min(minY, component.position.y || 0);
+            }
+          });
+          
+          // Adjust container padding to accommodate negative positions
+          if (minX < 0 || minY < 0) {
+            console.log('Adjusting for negative coordinates:', minX, minY);
+            container.style.padding = \`\${Math.abs(minY) + 12}px \${Math.abs(minX) + 12}px 12px 12px\`;
+          }
+          
+          // Render each component
+          notification.components.forEach((component, index) => {
+            // Skip if missing essential data
+            if (!component || !component.type) {
+              console.error('Invalid component:', component);
+              return;
+            }
+            
+            const id = component.id || \`comp-\${index}\`;
+            const type = component.type;
+            const content = component.content || '';
+            const position = component.position || { x: 0, y: 0 };
+            const style = component.style || {};
+            
+            // Create the component element
+            let element;
+            
+            switch (type) {
+              case 'image':
+                element = document.createElement('img');
+                element.src = content;
+                element.alt = 'Notification image';
+                element.onerror = () => {
+                  element.src = 'https://placehold.co/60x60?text=Error';
+                };
+                break;
+                
+              case 'badge':
+                element = document.createElement('div');
+                element.textContent = content;
+                // Apply default badge styles if not provided
+                if (!style.backgroundColor) element.style.backgroundColor = '#4338ca';
+                if (!style.color) element.style.color = 'white';
+                if (!style.padding) element.style.padding = '2px 6px';
+                if (!style.borderRadius) element.style.borderRadius = '4px';
+                if (!style.fontSize) element.style.fontSize = '12px';
+                if (!style.fontWeight) element.style.fontWeight = 'bold';
+                break;
+                
+              case 'user':
+                element = document.createElement('div');
+                element.textContent = content;
+                if (!style.fontWeight) element.style.fontWeight = 'bold';
+                if (!style.color) element.style.color = '#333333';
+                break;
+                
+              case 'price':
+                element = document.createElement('div');
+                element.textContent = content;
+                if (!style.color) element.style.color = '#10b981';
+                if (!style.fontWeight) element.style.fontWeight = 'bold';
+                if (!style.fontSize) element.style.fontSize = '16px';
+                break;
+                
+              case 'rating':
+                element = document.createElement('div');
+                element.textContent = content;
+                if (!style.color) element.style.color = '#f59e0b';
+                if (!style.fontSize) element.style.fontSize = '16px';
+                break;
+                
+              case 'location':
+                element = document.createElement('div');
+                element.textContent = content;
+                if (!style.color) element.style.color = '#6b7280';
+                if (!style.fontSize) element.style.fontSize = '12px';
+                break;
+                
+              case 'time':
+                element = document.createElement('div');
+                element.textContent = content;
+                if (!style.color) element.style.color = '#6b7280';
+                if (!style.fontSize) element.style.fontSize = '12px';
+                if (!style.fontStyle) element.style.fontStyle = 'italic';
+                break;
+                
+              case 'text':
+              default:
+                element = document.createElement('div');
+                element.textContent = content;
+                if (!style.fontSize) element.style.fontSize = '14px';
+                if (!style.color) element.style.color = '#333333';
+                break;
+            }
+            
+            // Add debug classes and attributes
+            element.className = \`proovd-component proovd-\${type}\`;
+            element.setAttribute('data-component-id', id);
+            element.setAttribute('data-component-type', type);
+            element.setAttribute('data-component-index', index);
+            
+            // Position the element - account for negative coordinates
+            element.style.position = 'absolute';
+            element.style.left = \`\${position.x + Math.abs(minX)}px\`;
+            element.style.top = \`\${position.y + Math.abs(minY)}px\`;
+            element.style.transform = 'translate(0, 0)'; 
+            element.style.display = 'block';
+            element.style.whiteSpace = 'nowrap';
+            
+            // Apply custom styles
+            for (const prop in style) {
+              try {
+                element.style[prop] = style[prop];
+              } catch (err) {
+                console.error('Error setting style', prop, style[prop], err);
+              }
+            }
+            
+            // Add to container
+            container.appendChild(element);
+          });
         }
         
         // Hide notification with animation
