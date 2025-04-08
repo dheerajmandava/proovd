@@ -119,6 +119,10 @@ const notificationSchema = new Schema(
       type: Number,
       default: 0,
     },
+    components: {
+      type: Array,
+      default: [],
+    },
   },
   {
     timestamps: true,
@@ -161,6 +165,7 @@ notificationSchema.methods.toResponse = function () {
     priority: this.priority,
     impressions: this.impressions,
     clicks: this.clicks,
+    components: this.components || [], // Return components array
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };

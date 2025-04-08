@@ -132,6 +132,21 @@ export async function GET(request, props) {
       if (!notification.url && notification.link) {
         notification.url = notification.link;
       }
+
+      // Identify notification type and ensure components are properly included
+      if (notification.components && notification.components.length > 0) {
+        console.log(`Found component-based notification: ${notification.name} with ${notification.components.length} components`);
+        notification.isComponentBased = true;
+        
+        // Make sure components are explicitly included (sometimes MongoDB objects need explicit inclusion)
+        const componentsCopy = [...notification.components];
+        notification.components = componentsCopy;
+        
+        console.log('Components sample:', componentsCopy.slice(0, 2));
+      } else {
+        notification.isComponentBased = false;
+        console.log(`Found traditional notification: ${notification.name} (non-component based)`);
+      }
       
       return notification;
     });

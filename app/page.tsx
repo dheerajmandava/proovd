@@ -3,6 +3,7 @@ import Image from 'next/image';
 import WaitlistForm from './components/WaitlistForm';
 import { GoogleAnalytics } from '@next/third-parties/google'
 import SampleNotification from './components/SampleNotification';
+import NotificationTemplates from './components/NotificationTemplates';
 
 export default function Home() {
   return (
@@ -178,6 +179,68 @@ export default function Home() {
               </div>
             </div>
           </div>
+          
+          {/* Product Roadmap Section */}
+          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 py-16 my-8 rounded-2xl">
+            <div className="container mx-auto px-4">
+              <h2 className="text-3xl font-bold text-center mb-4">Product Roadmap</h2>
+              <p className="text-center text-base-content/70 max-w-2xl mx-auto mb-12">
+                We're actively developing new features to enhance your social proof capabilities:
+              </p>
+              
+              <div className="grid md:grid-cols-3 gap-8">
+                <div className="bg-white p-6 rounded-lg shadow-md border-t-4 border-blue-500">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-semibold">Real-Time Integrations</h3>
+                    <span className="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded">Coming Soon</span>
+                  </div>
+                  <p className="text-base-content/70">Connect with Shopify, WooCommerce, and Stripe to display actual purchase activity.</p>
+                </div>
+                
+                <div className="bg-white p-6 rounded-lg shadow-md border-t-4 border-purple-500">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-semibold">Advanced Templates</h3>
+                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">In Development</span>
+                  </div>
+                  <p className="text-base-content/70">More notification types and design options for various user actions and events.</p>
+                </div>
+                
+                <div className="bg-white p-6 rounded-lg shadow-md border-t-4 border-green-500">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-semibold">Events API</h3>
+                    <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Planned</span>
+                  </div>
+                  <p className="text-base-content/70">Custom JavaScript API to track and display real-time user actions on your website.</p>
+                </div>
+              </div>
+              
+              <div className="mt-10 text-center">
+                <Link href="/contact" className="btn btn-outline btn-primary">
+                  Join Early Access Program
+                </Link>
+              </div>
+            </div>
+          </div>
+          
+          {/* Template Showcase Section */}
+          <div className="py-16 max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold text-center mb-4">Notification Templates</h2>
+            <p className="text-center text-base-content/70 max-w-2xl mx-auto mb-12">
+              Choose from a variety of notification styles to match your brand and goals
+            </p>
+            
+            <NotificationTemplates />
+            
+            <div className="mt-16 text-center">
+              <p className="mb-6 text-base-content/70">
+                Ready to boost conversions with social proof?
+              </p>
+              <Link href="/auth/signup" className="btn btn-primary btn-lg">
+                Get Started Free
+              </Link>
+            </div>
+          </div>
+          
         </div>
       </main>
 

@@ -146,7 +146,7 @@ export default function SignInForm() {
             </button>
           </div>
         </form>
-        
+{/*         
         <div className="divider my-6">OR</div>
         
         <button
@@ -161,7 +161,7 @@ export default function SignInForm() {
             />
           </svg>
           Sign in with Google
-        </button>
+        </button> */}
       </div>
     </div>
   );

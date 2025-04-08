@@ -277,6 +277,17 @@ class proovd {
   }
 
   showNewNotification(notification) {
+    console.log('proovd: Showing notification with data:', notification);
+    console.log('proovd: Is component based?', notification.isComponentBased);
+    console.log('proovd: Components:', notification.components);
+    
+    // Ensure notification has proper ID for tracking
+    const notificationId = notification._id || notification.id;
+    if (!notificationId) {
+      console.error('proovd: Notification missing ID:', notification);
+      return;
+    }
+    
     // Create notification element
     const notificationElement = document.createElement('div');
     notificationElement.className = `proovd-notification proovd-${this.options.theme}`;
@@ -288,64 +299,94 @@ class proovd {
     notificationElement.style.marginBottom = '10px';
     notificationElement.style.animation = 'proovd-fade-in 0.5s ease-in-out';
     notificationElement.style.cursor = notification.url ? 'pointer' : 'default';
+    
+    // Set notification title and id attributes for debugging
+    notificationElement.setAttribute('data-notification-id', notificationId);
+    notificationElement.setAttribute('data-notification-name', notification.name || 'Unnamed');
+    
+    // Set defaults for positioning content
+    notificationElement.style.position = 'relative';
+    notificationElement.style.width = '384px'; // Set fixed width for Real Estate template
+    notificationElement.style.minHeight = '100px';
+    notificationElement.style.overflow = 'hidden';
 
-    // Create image if available
-    if (notification.image) {
-      const image = document.createElement('img');
-      image.src = notification.image;
-      image.className = 'proovd-image';
-      notificationElement.appendChild(image);
+    // Check if this is a component-based notification
+    if (notification.isComponentBased && notification.components && notification.components.length > 0) {
+      // Render components
+      this.renderComponents(notificationElement, notification.components);
+    } else {
+      // Traditional notification rendering
+      // Create image if available
+      if (notification.image) {
+        const image = document.createElement('img');
+        image.src = notification.image;
+        image.className = 'proovd-image';
+        image.style.width = '60px';
+        image.style.height = '60px';
+        image.style.borderRadius = '4px';
+        image.style.marginRight = '10px';
+        image.style.objectFit = 'cover';
+        notificationElement.appendChild(image);
+      }
+
+      // Create content container
+      const content = document.createElement('div');
+      content.className = 'proovd-content';
+      content.style.flex = '1';
+
+      // Add name
+      const nameElement = document.createElement('div');
+      nameElement.className = 'proovd-name';
+      nameElement.textContent = notification.name;
+      nameElement.style.fontWeight = 'bold';
+      nameElement.style.marginBottom = '4px';
+      content.appendChild(nameElement);
+
+      // Add message
+      const messageElement = document.createElement('div');
+      messageElement.className = 'proovd-message';
+      messageElement.textContent = notification.message;
+      content.appendChild(messageElement);
+
+      // Add product name if available
+      if (notification.productName) {
+        const productElement = document.createElement('div');
+        productElement.className = 'proovd-product';
+        productElement.textContent = notification.productName;
+        productElement.style.fontWeight = 'bold';
+        productElement.style.marginTop = '4px';
+        content.appendChild(productElement);
+      }
+
+      // Add timestamp
+      const timeElement = document.createElement('div');
+      timeElement.className = 'proovd-time';
+      timeElement.textContent = notification.timeAgo || 'Just now';
+      timeElement.style.fontSize = '12px';
+      timeElement.style.color = '#6b7280';
+      timeElement.style.marginTop = '4px';
+      content.appendChild(timeElement);
+
+      notificationElement.appendChild(content);
     }
-
-    // Create content container
-    const content = document.createElement('div');
-    content.className = 'proovd-content';
-
-    // Add name
-    const nameElement = document.createElement('div');
-    nameElement.className = 'proovd-name';
-    nameElement.textContent = notification.name;
-    content.appendChild(nameElement);
-
-    // Add message
-    const messageElement = document.createElement('div');
-    messageElement.className = 'proovd-message';
-    messageElement.textContent = notification.message;
-    content.appendChild(messageElement);
-
-    // Add product name if available
-    if (notification.productName) {
-      const productElement = document.createElement('div');
-      productElement.className = 'proovd-product';
-      productElement.textContent = notification.productName;
-      content.appendChild(productElement);
-    }
-
-    // Add timestamp
-    const timeElement = document.createElement('div');
-    timeElement.className = 'proovd-time';
-    timeElement.textContent = 'Just now';
-    content.appendChild(timeElement);
-
-    notificationElement.appendChild(content);
     
     // Add click handler if URL exists
     if (notification.url) {
       notificationElement.onclick = (e) => {
-        this.trackClick(notification.id);
+        this.trackClick(notificationId);
         window.open(notification.url, '_blank');
       };
     }
 
     // Track impression
-    this.trackImpression(notification.id);
+    this.trackImpression(notificationId);
     
     // Add to container
     this.container.appendChild(notificationElement);
 
     // Dispatch event
     this.dispatchEvent('proovdNotification', { 
-      id: notification._id,
+      id: notificationId,
       name: notification.name,
       message: notification.message,
       type: notification.type,
@@ -353,8 +394,158 @@ class proovd {
     });
   }
 
+  // New method to render component-based notifications
+  renderComponents(container, components) {
+    if (!components || !components.length) {
+      console.error('proovd: No components to render');
+      return;
+    }
+    
+    console.log('proovd: Rendering components:', JSON.stringify(components));
+    
+    // Create a wrapper for absolute positioning
+    container.style.position = 'relative';
+    
+    // Calculate bounding box to adjust for negative coordinates
+    let minX = 0, minY = 0;
+    components.forEach(component => {
+      if (component.position) {
+        minX = Math.min(minX, component.position.x || 0);
+        minY = Math.min(minY, component.position.y || 0);
+      }
+    });
+    
+    // Adjust container to accommodate negative positions
+    if (minX < 0 || minY < 0) {
+      console.log(`proovd: Adjusting container for negative coordinates: x=${minX}, y=${minY}`);
+      container.style.padding = `${Math.abs(minY) + 15}px ${Math.abs(minX) + 15}px 15px 15px`;
+    }
+    
+    // Render each component
+    components.forEach((component, index) => {
+      // Skip if missing essential data
+      if (!component || !component.type) {
+        console.error(`proovd: Invalid component at index ${index}:`, component);
+        return;
+      }
+      
+      const id = component.id || `comp-${index}`;
+      const type = component.type;
+      const content = component.content || '';
+      const position = component.position || { x: 0, y: 0 };
+      const style = component.style || {};
+      
+      console.log(`proovd: Rendering component[${index}]: ${type} id=${id}, position=${JSON.stringify(position)}, content="${content.substring(0, 20)}${content.length > 20 ? '...' : ''}"`);
+      
+      // Create the component element
+      let element;
+      
+      switch (type) {
+        case 'image':
+          element = document.createElement('img');
+          element.src = content;
+          element.alt = 'Notification image';
+          element.onerror = () => {
+            element.src = 'https://placehold.co/60x60?text=Error';
+          };
+          break;
+          
+        case 'badge':
+          element = document.createElement('div');
+          element.textContent = content;
+          // Apply default badge styles if not provided
+          if (!style.backgroundColor) element.style.backgroundColor = '#4338ca';
+          if (!style.color) element.style.color = 'white';
+          if (!style.padding) element.style.padding = '2px 6px';
+          if (!style.borderRadius) element.style.borderRadius = '4px';
+          if (!style.fontSize) element.style.fontSize = '12px';
+          if (!style.fontWeight) element.style.fontWeight = 'bold';
+          break;
+          
+        case 'user':
+          element = document.createElement('div');
+          element.textContent = content;
+          if (!style.fontWeight) element.style.fontWeight = 'bold';
+          if (!style.color) element.style.color = '#333333';
+          break;
+          
+        case 'price':
+          element = document.createElement('div');
+          element.textContent = content;
+          if (!style.color) element.style.color = '#10b981';
+          if (!style.fontWeight) element.style.fontWeight = 'bold';
+          if (!style.fontSize) element.style.fontSize = '16px';
+          break;
+          
+        case 'rating':
+          element = document.createElement('div');
+          element.textContent = content;
+          if (!style.color) element.style.color = '#f59e0b';
+          if (!style.fontSize) element.style.fontSize = '16px';
+          break;
+          
+        case 'location':
+          element = document.createElement('div');
+          element.textContent = content;
+          if (!style.color) element.style.color = '#6b7280';
+          if (!style.fontSize) element.style.fontSize = '12px';
+          break;
+          
+        case 'time':
+          element = document.createElement('div');
+          element.textContent = content;
+          if (!style.color) element.style.color = '#6b7280';
+          if (!style.fontSize) element.style.fontSize = '12px';
+          if (!style.fontStyle) element.style.fontStyle = 'italic';
+          break;
+          
+        case 'text':
+        default:
+          element = document.createElement('div');
+          element.textContent = content;
+          if (!style.fontSize) element.style.fontSize = '14px';
+          if (!style.color) element.style.color = '#333333';
+          break;
+      }
+      
+      // Add debug classes and attributes
+      element.className = `proovd-component proovd-${type}`;
+      element.setAttribute('data-component-id', id);
+      element.setAttribute('data-component-type', type);
+      element.setAttribute('data-component-index', index);
+      
+      // Position the element - account for negative coordinates
+      element.style.position = 'absolute';
+      element.style.left = `${position.x + Math.abs(minX)}px`;
+      element.style.top = `${position.y + Math.abs(minY)}px`;
+      element.style.transform = 'translate(0, 0)'; 
+      element.style.display = 'block';
+      element.style.whiteSpace = 'nowrap';
+      
+      // Apply custom styles
+      Object.keys(style).forEach(prop => {
+        try {
+          element.style[prop] = style[prop];
+          console.log(`proovd: Setting style ${prop} = ${style[prop]}`);
+        } catch (err) {
+          console.error(`proovd: Error setting style ${prop}:`, err);
+        }
+      });
+      
+      // Add to container
+      container.appendChild(element);
+    });
+  }
+
   async trackImpression(notificationId) {
     try {
+      // If no ID, log an error and return
+      if (!notificationId) {
+        console.error('proovd: Cannot track impression - missing notification ID');
+        return;
+      }
+      
+      console.log(`proovd: Tracking impression for notification ${notificationId}`);
       await fetch(`${this.apiUrl}/api/websites/${this.options.websiteId}/notifications/${notificationId}/track`, {
         method: 'POST',
         headers: {
@@ -372,6 +563,13 @@ class proovd {
 
   async trackClick(notificationId) {
     try {
+      // If no ID, log an error and return
+      if (!notificationId) {
+        console.error('proovd: Cannot track click - missing notification ID');
+        return;
+      }
+      
+      console.log(`proovd: Tracking click for notification ${notificationId}`);
       await fetch(`${this.apiUrl}/api/websites/${this.options.websiteId}/notifications/${notificationId}/track`, {
         method: 'POST',
         headers: {

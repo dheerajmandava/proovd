@@ -379,23 +379,35 @@ export async function trackEvent(data: {
 }) {
   await connectToDatabase();
 
-  // Create event
-  const event = new AnalyticsEvent({
-    websiteId: data.websiteId,
-    notificationId: data.notificationId,
-    type: data.type,
-    metadata: data.metadata || {}
-  });
-  await event.save();
+  try {
+    // Create event
+    const event = new AnalyticsEvent({
+      websiteId: new mongoose.Types.ObjectId(data.websiteId),
+      notificationId: new mongoose.Types.ObjectId(data.notificationId),
+      type: data.type,
+      metadata: data.metadata || {}
+    });
+    await event.save();
 
-  // Update summaries
-  await Promise.all([
-    updateSummary('daily', data),
-    updateSummary('weekly', data),
-    updateSummary('monthly', data)
-  ]);
+    // Update the notification's impressions and clicks counts
+    await Notification.findByIdAndUpdate(
+      data.notificationId,
+      { $inc: { [data.type === 'impression' ? 'impressions' : 'clicks']: 1 } },
+      { new: true }
+    );
 
-  return event;
+    // Update summaries
+    await Promise.all([
+      updateSummary('daily', data),
+      updateSummary('weekly', data),
+      updateSummary('monthly', data)
+    ]);
+
+    return event;
+  } catch (error) {
+    console.error('Error tracking event:', error);
+    throw error;
+  }
 }
 
 /**
@@ -417,68 +429,74 @@ async function updateSummary(
     monthly: startOfMonth(now)
   }[granularity];
 
-  // Find or create summary
-  let summary = await AnalyticsSummary.findOne({
-    websiteId: data.websiteId,
-    date: periodStart,
-    granularity
-  });
-
-  if (!summary) {
-    summary = new AnalyticsSummary({
-      websiteId: data.websiteId,
+  try {
+    // Find or create summary
+    let summary = await AnalyticsSummary.findOne({
+      websiteId: new mongoose.Types.ObjectId(data.websiteId),
       date: periodStart,
-      granularity,
-      metrics: {
+      granularity
+    });
+
+    if (!summary) {
+      summary = new AnalyticsSummary({
+        websiteId: new mongoose.Types.ObjectId(data.websiteId),
+        date: periodStart,
+        granularity,
+        metrics: {
+          impressions: 0,
+          clicks: 0,
+          uniqueImpressions: 0,
+          uniqueClicks: 0,
+          conversionRate: 0
+        },
+        notificationMetrics: []
+      });
+    }
+
+    // Update metrics
+    if (data.type === 'impression') {
+      summary.metrics.impressions++;
+    } else if (data.type === 'click') {
+      summary.metrics.clicks++;
+    }
+
+    // Update conversion rate
+    if (summary.metrics.impressions > 0) {
+      summary.metrics.conversionRate = (summary.metrics.clicks / summary.metrics.impressions) * 100;
+    }
+
+    // Update notification metrics
+    let notificationMetric = summary.notificationMetrics.find(
+      m => m.notificationId.toString() === data.notificationId
+    );
+
+    if (!notificationMetric) {
+      notificationMetric = {
+        notificationId: new mongoose.Types.ObjectId(data.notificationId),
         impressions: 0,
         clicks: 0,
-        uniqueImpressions: 0,
-        uniqueClicks: 0,
         conversionRate: 0
-      },
-      notificationMetrics: []
-    });
+      };
+      summary.notificationMetrics.push(notificationMetric);
+    }
+
+    if (data.type === 'impression') {
+      notificationMetric.impressions++;
+    } else if (data.type === 'click') {
+      notificationMetric.clicks++;
+    }
+
+    if (notificationMetric.impressions > 0) {
+      notificationMetric.conversionRate = (notificationMetric.clicks / notificationMetric.impressions) * 100;
+    }
+
+    await summary.save();
+    return summary;
+  } catch (error) {
+    console.error(`Error updating ${granularity} summary:`, error);
+    // Continue execution even if there's an error with summary updates
+    return null;
   }
-
-  // Update metrics
-  if (data.type === 'impression') {
-    summary.metrics.impressions++;
-  } else if (data.type === 'click') {
-    summary.metrics.clicks++;
-  }
-
-  // Update conversion rate
-  if (summary.metrics.impressions > 0) {
-    summary.metrics.conversionRate = (summary.metrics.clicks / summary.metrics.impressions) * 100;
-  }
-
-  // Update notification metrics
-  let notificationMetric = summary.notificationMetrics.find(
-    m => m.notificationId.toString() === data.notificationId
-  );
-
-  if (!notificationMetric) {
-    notificationMetric = {
-      notificationId: new mongoose.Types.ObjectId(data.notificationId),
-      impressions: 0,
-      clicks: 0,
-      conversionRate: 0
-    };
-    summary.notificationMetrics.push(notificationMetric);
-  }
-
-  if (data.type === 'impression') {
-    notificationMetric.impressions++;
-  } else if (data.type === 'click') {
-    notificationMetric.clicks++;
-  }
-
-  if (notificationMetric.impressions > 0) {
-    notificationMetric.conversionRate = (notificationMetric.clicks / notificationMetric.impressions) * 100;
-  }
-
-  await summary.save();
-  return summary;
 }
 
 /**

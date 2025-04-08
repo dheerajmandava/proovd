@@ -1,6 +1,29 @@
 import { getWebsiteMetricsSummary, getWebsiteTimeSeries } from '@/app/lib/services/analytics.service';
 import { getServerSideWebsite, getServerSideNotifications } from '@/app/lib/server/data-fetchers';
 import AnalyticsTab from './AnalyticsTab';
+import { addDays, format } from 'date-fns';
+
+// Helper to generate empty timeline data for the chart
+function generateEmptyTimeSeriesData(timeRange = 'week', groupBy = 'day') {
+  const result = [];
+  const today = new Date();
+  let days = 7;
+  
+  if (timeRange === 'day') days = 1;
+  if (timeRange === 'month') days = 30;
+  
+  for (let i = days - 1; i >= 0; i--) {
+    const date = addDays(today, -i);
+    result.push({
+      date: date.toISOString(),
+      impressions: 0,
+      clicks: 0,
+      conversionRate: '0.00'
+    });
+  }
+  
+  return result;
+}
 
 export default async function ServerHydratedAnalyticsTab({ websiteId }: { websiteId: string }) {
   // Fetch core data
@@ -25,18 +48,26 @@ export default async function ServerHydratedAnalyticsTab({ websiteId }: { websit
   }
   
   // Get notification performance data
-  const notificationMetrics = notifications.map(notification => ({
-    id: notification._id.toString(),
-    name: notification.name || '',
-    impressions: notification.impressions || 0,
-    clicks: notification.clicks || 0,
-    conversionRate: notification.impressions > 0 
-      ? ((notification.clicks / notification.impressions) * 100).toFixed(2) 
-      : '0.00',
-    createdAt: notification.createdAt instanceof Date 
-      ? notification.createdAt.toISOString() 
-      : (typeof notification.createdAt === 'string' ? notification.createdAt : new Date().toISOString())
-  }));
+  const notificationMetrics = notifications.map(notification => {
+    // Use impressions and clicks directly from the notification object
+    // based on the NotificationType definition in notification.service.ts
+    const impressions = notification.impressions || 0;
+    const clicks = notification.clicks || 0;
+    const conversionRate = impressions > 0 
+      ? ((clicks / impressions) * 100).toFixed(2) 
+      : '0.00';
+      
+    return {
+      id: notification._id.toString(),
+      name: notification.name || notification.type || 'Unnamed Notification',
+      impressions,
+      clicks,
+      conversionRate,
+      createdAt: notification.createdAt instanceof Date 
+        ? notification.createdAt.toISOString() 
+        : (typeof notification.createdAt === 'string' ? notification.createdAt : new Date().toISOString())
+    };
+  });
   
   // Serialize website basic info
   const serializedWebsite = {
@@ -55,15 +86,17 @@ export default async function ServerHydratedAnalyticsTab({ websiteId }: { websit
     period: 'all_time'
   };
   
-  // Serialize time series data (ensuring dates are ISO strings)
-  const serializedTimeSeriesData = timeSeriesData.map(point => ({
-    date: point.date instanceof Date 
-      ? point.date.toISOString() 
-      : (typeof point.date === 'string' ? point.date : new Date().toISOString()),
-    impressions: point.impressions || 0,
-    clicks: point.clicks || 0,
-    conversionRate: point.conversionRate || '0.00'
-  }));
+  // Use the API provided time series data, or generate empty data for the chart if none exists
+  const processedTimeSeriesData = timeSeriesData.length > 0 
+    ? timeSeriesData.map(point => ({
+        date: point.date instanceof Date 
+          ? point.date.toISOString() 
+          : (typeof point.date === 'string' ? point.date : new Date().toISOString()),
+        impressions: point.impressions || 0,
+        clicks: point.clicks || 0,
+        conversionRate: point.conversionRate || '0.00'
+      }))
+    : generateEmptyTimeSeriesData('week', 'day');
   
   // Get top performing notifications
   const topNotifications = [...notificationMetrics]
@@ -85,7 +118,7 @@ export default async function ServerHydratedAnalyticsTab({ websiteId }: { websit
       websiteId={websiteId}
       website={serializedWebsite}
       metrics={serializedMetrics}
-      timeSeriesData={serializedTimeSeriesData}
+      timeSeriesData={processedTimeSeriesData}
       notificationMetrics={notificationMetrics}
       topNotifications={topNotifications}
       totals={notificationTotals}

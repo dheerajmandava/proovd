@@ -20,6 +20,7 @@ type NotificationType = {
   timeAgo?: string;
   type?: string;
   location?: string;
+  components?: any[];
 };
 
 /**
@@ -46,10 +47,20 @@ export const getNotificationsByWebsiteId = cache(
     if (!websiteId || !mongoose.Types.ObjectId.isValid(websiteId)) return [];
     
     await connectToDatabase();
+    // Use .select('+components') to ensure components are included in the result
     const notifications = await Notification.find({ siteId: websiteId, status: 'active' })
+      .select('+components')  
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
+    
+    console.log(`getNotificationsByWebsiteId found ${notifications.length} notifications`);
+    if (notifications.length > 0) {
+      console.log('First notification has components?', !!notifications[0].components);
+      if (notifications[0].components) {
+        console.log('Component count:', notifications[0].components.length);
+      }
+    }
     
     return notifications as NotificationType[];
   }
@@ -87,6 +98,7 @@ export async function createNotification(notificationData: {
   type?: string;
   priority?: number;
   fakeTimestamp?: Date;
+  components?: any[];
 }): Promise<NotificationType> {
   await connectToDatabase();
   
@@ -108,7 +120,8 @@ export async function createNotification(notificationData: {
       impressions: 0,
       clicks: 0,
       priority: notificationData.priority || 0,
-      fakeTimestamp: notificationData.fakeTimestamp
+      fakeTimestamp: notificationData.fakeTimestamp,
+      components: notificationData.components || []
     });
     
     await notification.save();
