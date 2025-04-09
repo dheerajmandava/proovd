@@ -71,7 +71,7 @@ To ensure that only you can display notifications for your domain, you'll need t
 1. Go to your website's **Setup** tab
 2. Copy the installation code snippet:
    ```html
-   <script src="https://cdn.proovd.in/w/YOUR_WEBSITE_ID.js"></script>
+   <script src="https://www.proovd.in/api/cdn/w/YOUR_WEBSITE_ID.js"></script>
    ```
 3. Add this code to your website just before the closing `</body>` tag
 4. Save and deploy your website changes

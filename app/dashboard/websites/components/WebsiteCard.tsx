@@ -24,7 +24,7 @@ export default function WebsiteCard({ website }: WebsiteCardProps) {
   const [copied, setCopied] = useState(false);
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   
-  const scriptTag = `<script src="https://cdn.proovd.in/w/${website.id}.js"></script>`;
+  const scriptTag = `<script src="https://www.proovd.in/api/cdn/w/${website.id}"></script>`;
 
   const copySetupCode = () => {
     navigator.clipboard.writeText(scriptTag);

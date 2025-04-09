@@ -16,7 +16,7 @@ export default function CodeSection({ websiteId, code: propCode, language }: Cod
   const baseUrl = 'https://www.proovd.in';
   
   // Generate the installation code using the main domain
-  const code = propCode || (websiteId ? `<script src="${baseUrl}/api/cdn/w/${websiteId}.js"></script>` : '');
+  const code = propCode || (websiteId ? `<script src="${baseUrl}/api/cdn/w/${websiteId}"></script>` : '');
   
   const copyToClipboard = async () => {
     try {
