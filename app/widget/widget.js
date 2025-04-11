@@ -410,7 +410,7 @@ class proovd {
     });
   }
 
-  // New method to render component-based notifications
+  // Render component-based notifications
   renderComponents(container, components) {
     if (!components || !components.length) {
       console.error('proovd: No components to render');
@@ -438,118 +438,161 @@ class proovd {
     }
     
     // Render each component
-    components.forEach((component, index) => {
-      // Skip if missing essential data
-      if (!component || !component.type) {
-        console.error(`proovd: Invalid component at index ${index}:`, component);
+    components.forEach(component => {
+      const { type, content, position, style = {} } = component;
+      
+      // Skip components with missing required fields
+      if (!type || !position) {
+        console.warn('proovd: Skipping component with missing required fields:', component);
         return;
       }
-      
-      const id = component.id || `comp-${index}`;
-      const type = component.type;
-      const content = component.content || '';
-      const position = component.position || { x: 0, y: 0 };
-      const style = component.style || {};
-      
-      console.log(`proovd: Rendering component[${index}]: ${type} id=${id}, position=${JSON.stringify(position)}, content="${content.substring(0, 20)}${content.length > 20 ? '...' : ''}"`);
-      
-      // Create the component element
-      let element;
-      
-      switch (type) {
-        case 'image':
-          element = document.createElement('img');
-          element.src = content;
-          element.alt = 'Notification image';
-          element.onerror = () => {
-            element.src = 'https://placehold.co/60x60?text=Error';
-          };
-          break;
-          
-        case 'badge':
-          element = document.createElement('div');
-          element.textContent = content;
-          // Apply default badge styles if not provided
-          if (!style.backgroundColor) element.style.backgroundColor = '#4338ca';
-          if (!style.color) element.style.color = 'white';
-          if (!style.padding) element.style.padding = '2px 6px';
-          if (!style.borderRadius) element.style.borderRadius = '4px';
-          if (!style.fontSize) element.style.fontSize = '12px';
-          if (!style.fontWeight) element.style.fontWeight = 'bold';
-          break;
-          
-        case 'user':
-          element = document.createElement('div');
-          element.textContent = content;
-          if (!style.fontWeight) element.style.fontWeight = 'bold';
-          if (!style.color) element.style.color = '#333333';
-          break;
-          
-        case 'price':
-          element = document.createElement('div');
-          element.textContent = content;
-          if (!style.color) element.style.color = '#10b981';
-          if (!style.fontWeight) element.style.fontWeight = 'bold';
-          if (!style.fontSize) element.style.fontSize = '16px';
-          break;
-          
-        case 'rating':
-          element = document.createElement('div');
-          element.textContent = content;
-          if (!style.color) element.style.color = '#f59e0b';
-          if (!style.fontSize) element.style.fontSize = '16px';
-          break;
-          
-        case 'location':
-          element = document.createElement('div');
-          element.textContent = content;
-          if (!style.color) element.style.color = '#6b7280';
-          if (!style.fontSize) element.style.fontSize = '12px';
-          break;
-          
-        case 'time':
-          element = document.createElement('div');
-          element.textContent = content;
-          if (!style.color) element.style.color = '#6b7280';
-          if (!style.fontSize) element.style.fontSize = '12px';
-          if (!style.fontStyle) element.style.fontStyle = 'italic';
-          break;
-          
-        case 'text':
-        default:
-          element = document.createElement('div');
-          element.textContent = content;
-          if (!style.fontSize) element.style.fontSize = '14px';
-          if (!style.color) element.style.color = '#333333';
-          break;
-      }
-      
-      // Add debug classes and attributes
-      element.className = `proovd-component proovd-${type}`;
-      element.setAttribute('data-component-id', id);
-      element.setAttribute('data-component-type', type);
-      element.setAttribute('data-component-index', index);
-      
-      // Position the element - account for negative coordinates
-      element.style.position = 'absolute';
-      element.style.left = `${position.x + Math.abs(minX)}px`;
-      element.style.top = `${position.y + Math.abs(minY)}px`;
-      element.style.transform = 'translate(0, 0)'; 
-      element.style.display = 'block';
-      element.style.whiteSpace = 'nowrap';
-      
-      // Apply custom styles
-      Object.keys(style).forEach(prop => {
-        try {
-          element.style[prop] = style[prop];
-          console.log(`proovd: Setting style ${prop} = ${style[prop]}`);
-        } catch (err) {
-          console.error(`proovd: Error setting style ${prop}:`, err);
+
+      try {
+        // Create the component element
+        let element;
+        
+        // Handle different component types
+        switch (type) {
+          case 'text': {
+            element = document.createElement('div');
+            
+            // Check if the content is in Editor.js JSON format
+            let textContent = content;
+            try {
+              // Check if content is JSON from Editor.js
+              if (content && typeof content === 'string' && content.startsWith('{')) {
+                const editorData = JSON.parse(content);
+                
+                if (editorData.blocks && Array.isArray(editorData.blocks)) {
+                  // Clear textContent to build it from blocks
+                  textContent = '';
+                  
+                  // Process each block
+                  editorData.blocks.forEach(block => {
+                    switch (block.type) {
+                      case 'header': {
+                        const headerEl = document.createElement(`h${block.data.level || 3}`);
+                        headerEl.innerHTML = block.data.text;
+                        headerEl.style.margin = '0.5em 0';
+                        headerEl.style.fontWeight = 'bold';
+                        element.appendChild(headerEl);
+                        break;
+                      }
+                      case 'paragraph': {
+                        const paraEl = document.createElement('p');
+                        paraEl.innerHTML = block.data.text;
+                        paraEl.style.margin = '0.5em 0';
+                        element.appendChild(paraEl);
+                        break;
+                      }
+                      case 'list': {
+                        const listEl = document.createElement(block.data.style === 'ordered' ? 'ol' : 'ul');
+                        listEl.style.margin = '0.5em 0';
+                        listEl.style.paddingLeft = '1.5em';
+                        
+                        block.data.items.forEach(item => {
+                          const listItem = document.createElement('li');
+                          listItem.innerHTML = item;
+                          listEl.appendChild(listItem);
+                        });
+                        
+                        element.appendChild(listEl);
+                        break;
+                      }
+                      default: {
+                        // Fallback for unsupported blocks
+                        if (block.data && block.data.text) {
+                          const div = document.createElement('div');
+                          div.innerHTML = block.data.text;
+                          element.appendChild(div);
+                        }
+                      }
+                    }
+                  });
+                }
+              } else {
+                // Plain text, just set it
+                element.textContent = textContent;
+              }
+            } catch (e) {
+              console.error('proovd: Error rendering rich text:', e);
+              // Fallback to plain text
+              element.textContent = textContent || '';
+            }
+            break;
+          }
+          case 'image':
+            element = document.createElement('img');
+            element.src = content;
+            element.alt = 'Notification image';
+            element.onerror = () => {
+              element.src = 'https://placehold.co/60x60?text=Error';
+              element.alt = 'Image not found';
+            };
+            break;
+          case 'badge':
+            element = document.createElement('span');
+            element.textContent = content;
+            element.style.backgroundColor = style.backgroundColor || '#4338ca';
+            element.style.color = style.color || 'white';
+            element.style.padding = style.padding || '2px 6px';
+            element.style.borderRadius = style.borderRadius || '4px';
+            element.style.fontSize = style.fontSize || '12px';
+            element.style.fontWeight = style.fontWeight || 'bold';
+            break;
+          case 'price':
+            element = document.createElement('div');
+            element.textContent = content;
+            element.style.color = style.color || '#10b981';
+            element.style.fontWeight = style.fontWeight || 'bold';
+            break;
+          case 'rating':
+            element = document.createElement('div');
+            // Render stars based on rating value
+            const rating = parseInt(content) || 5;
+            element.textContent = '★'.repeat(rating);
+            element.style.color = style.color || '#f59e0b';
+            break;
+          case 'user':
+            element = document.createElement('div');
+            element.textContent = content;
+            element.style.fontWeight = style.fontWeight || 'bold';
+            break;
+          case 'location':
+            element = document.createElement('div');
+            element.textContent = content;
+            element.style.color = style.color || '#6b7280';
+            element.style.fontSize = style.fontSize || '12px';
+            break;
+          case 'time':
+            element = document.createElement('div');
+            element.textContent = content;
+            element.style.color = style.color || '#6b7280';
+            element.style.fontSize = style.fontSize || '12px';
+            element.style.fontStyle = style.fontStyle || 'italic';
+            break;
+          default:
+            element = document.createElement('div');
+            element.textContent = content;
         }
-      });
-      
-      // Add to container
-      container.appendChild(element);
+
+        // Apply common styles and positioning
+        element.style.position = 'absolute';
+        element.style.left = `${position.x}px`;
+        element.style.top = `${position.y}px`;
+        
+        // Apply custom styles from the component
+        Object.entries(style).forEach(([key, value]) => {
+          if (key !== 'position') {
+            element.style[key] = value;
+          }
+        });
+        
+        // Add component to the container
+        container.appendChild(element);
+      } catch (error) {
+        console.error('proovd: Error rendering component:', error, component);
+      }
     });
   }
 

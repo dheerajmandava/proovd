@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { timeAgo } from '@/app/lib/utils';
 import { useNotifications, useDeleteNotification } from '@/app/lib/hooks';
 import type { Notification as NotificationType } from '@/app/lib/hooks';
+import { revalidatePath } from 'next/cache';
+import { toast } from 'react-hot-toast';
 
 // Define notification type interface
 interface Notification {
@@ -38,15 +41,10 @@ interface NotificationsTabProps {
 }
 
 export default function NotificationsTab({ websiteId , website, initialNotifications}: NotificationsTabProps) {
-
-  // Use custom hooks for notifications data and deletion
-  // const { 
-  //   notifications, 
-  //   isLoading, 
-  //   error: notificationsError, 
-  //   refreshNotifications 
-  // } = useNotifications(websiteId);
+  const router = useRouter();
+  const [currentNotifications, setCurrentNotifications] = useState(initialNotifications);
   
+  // Use custom hook for deletion
   const { 
     deleteNotification, 
     isDeleting, 
@@ -57,35 +55,36 @@ export default function NotificationsTab({ websiteId , website, initialNotificat
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   
   // Handle notification delete
-  // async function handleDelete(notificationId: string) {
-  //   if (!confirm('Are you sure you want to delete this notification?')) {
-  //     return;
-  //   }
+  async function handleDelete(notificationId: string) {
+    if (!confirm('Are you sure you want to delete this notification?')) {
+      return;
+    }
     
-  //   try {
-  //     setDeletingIds(prev => new Set(prev).add(notificationId));
+    try {
+      setDeletingIds(prev => new Set(prev).add(notificationId));
       
-  //     await deleteNotification(notificationId);
+      await deleteNotification(notificationId);
+      toast.success('Notification deleted successfully');
       
-  //     // Refresh the notifications list
-  //     refreshNotifications();
-  //   } catch (err: any) {
-  //     console.error('Failed to delete notification:', err);
-  //     alert('Failed to delete notification. Please try again.');
-  //   } finally {
-  //     setDeletingIds(prev => {
-  //       const newSet = new Set(prev);
-  //       newSet.delete(notificationId);
-  //       return newSet;
-  //     });
-  //   }
-  // }
-  
-  // Show loading state
-
-  
-  // Show error state
-
+      // Remove notification from local state immediately for better UX
+      setCurrentNotifications(prev => prev.filter(n => n._id !== notificationId));
+      
+      // Optionally re-fetch or revalidate if not using optimistic updates
+      // Consider revalidating the path if using RSC/Server Actions for data fetching
+      // router.refresh(); // This re-fetches data for the current route
+      
+    } catch (err: any) {
+      console.error('Failed to delete notification:', err);
+      const errorMessage = deleteError?.message || 'Failed to delete notification. Please try again.';
+      toast.error(errorMessage);
+    } finally {
+      setDeletingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(notificationId);
+        return newSet;
+      });
+    }
+  }
   
   return (
     <div>
@@ -139,7 +138,7 @@ export default function NotificationsTab({ websiteId , website, initialNotificat
               </tr>
             </thead>
             <tbody>
-              {initialNotifications.map((notification) => (
+              {currentNotifications.map((notification) => (
                 <tr key={notification._id}>
                   <td className="font-medium">{notification.name}</td>
                   <td className="max-w-xs truncate">{notification.message}</td>
@@ -159,7 +158,7 @@ export default function NotificationsTab({ websiteId , website, initialNotificat
                       Edit
                     </Link>
                     <button 
-                      onClick={() => console.log(notification._id)}
+                      onClick={() => handleDelete(notification._id)}
                       className="btn btn-xs btn-error btn-outline"
                       disabled={deletingIds.has(notification._id)}
                     >

@@ -4,7 +4,7 @@ import NotificationsTab from './NotificationsTab';
 
 export default async function ServerHydratedNotificationsTab({ websiteId }: { websiteId: string }) {
   const website = await getServerSideWebsite(websiteId);
-  const notifications = await getServerSideNotifications(websiteId);
+  const notifications = await getServerSideNotifications(websiteId, 100);
   
   if (!website) {
     return <div className="alert alert-error">Website not found</div>;

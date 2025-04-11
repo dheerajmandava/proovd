@@ -5,7 +5,7 @@ import { getServerSideWebsite, getServerSideNotifications } from '@/app/lib/serv
 export default async function ServerHydratedOverviewTab({ websiteId }: { websiteId: string }) {
   // Fetch exactly what this tab needs
   const website = await getServerSideWebsite(websiteId);
-  const notifications = await getServerSideNotifications(websiteId, 5);
+  const notifications = await getServerSideNotifications(websiteId, 100);
   
   if (!website) {
     return <div className="alert alert-error">Website not found</div>;

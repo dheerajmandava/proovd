@@ -534,7 +534,9 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
               case 'text':
               default:
                 element = document.createElement('div');
-                element.textContent = content;
+                // Use innerHTML to render formatted text
+                element.innerHTML = content;
+                // Apply default text styles if not provided
                 if (!style.fontSize) element.style.fontSize = '14px';
                 if (!style.color) element.style.color = '#333333';
                 break;

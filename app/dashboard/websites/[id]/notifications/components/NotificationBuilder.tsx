@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DndContext, useSensors, useSensor, PointerSensor, DragEndEvent, DragStartEvent, MouseSensor, TouchSensor } from '@dnd-kit/core';
 import { restrictToWindowEdges } from '@dnd-kit/modifiers';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import StyleEditor from './StyleEditor';
 import { X, Plus } from 'lucide-react';
@@ -18,11 +18,13 @@ export interface ComponentProps {
 }
 
 // Define notification template interface
-interface NotificationTemplate {
-  id?: string;
+interface NotificationData {
+  _id?: string; // Use _id to match MongoDB convention
+  id?: string; // Keep id if used elsewhere, but prefer _id
   name: string;
   websiteId: string;
   components: ComponentProps[];
+  // Add other fields if necessary (e.g., status, created/updated dates)
 }
 
 // Default component style presets
@@ -61,39 +63,78 @@ const componentDefaults: Record<string, { content: string; style: Record<string,
   },
 };
 
-// Update the styles at the top to include better cursor handling
+// Define CSS styles for components
 const styles = `
-  .grabbing-cursor, .grabbing-cursor * {
-    cursor: grabbing !important;
-  }
-  
   .notification-component {
     position: absolute;
-    cursor: grab; 
+    transition: transform 0.2s ease;
+    cursor: move;
     user-select: none;
-    touch-action: none;
-    transition: box-shadow 0.1s ease, transform 0.1s ease;
-  }
-  
-  .notification-component:active {
-    cursor: grabbing;
-    transform: scale(1.05);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    z-index: 50;
   }
   
   .notification-component.dragging {
-    cursor: grabbing;
-    opacity: 0.9;
+    opacity: 0.8;
+    z-index: 100;
+  }
+  
+  .notification-component.inline-editing {
+    cursor: text;
     z-index: 50;
-    transition: none;
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+    user-select: text;
+  }
+  
+  .inline-editor-wrapper {
+    min-width: 100px;
+    min-height: 40px;
+  }
+  
+  .loading-editor {
+    padding: 8px;
+    font-style: italic;
+    color: #6b7280;
+    background-color: #f9fafb;
+    border-radius: 4px;
+  }
+  
+  .editorjs-content h1, .editorjs-content h2, .editorjs-content h3 {
+    margin: 0.5em 0;
+    font-weight: bold;
+  }
+  
+  .editorjs-content p {
+    margin: 0.5em 0;
+  }
+  
+  .editorjs-content ul, .editorjs-content ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+  }
+  
+  /* Editor.js toolbar styles */
+  .ce-toolbar__content {
+    max-width: 100% !important;
+  }
+  
+  .ce-block__content {
+    max-width: 100% !important;
   }
 `;
 
-export default function NotificationBuilder({ existingTemplate }: { existingTemplate?: NotificationTemplate }) {
-  const params = useParams();
+// Update props definition
+interface NotificationBuilderProps {
+  websiteId: string; // Passed directly now
+  initialNotificationData?: NotificationData; // Renamed prop
+  isEditing?: boolean; // Flag for edit mode
+}
+
+export default function NotificationBuilder({ 
+  websiteId, 
+  initialNotificationData, 
+  isEditing = false 
+}: NotificationBuilderProps) {
   const router = useRouter();
-  const websiteId = params.id as string;
 
   // State variables
   const [templateName, setTemplateName] = useState('New Notification');
@@ -108,20 +149,19 @@ export default function NotificationBuilder({ existingTemplate }: { existingTemp
   const [previewSize] = useState<'realestate'>('realestate');
   const [previewBg, setPreviewBg] = useState<'light' | 'dark' | 'custom'>('light');
   const [previewMode, setPreviewMode] = useState<'standalone' | 'website'>('standalone');
+  const [customDimensions, setCustomDimensions] = useState({ width: 280, height: 120 });
+  const [tempDimensions, setTempDimensions] = useState({ width: '280', height: '120' });
   
   // Define notification preview dimensions for different sizes
   const previewDimensions = {
     realestate: { 
-      // Using the exact "max-w-sm" from the real estate template
-      width: 384, 
-      // Auto height based on content is ideal, but we need a fixed height for the builder
-      height: "auto", 
-      // Match the exact padding from the template
-      padding: 16, // p-4
-      // Match exact border and rounded styles
-      borderRadius: 8, // rounded-lg
-      border: "1px solid #e5e7eb", // border border-gray-200
-      shadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" // shadow-lg
+      // Using configurable dimensions
+      width: customDimensions.width, 
+      height: customDimensions.height, 
+      padding: "12px",
+      borderRadius: "8px", 
+      border: "1px solid #e5e7eb",
+      shadow: "0 6px 12px -3px rgba(0, 0, 0, 0.15), 0 2px 4px -1px rgba(0, 0, 0, 0.08)"
     }
   };
   
@@ -134,6 +174,7 @@ export default function NotificationBuilder({ existingTemplate }: { existingTemp
   
   // Define notification positions
   const notificationPositions = {
+    'center': { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' },
     'bottom-left': { bottom: '20px', left: '20px' },
     'bottom-right': { bottom: '20px', right: '20px' },
     'top-left': { top: '20px', left: '20px' },
@@ -141,7 +182,7 @@ export default function NotificationBuilder({ existingTemplate }: { existingTemp
   };
   
   // Default position
-  const [notificationPosition, setNotificationPosition] = useState<keyof typeof notificationPositions>('bottom-left');
+  const [notificationPosition, setNotificationPosition] = useState<keyof typeof notificationPositions>('center');
 
   // Configure drag sensors - updated for maximum sensitivity
   const sensors = useSensors(
@@ -159,13 +200,19 @@ export default function NotificationBuilder({ existingTemplate }: { existingTemp
     })
   );
 
-  // Initialize from existing template if provided
+  // Initialize from existing template OR initial data if editing
   useEffect(() => {
-    if (existingTemplate) {
-      setTemplateName(existingTemplate.name);
-      setComponents(existingTemplate.components);
+    if (isEditing && initialNotificationData) {
+      setTemplateName(initialNotificationData.name);
+      setComponents(initialNotificationData.components || []); // Ensure components array exists
+      // Set other relevant states if needed, e.g., notificationPosition
+    } else if (!isEditing) {
+      // Reset state if navigating from edit to new (optional)
+      setTemplateName('New Notification');
+      setComponents([]);
     }
-  }, [existingTemplate]);
+    // Add dependencies: isEditing and initialNotificationData
+  }, [isEditing, initialNotificationData]);
 
   // Add a custom CSS class to the document when dragging for better cursor feedback
   useEffect(() => {
@@ -358,11 +405,11 @@ export default function NotificationBuilder({ existingTemplate }: { existingTemp
     setIsLoading(true);
 
     try {
-      const endpoint = existingTemplate?.id 
-        ? `/api/websites/${websiteId}/notifications/${existingTemplate.id}`
+      const endpoint = initialNotificationData?._id 
+        ? `/api/websites/${websiteId}/notifications/${initialNotificationData._id}`
         : `/api/websites/${websiteId}/notifications`;
       
-      const method = existingTemplate?.id ? 'PUT' : 'POST';
+      const method = initialNotificationData?._id ? 'PUT' : 'POST';
       
       const response = await fetch(endpoint, {
         method,
@@ -398,19 +445,21 @@ export default function NotificationBuilder({ existingTemplate }: { existingTemp
     const isSelected = selectedComponent?.id === component.id;
     const isMoving = isDirectMoving && selectedComponent?.id === component.id;
 
-    // Create base props WITHOUT the key
     const baseProps = {
       id: component.id,
       className: `notification-component ${isActive ? 'opacity-80' : ''} ${isSelected ? 'ring-2 ring-primary' : ''} ${isMoving ? 'dragging' : ''}`,
       style: {
         ...style,
         transform: `translate(${component.position.x}px, ${component.position.y}px)`,
+        position: 'absolute' as const,
       },
       onClick: (e: React.MouseEvent) => {
         e.stopPropagation();
         setSelectedComponent(component);
       },
-      onMouseDown: (e: React.MouseEvent) => handleStartDirectMove(e, component),
+      onMouseDown: (e: React.MouseEvent) => {
+        handleStartDirectMove(e, component);
+      },
       'data-draggable': 'true',
       'data-component-type': type,
       title: 'Click and drag to move',
@@ -418,7 +467,19 @@ export default function NotificationBuilder({ existingTemplate }: { existingTemp
 
     switch (type) {
       case 'text':
-        return <div key={component.id} {...baseProps}>{content}</div>;
+        return (
+          <div 
+            key={component.id} 
+            {...baseProps}
+            style={{ ...baseProps.style, overflow: 'hidden' }}
+            className={`${baseProps.className} inline-editor-wrapper`}
+          >
+            <div 
+              className="prose dark:prose-invert max-w-none w-full h-full"
+              dangerouslySetInnerHTML={{ __html: content || '' }}
+            />
+          </div>
+        );
       case 'image':
         return (
           <img 
@@ -502,224 +563,440 @@ export default function NotificationBuilder({ existingTemplate }: { existingTemp
     <>
       <style>{styles}</style>
       <div className="flex flex-col h-full">
-        {/* Header with buttons */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
-              className="input input-bordered w-full max-w-xs"
-              placeholder="Notification Name"
-            />
-          </div>
-          
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={() => setShowPreview(!showPreview)}
-            >
-              {showPreview ? 'Edit Mode' : 'Preview'}
-            </button>
+        {/* Modern Header with gradient and more intuitive controls */}
+        <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border border-base-300 rounded-lg p-4 mb-4">
+          <div className="flex flex-wrap md:flex-nowrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="flex-1">
+                <label className="text-xs font-medium text-base-content/70 block mb-1">Template Name</label>
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  className="input input-bordered w-full max-w-xs text-base font-medium"
+                  placeholder="My Notification Template"
+                />
+              </div>
+              <div className="w-32">
+                <label className="text-xs font-medium text-base-content/70 block mb-1">Position</label>
+                <select 
+                  value={notificationPosition}
+                  onChange={(e) => setNotificationPosition(e.target.value as keyof typeof notificationPositions)}
+                  className="select select-bordered select-sm w-full"
+                >
+                  <option value="center">Center</option>
+                  <option value="bottom-left">Bottom Left</option>
+                  <option value="bottom-right">Bottom Right</option>
+                  <option value="top-left">Top Left</option>
+                  <option value="top-right">Top Right</option>
+                </select>
+              </div>
+            </div>
             
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={handleSaveTemplate}
-              disabled={isLoading}
-            >
-              {isLoading ? 'Saving...' : 'Save Template'}
-            </button>
+            <div className="flex gap-3 items-end">
+              <div className="flex gap-2">
+                <div>
+                  <label className="text-xs font-medium text-base-content/70 block mb-1">Width (px)</label>
+                  <input
+                    type="text"
+                    value={tempDimensions.width}
+                    onChange={(e) => {
+                      setTempDimensions({...tempDimensions, width: e.target.value});
+                      
+                      // Only update actual dimensions when there's a valid number
+                      if (e.target.value !== '') {
+                        const value = parseInt(e.target.value);
+                        if (!isNaN(value)) {
+                          setCustomDimensions({...customDimensions, width: Math.min(Math.max(value, 100), 600)});
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      // On blur, ensure we have a valid dimension
+                      if (tempDimensions.width === '' || isNaN(parseInt(tempDimensions.width))) {
+                        setTempDimensions({...tempDimensions, width: '280'});
+                        setCustomDimensions({...customDimensions, width: 280});
+                      }
+                    }}
+                    className="input input-bordered input-sm w-20"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-base-content/70 block mb-1">Height (px)</label>
+                  <input
+                    type="text"
+                    value={tempDimensions.height}
+                    onChange={(e) => {
+                      setTempDimensions({...tempDimensions, height: e.target.value});
+                      
+                      // Only update actual dimensions when there's a valid number
+                      if (e.target.value !== '') {
+                        const value = parseInt(e.target.value);
+                        if (!isNaN(value)) {
+                          setCustomDimensions({...customDimensions, height: Math.min(Math.max(value, 50), 400)});
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      // On blur, ensure we have a valid dimension
+                      if (tempDimensions.height === '' || isNaN(parseInt(tempDimensions.height))) {
+                        setTempDimensions({...tempDimensions, height: '120'});
+                        setCustomDimensions({...customDimensions, height: 120});
+                      }
+                    }}
+                    className="input input-bordered input-sm w-20"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-xs font-medium text-base-content/70 block mb-1">Theme</label>
+                <div className="flex border rounded-lg overflow-hidden">
+                  <button 
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${previewBg === 'light' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
+                    onClick={() => setPreviewBg('light')}
+                  >
+                    Light
+                  </button>
+                  <button 
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${previewBg === 'dark' ? 'bg-gray-800 text-white shadow-sm' : 'bg-gray-700 text-gray-100 hover:bg-gray-600'}`}
+                    onClick={() => setPreviewBg('dark')}
+                  >
+                    Dark
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`btn ${showPreview ? 'btn-outline' : 'btn-primary'} btn-sm`}
+                  onClick={() => setShowPreview(!showPreview)}
+                >
+                  {showPreview ? 'Edit Mode' : 'Preview'}
+                </button>
+                
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={handleSaveTemplate}
+                  disabled={isLoading}
+                >
+                  {isLoading ? 
+                    <span className="flex items-center gap-2">
+                      <span className="loading loading-spinner loading-xs"></span>
+                      Saving...
+                    </span> 
+                    : 'Save Template'
+                  }
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Main builder interface */}
         <div className="flex gap-4 h-full">
-          {/* Component palette */}
-          <div className="w-64 bg-base-200 rounded-lg shadow-md p-4 flex flex-col">
-            <h3 className="text-lg font-medium mb-3">Components</h3>
-            
-            <div className="grid grid-cols-2 gap-2">
-              {Object.keys(componentDefaults).map((type) => (
-                <button
-                  key={type}
-                  onClick={() => handleAddComponent(type)}
-                  className="btn btn-sm btn-outline h-auto flex flex-col items-center py-2 gap-1"
-                >
-                  <ComponentIcon type={type} />
-                  <span className="text-xs">{getComponentDisplayName(type)}</span>
-                </button>
-              ))}
+          {/* Modern Component palette with categories - LEFT COLUMN */}
+          <div className="w-64 bg-base-100 rounded-lg shadow-md border border-base-300 overflow-hidden flex flex-col">
+            <div className="p-4 bg-base-200 border-b border-base-300">
+              <h3 className="text-base font-semibold">Components</h3>
+              <p className="text-xs text-base-content/70 mt-1">Drag elements to create your notification</p>
             </div>
             
-            <div className="divider my-3">Selected Component</div>
-            
-            {selectedComponent ? (
-              <div className="mt-2 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">
-                    {getComponentDisplayName(selectedComponent.type)}
-                  </span>
-                  
-                  <button 
-                    className="btn btn-ghost btn-xs btn-square text-error"
-                    onClick={() => handleRemoveComponent(selectedComponent.id)}
-                    title="Remove component"
-                  >
-                    <X 
-                      size={16}
-                      className="cursor-pointer" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveComponent(selectedComponent.id);
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium uppercase text-base-content/50 pl-1">Content</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {['text', 'image'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => handleAddComponent(type)}
+                      className="btn btn-sm h-auto flex flex-col items-center py-2 gap-1 bg-base-100 hover:bg-base-200 border border-base-300"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('component/type', type);
                       }}
-                      style={{ userSelect: 'none' as const }}
-                    />
-                  </button>
-                </div>
-                
-                <div className="text-xs text-base-content/70">
-                  Position: {selectedComponent.position.x}, {selectedComponent.position.y}
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm text-base-content/60 mt-2">
-                No component selected. Click on a component in the preview to edit it.
-              </div>
-            )}
-          </div>
-
-          {/* Preview canvas */}
-          <div className="flex-1 flex flex-col">
-            <div className="relative bg-base-100 rounded-lg shadow-lg overflow-hidden border-2 border-base-300">
-              <div className="bg-base-200 p-2 flex justify-between items-center">
-                <div className="text-sm font-medium flex items-center gap-2">
-                  <span>Preview</span>
-                  <div className="flex border rounded overflow-hidden">
-                    <button 
-                      className={`px-2 py-1 text-xs ${previewBg === 'light' ? 'bg-primary text-primary-content' : 'bg-white text-gray-800'}`}
-                      onClick={() => setPreviewBg('light')}
-                      title="Light background"
                     >
-                      Light
+                      <ComponentIcon type={type} />
+                      <span className="text-xs">{getComponentDisplayName(type)}</span>
                     </button>
-                    <button 
-                      className={`px-2 py-1 text-xs ${previewBg === 'dark' ? 'bg-primary text-primary-content' : 'bg-gray-800 text-white'}`}
-                      onClick={() => setPreviewBg('dark')}
-                      title="Dark background"
-                    >
-                      Dark
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-xs font-medium bg-primary text-primary-content px-2 py-1 rounded">
-                    Real Estate Template (max-w-sm)
-                  </div>
-                  <div className="text-xs text-base-content/60">
-                    384px width × auto height
-                  </div>
+                  ))}
                 </div>
               </div>
               
-              <DndContext
-                sensors={sensors}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                modifiers={[restrictToWindowEdges]}
-              >
-                <div 
-                  className={`relative mx-auto flex justify-center items-center bg-white`}
-                  style={{
-                    width: previewDimensions[previewSize].width,
-                    height: previewDimensions[previewSize].height === "auto" ? "auto" : previewDimensions[previewSize].height,
-                    minHeight: 100, // Minimum height to ensure there's space for components
-                    boxShadow: previewDimensions[previewSize].shadow,
-                    overflow: 'hidden',
-                    borderRadius: previewDimensions[previewSize].borderRadius,
-                    border: previewDimensions[previewSize].border,
-                    padding: previewDimensions[previewSize].padding,
-                    backgroundColor: previewBackgrounds[previewBg].bg,
-                    color: previewBackgrounds[previewBg].text,
-                  }}
-                  onClick={() => setSelectedComponent(null)}
-                  onDragOver={handleNativeDragOver}
-                  onDrop={handleNativeDrop}
-                  onMouseDown={(e) => {
-                    // If clicking directly on the container (not a component)
-                    if (e.target === e.currentTarget && selectedComponent) {
-                      // Calculate new position based on mouse coordinates
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const x = e.clientX - rect.left;
-                      const y = e.clientY - rect.top;
-                      
-                      // Only update if within bounds
-                      if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
-                        // Update the selected component's position
-                        setComponents(prev => 
-                          prev.map(comp => {
-                            if (comp.id === selectedComponent.id) {
-                              return {
-                                ...comp,
-                                position: { x, y }
-                              };
-                            }
-                            return comp;
-                          })
-                        );
-                        
-                        setSelectedComponent(prev => {
-                          if (!prev) return null;
-                          return {
-                            ...prev,
-                            position: { x, y }
-                          };
-                        });
-                      }
-                    }
-                  }}
-                >
-                  {components.map((component) => renderComponent(component))}
-                  
-                  {components.length === 0 && !showPreview && (
-                    <div className="absolute inset-0 flex items-center justify-center text-base-content/40">
-                      <p className="text-sm text-center px-4" style={{ color: `${previewBackgrounds[previewBg].text}80` }}>
-                        This is the actual notification size.<br />
-                        Add components using the buttons on the left.
-                      </p>
-                    </div>
-                  )}
-                  
-                  {/* Positioning help tooltip */}
-                  {/* {components.length > 0 && !isDirectMoving && (
-                    <div className="absolute bottom-2 right-2 text-xs bg-base-200/80 text-base-content/80 px-2 py-1 rounded-md pointer-events-none">
-                      <span className="font-medium">Pro tip:</span> Just click and drag elements to move them
-                    </div>
-                  )} */}
-                  
-                  {/* Visual indicator for direct moving mode */}
-                  {/* {isDirectMoving && (
-                    <div className="absolute inset-0 border-2 border-primary pointer-events-none">
-                      <div className="absolute top-2 left-2 bg-primary text-primary-content text-xs px-2 py-1 rounded-md">
-                        Moving component with mouse - release to place
-                      </div>
-                    </div>
-                  )} */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium uppercase text-base-content/50 pl-1">Elements</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {['badge', 'price', 'rating'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => handleAddComponent(type)}
+                      className="btn btn-sm h-auto flex flex-col items-center py-2 gap-1 bg-base-100 hover:bg-base-200 border border-base-300"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('component/type', type);
+                      }}
+                    >
+                      <ComponentIcon type={type} />
+                      <span className="text-xs">{getComponentDisplayName(type)}</span>
+                    </button>
+                  ))}
                 </div>
-              </DndContext>
+              </div>
+              
+              <div className="space-y-2">
+                <h4 className="text-xs font-medium uppercase text-base-content/50 pl-1">User Info</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {['user', 'location', 'time'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => handleAddComponent(type)}
+                      className="btn btn-sm h-auto flex flex-col items-center py-2 gap-1 bg-base-100 hover:bg-base-200 border border-base-300"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('component/type', type);
+                      }}
+                    >
+                      <ComponentIcon type={type} />
+                      <span className="text-xs">{getComponentDisplayName(type)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
             
-            {/* Properties panel */}
-            <div className="mt-4 bg-base-200 rounded-lg shadow-md p-4 max-h-[350px] overflow-y-auto">
-              <StyleEditor 
-                component={selectedComponent} 
-                onUpdate={(updates) => {
-                  if (selectedComponent) {
+            <div className="border-t border-base-300 p-3">
+              <div className="space-y-3">
+                <h4 className="text-xs font-medium uppercase text-base-content/50">Selected Component</h4>
+                
+                {selectedComponent ? (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium flex items-center gap-1.5">
+                        <ComponentIcon type={selectedComponent.type} />
+                        {getComponentDisplayName(selectedComponent.type)}
+                      </span>
+                      
+                      <button 
+                        className="btn btn-ghost btn-xs btn-square text-error"
+                        onClick={() => handleRemoveComponent(selectedComponent.id)}
+                        title="Remove component"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                    
+                    <div className="flex items-center justify-between gap-2 text-xs text-base-content/70 bg-base-200 rounded-md p-2">
+                      <span>Position</span>
+                      <span className="font-mono">X: {selectedComponent.position.x}, Y: {selectedComponent.position.y}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-base-content/60 bg-base-200 p-3 rounded-md">
+                    Click on any component in the preview to edit it
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Preview canvas - MIDDLE COLUMN */}
+          <div className="flex-1 flex flex-col">
+            <div className="relative bg-base-100 rounded-lg shadow-lg overflow-hidden border border-base-300 h-full">
+              <div className="bg-base-200 p-3 flex justify-between items-center border-b border-base-300">
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col">
+                    <h3 className="text-sm font-medium">Notification Preview</h3>
+                    <p className="text-xs text-base-content/60">Dimensions: {previewDimensions[previewSize].width}px × {previewDimensions[previewSize].height}px</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="bg-green-500 w-2.5 h-2.5 rounded-full"></span>
+                    <span className="text-xs font-medium text-base-content/80">Live Preview</span>
+                  </div>
+                </div>
+                <div className="flex items-center">
+                  <div className="flex space-x-1.5">
+                    <div className="w-3 h-3 rounded-full bg-red-400"></div>
+                    <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+                    <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Canvas with browser-like frame for realistic preview */}
+              <div className="relative flex flex-col h-full">
+                <div className="bg-gray-100 dark:bg-gray-800 border-b border-base-300 p-2 flex items-center">
+                  <div className="flex items-center bg-white dark:bg-gray-900 rounded px-2 py-1 w-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                    </svg>
+                    <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">yourwebsite.com</span>
+                  </div>
+                </div>
+
+                {/* Realistic website background */}
+                <div 
+                  className="relative flex-1 p-6 flex items-center justify-center bg-pattern"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23${previewBg === 'light' ? '000000' : 'ffffff'}' fill-opacity='0.05' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='1'/%3E%3C/g%3E%3C/svg%3E")`,
+                    backgroundColor: previewBg === 'light' ? '#f9fafb' : '#1f2937',
+                    minHeight: '350px',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {/* DndContext for drag and drop functionality */}
+                  <DndContext
+                    sensors={sensors}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    modifiers={[restrictToWindowEdges]}
+                  >
+                    <div 
+                      className={`relative ${previewMode === 'standalone' ? '' : 'mx-auto'}`}
+                      style={{
+                        position: 'absolute',
+                        ...(notificationPosition === 'center' 
+                          ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+                          : notificationPositions[notificationPosition]),
+                        width: `${previewDimensions[previewSize].width}px`,
+                        height: `${previewDimensions[previewSize].height}px`,
+                        boxShadow: previewDimensions[previewSize].shadow,
+                        borderRadius: previewDimensions[previewSize].borderRadius,
+                        border: previewDimensions[previewSize].border,
+                        padding: previewDimensions[previewSize].padding,
+                        backgroundColor: previewBackgrounds[previewBg].bg,
+                        color: previewBackgrounds[previewBg].text,
+                        cursor: isDirectMoving ? 'grabbing' : 'default',
+                        transition: 'box-shadow 0.3s ease, width 0.3s ease, height 0.3s ease',
+                        zIndex: 50
+                      }}
+                      onClick={() => {
+                        // Deselect any component when clicking on the background
+                        setSelectedComponent(null);
+                      }}
+                      onDragOver={handleNativeDragOver}
+                      onDrop={handleNativeDrop}
+                    >
+                      {/* Visual indicator for current component position */}
+                      {selectedComponent && !showPreview && (
+                        <div
+                          className="absolute pointer-events-none opacity-0"
+                          style={{
+                            left: `${selectedComponent.position.x}px`,
+                            top: `${selectedComponent.position.y}px`,
+                            width: '1px',
+                            height: '1px',
+                          }}
+                        ></div>
+                      )}
+                      
+                      {/* Render all components in their proper positions */}
+                      {components.map((component) => (
+                        <React.Fragment key={component.id}>
+                          {renderComponent(component)}
+                        </React.Fragment>
+                      ))}
+                      
+                      {components.length === 0 && !showPreview && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="text-center px-4 py-2 border-2 border-dashed border-base-300 rounded-lg bg-base-200/30">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto mb-2 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p className="text-sm font-medium" style={{ color: `${previewBackgrounds[previewBg].text}` }}>
+                              Add components here
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: `${previewBackgrounds[previewBg].text}80` }}>
+                              Drag and drop or click buttons from the panel
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Direct edit hint message */}
+                      {components.length > 0 && !showPreview && selectedComponent && (
+                        <div className="absolute bottom-1 right-1 text-[10px] bg-primary/90 text-primary-content px-1.5 py-0.5 rounded pointer-events-none">
+                          Edit Mode
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Instructions overlay when in edit mode and no components */}
+                    {components.length === 0 && !showPreview && (
+                      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-4 py-2 rounded-full text-sm pointer-events-none">
+                        Drag components onto the notification
+                      </div>
+                    )}
+                  </DndContext>
+                </div>
+              </div>
+            </div>
+          </div>
+            
+          {/* Properties panel - RIGHT COLUMN */}
+          <div className="w-80 bg-base-100 rounded-lg shadow-md border border-base-300 overflow-hidden flex flex-col">
+            <div className="bg-base-200 border-b border-base-300 px-4 py-3 flex justify-between items-center">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                  <path d="M12 2H2v10h10V2z"></path>
+                  <path d="M22 12h-10v10h10V12z"></path>
+                  <path d="M12 12H2v10h10V12z"></path>
+                </svg>
+                Style Properties
+              </h3>
+              {selectedComponent && (
+                <div className="badge badge-sm">
+                  {getComponentDisplayName(selectedComponent.type)}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 flex-1 overflow-y-auto">
+              {selectedComponent ? (
+                <StyleEditor 
+                  component={selectedComponent} 
+                  onUpdate={(updates) => {
                     handleUpdateComponent(selectedComponent.id, updates);
-                  }
-                }} 
-              />
+                  }} 
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="w-16 h-16 rounded-full bg-base-200 flex items-center justify-center mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-base-content/40">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+                    </svg>
+                  </div>
+                  <h4 className="text-base font-medium mb-1">No Component Selected</h4>
+                  <p className="text-sm text-base-content/60 max-w-xs">
+                    Select a component in the preview area to customize its appearance and behavior
+                  </p>
+                  
+                  <div className="mt-6 bg-base-200 rounded-lg p-3 text-left w-full">
+                    <h5 className="text-xs font-medium uppercase text-base-content/50 mb-2">Quick Tips</h5>
+                    <ul className="text-xs space-y-1.5 text-base-content/70">
+                      <li className="flex items-start gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-primary mt-0.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Drag components directly onto the notification</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-primary mt-0.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Double-click text elements to edit content</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5 text-primary mt-0.5">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Click and drag to reposition components</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
