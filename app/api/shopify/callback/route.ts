@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
 
                 console.log('Registering ScriptTag:', scriptSrc);
 
-                const scriptTagResponse = await fetch(`https://${shop}/admin/api/2024-01/script_tags.json`, {
+                const scriptTagResponse = await fetch(`https://${shop}/admin/api/2025-10/script_tags.json`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
