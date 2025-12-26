@@ -147,12 +147,22 @@ export class ShopifyVariantSelector {
     /**
      * Update URL to include variant ID
      */
+    /**
+     * Update URL to include variant ID
+     * Uses hard redirect to ensure Shopify server-renders the correct variant
+     */
     private updateUrlWithVariant(variantId: string): void {
         const url = new URL(window.location.href);
+        const currentVariant = url.searchParams.get('variant');
+
+        // If URL already has correct variant, do nothing
+        if (currentVariant === variantId) return;
+
         url.searchParams.set('variant', variantId);
 
-        // Use replaceState to avoid adding to history
-        window.history.replaceState({}, '', url.toString());
+        // Force reload to ensure visual consistency (server-side render)
+        // This prevents mismatched buttons/prices
+        window.location.replace(url.toString());
     }
 
     /**
@@ -241,7 +251,7 @@ export class ShopifyVariantSelector {
                 body: JSON.stringify({
                     siteId,
                     campaignId: this.campaign.id,
-                    eventType: 'impression',
+                    type: 'impression',
                     variantId: this.assignedVariant.variantId,
                     price: this.assignedVariant.price,
                     cost: this.assignedVariant.cost || 0
