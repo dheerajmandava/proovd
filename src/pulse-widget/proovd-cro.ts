@@ -60,7 +60,7 @@ export class ProovdCRO {
                 && window.location.hostname !== 'localhost'
                 && !window.location.hostname.includes('127.0.0.1');
             this.options.apiUrl = isProduction
-                ? 'https://api.proovd.in'
+                ? 'https://proovd.in/api'
                 : 'http://localhost:3000/api';
         }
 

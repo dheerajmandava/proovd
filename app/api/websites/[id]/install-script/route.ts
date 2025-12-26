@@ -40,7 +40,7 @@ export async function POST(
         // ScriptTag requires HTTPS with proper Content-Type headers.
         // jsDelivr CDN serves Gists with correct headers for browser execution.
         const scriptSrc = process.env.SHOPIFY_SCRIPT_URL ||
-            'https://cdn.jsdelivr.net/gh/dheerajmandava/widget.js@07ea2c83686595220e2c2811709e4407ef0b6250/widget.js';
+            'https://cdn.jsdelivr.net/gh/dheerajmandava/widget.js@d556cd19f4c6d48eedc612fe4f656635567cec45/widget.js';
 
         console.log('Installing ScriptTag:', { shop, scriptSrc });
 
