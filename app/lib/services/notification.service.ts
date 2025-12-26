@@ -61,7 +61,7 @@ export const getNotificationsByWebsiteId = cache(
       // First try with explicit select
       const notifications = await Notification.find({
         siteId: websiteId,
-        status: 'active'
+        status: { $in: ['active', 'running'] }
       })
         .select('+components')
         .sort({ createdAt: -1 })

@@ -212,11 +212,10 @@ export async function GET(request: NextRequest) {
         }
 
         // Clear the state cookie
+        // Clear the state cookie
+        const baseUrl = process.env.SHOPIFY_APP_URL || 'https://proovd.in';
         const response = NextResponse.redirect(
-            new URL(
-                `/dashboard/websites/${websiteId}?shopify=connected`,
-                request.url
-            )
+            `${baseUrl}/dashboard/websites/${websiteId}?shopify=connected`
         );
 
         response.cookies.delete('shopify_oauth_state');

@@ -123,7 +123,7 @@ export class ProovdCRO {
             if (data.success && Array.isArray(data.campaigns)) {
                 // Filter for active pricing campaigns only
                 const pricingCampaigns = data.campaigns.filter(
-                    (c: any) => c.type === 'pricing' && c.status === 'running' && c.pricingConfig
+                    (c: any) => c.type === 'pricing' && ['active', 'running'].includes(c.status) && c.pricingConfig
                 );
                 this.log(`Found ${pricingCampaigns.length} active pricing campaigns`);
                 return pricingCampaigns;
