@@ -75,7 +75,10 @@ export class ShopifyVariantSelector {
                 const variant = this.campaign.pricingConfig.variants.find(
                     v => v.variantId === parsed.variantId
                 );
-                if (variant) {
+
+                // Only use stored variant if it exists AND has traffic > 0
+                // This allows "kill switching" a variant by setting it to 0%
+                if (variant && variant.trafficPercent > 0) {
                     this.assignedVariant = variant;
                     return variant;
                 }
@@ -86,6 +89,10 @@ export class ShopifyVariantSelector {
 
         // Assign new variant based on traffic split
         const variant = this.selectVariantByTraffic();
+
+        // Safety check: if no variant returned (empty config), stop
+        if (!variant) return null as any;
+
         this.assignedVariant = variant;
 
         // Persist assignment
@@ -102,6 +109,9 @@ export class ShopifyVariantSelector {
      */
     private selectVariantByTraffic(): PricingVariant {
         const variants = this.campaign.pricingConfig.variants;
+
+        if (!variants || variants.length === 0) return null as any;
+
         const random = Math.random() * 100;
         let cumulative = 0;
 
@@ -112,7 +122,7 @@ export class ShopifyVariantSelector {
             }
         }
 
-        // Fallback to first variant
+        // Fallback to first variant if loop finishes (or all 0%)
         return variants[0];
     }
 
@@ -200,6 +210,8 @@ export class ShopifyVariantSelector {
         }
 
         const variant = this.getAssignedVariant();
+
+        if (!variant) return null; // Safe exit if no variant found
 
         // Wait for DOM to be ready, then force selection
         if (document.readyState === 'loading') {

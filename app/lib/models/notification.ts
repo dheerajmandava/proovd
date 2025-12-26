@@ -57,6 +57,22 @@ const notificationSchema = new Schema(
       impressions: { type: Number, default: 0 },
       clicks: { type: Number, default: 0 }
     }],
+    // Pricing Config (Shared with Campaign Schema)
+    pricingConfig: {
+      productId: { type: String, trim: true },
+      productHandle: { type: String, trim: true },
+      productUrl: { type: String, trim: true },
+      variants: [{
+        variantId: { type: String },
+        name: { type: String },
+        price: { type: Number },
+        cost: { type: Number, default: 0 },
+        trafficPercent: { type: Number, default: 50 },
+        impressions: { type: Number, default: 0 },
+        conversions: { type: Number, default: 0 },
+        revenue: { type: Number, default: 0 }
+      }]
+    },
     // Display Settings
     position: {
       type: String,
