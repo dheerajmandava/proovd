@@ -138,11 +138,18 @@ export class ProovdCRO {
     /**
      * Execute a pricing campaign
      */
-    private executePricingCampaign(campaign: PricingCampaign): void {
-        this.log(`Executing pricing campaign: ${campaign.id}`);
+    private executePricingCampaign(campaign: any): void {
+        const campaignId = campaign.id || campaign._id;
+
+        if (!campaign.pricingConfig?.variants?.length) {
+            this.log(`Campaign ${campaignId} has no variants. Skipping.`);
+            return;
+        }
+
+        this.log(`Executing pricing campaign: ${campaignId}`);
 
         const selector = new ShopifyVariantSelector({
-            id: campaign.id,
+            id: campaignId,
             type: 'pricing',
             pricingConfig: campaign.pricingConfig
         });
@@ -153,7 +160,7 @@ export class ProovdCRO {
             this.log(`Assigned variant: ${assignedVariant.variantId} (${assignedVariant.name})`);
 
             // Track impression
-            this.trackImpression(campaign.id, assignedVariant);
+            this.trackImpression(campaignId, assignedVariant);
         }
     }
 

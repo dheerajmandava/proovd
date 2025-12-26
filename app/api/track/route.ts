@@ -20,13 +20,7 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
   headers.set('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Handle preflight requests
-  if (request.method === 'OPTIONS') {
-    return new NextResponse(null, {
-      status: 204,
-      headers
-    });
-  }
+
 
   try {
     // Parse request body
@@ -154,8 +148,15 @@ export async function POST(request: NextRequest) {
 }
 
 // Disable body parsing to increase performance for high-volume endpoint
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}; 
+// OPTIONS handler for CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  const headers = new Headers();
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  return new NextResponse(null, {
+    status: 204,
+    headers
+  });
+} 
