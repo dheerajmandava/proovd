@@ -1,19 +1,21 @@
 'use server';
 
 import { connectToDatabase } from '@/app/lib/database/connection';
-import { 
-  getUserById, 
-  updateUserPreferences 
+import {
+  getUserById,
+  updateUserPreferences
 } from '@/app/lib/services/user.service';
-import { 
-  getWebsiteById, 
-  getWebsitesByUserId, 
-  getWebsitesRaw 
+import {
+  getWebsiteById,
+  getWebsitesByUserId,
+  getWebsitesRaw
 } from '@/app/lib/services/website.service';
-import { 
+import {
   getNotificationsByWebsiteId,
-  getNotificationById
-} from '@/app/lib/services/notification.service';
+  getNotificationById,
+  getCampaignsByWebsiteId,
+  getCampaignById
+} from '@/app/lib/services/campaign.service';
 import { auth } from '@/auth';
 import { cache } from 'react';
 
@@ -21,7 +23,7 @@ import { cache } from 'react';
 export const getServerSideUserData = cache(async () => {
   const session = await auth();
   if (!session?.user?.id) return null;
-  
+
   await connectToDatabase();
   return getUserById(session.user.id);
 });
@@ -30,7 +32,7 @@ export const getServerSideUserData = cache(async () => {
 export const getServerSideUserPreferences = cache(async () => {
   const session = await auth();
   if (!session?.user?.id) return null;
-  
+
   await connectToDatabase();
   const user = await getUserById(session.user.id);
   return {
@@ -43,7 +45,7 @@ export const getServerSideUserPreferences = cache(async () => {
 export const getServerSideWebsites = cache(async () => {
   const session = await auth();
   if (!session?.user?.id) return [];
-  
+
   await connectToDatabase();
   return getWebsitesByUserId(session.user.id);
 });
@@ -51,29 +53,33 @@ export const getServerSideWebsites = cache(async () => {
 export const getServerSideWebsitesRaw = cache(async () => {
   const session = await auth();
   if (!session?.user?.id) return [];
-  
+
   await connectToDatabase();
   return getWebsitesRaw(session.user.id);
 });
 
 export const getServerSideWebsite = cache(async (websiteId: string) => {
   if (!websiteId) return null;
-  
+
   await connectToDatabase();
   return getWebsiteById(websiteId);
 });
 
-// Notifications fetching
-export const getServerSideNotifications = cache(async (websiteId: string, limit = 5) => {
+// Campaigns fetching
+export const getServerSideCampaigns = cache(async (websiteId: string, limit = 5) => {
   if (!websiteId) return [];
-  
+
   await connectToDatabase();
-  return getNotificationsByWebsiteId(websiteId, limit);
+  return getCampaignsByWebsiteId(websiteId, limit);
 });
 
-export const getServerSideNotification = cache(async (notificationId: string) => {
-  if (!notificationId) return null;
-  
+export const getServerSideCampaign = cache(async (campaignId: string) => {
+  if (!campaignId) return null;
+
   await connectToDatabase();
-  return getNotificationById(notificationId);
-}); 
+  return getCampaignById(campaignId);
+});
+
+// Backward compatibility aliases
+export const getServerSideNotifications = getServerSideCampaigns;
+export const getServerSideNotification = getServerSideCampaign; 

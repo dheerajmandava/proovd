@@ -2,7 +2,7 @@ import React from 'react';
 import NotificationBuilder from '@/app/dashboard/websites/[id]/notifications/components/NotificationBuilder';
 import { getNotificationById } from '@/app/lib/services/notification.service';
 import { notFound } from 'next/navigation';
-import { connectToDatabase } from '@/app/lib/mongodb';
+import { connectToDatabase } from '@/app/lib/database/connection';
 
 interface EditNotificationPageProps {
   params: {

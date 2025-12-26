@@ -10,6 +10,14 @@ export interface WebsiteDocument extends Document {
   userId: mongoose.Types.ObjectId;
   status: string;
   apiKey?: string;
+  // Shopify Integration
+  shopify?: {
+    shop: string;           // e.g., "my-store.myshopify.com"
+    accessToken: string;    // Encrypted OAuth token
+    scope: string;          // Granted scopes
+    installedAt: Date;
+    isActive: boolean;
+  };
   settings: {
     position: string;
     delay: number;
@@ -86,6 +94,14 @@ const websiteSchema = new Schema(
       type: String,
       enum: ['active', 'inactive', 'pending', 'verified'],
       default: 'pending',
+    },
+    // Shopify Integration
+    shopify: {
+      shop: { type: String, trim: true },
+      accessToken: { type: String },
+      scope: { type: String },
+      installedAt: { type: Date },
+      isActive: { type: Boolean, default: false },
     },
     settings: {
       position: {
@@ -259,7 +275,7 @@ websiteSchema.index({ domain: 1 });
 websiteSchema.index({ userId: 1, domain: 1 }, { unique: true });
 
 // Pre-save middleware to process domain
-websiteSchema.pre('save', function(next) {
+websiteSchema.pre('save', function (next) {
   // Normalize domain (remove http://, https://, www. prefixes)
   if (this.domain) {
     try {
@@ -270,35 +286,35 @@ websiteSchema.pre('save', function(next) {
       } else if (domain.startsWith('https://')) {
         domain = domain.substring(8);
       }
-      
+
       if (domain.startsWith('www.')) {
         domain = domain.substring(4);
       }
-      
+
       // Remove trailing slash if present
       if (domain.endsWith('/')) {
         domain = domain.slice(0, -1);
       }
-      
+
       this.domain = domain;
     } catch (err) {
       console.error('Error normalizing domain:', err);
     }
   }
-  
+
   // Only create/modify verification data if not already verified
   if (this.verification && this.verification.status === 'verified') {
     // Don't modify verification data if already verified
     next();
     return;
   }
-  
+
   // If verification object exists but token is missing, set a default token
   if (this.verification && (!this.verification.token || this.verification.token.length === 0)) {
     const crypto = require('crypto');
     this.verification.token = crypto.randomBytes(6).toString('hex');
   }
-  
+
   // If verification object doesn't exist, create it with defaults
   if (!this.verification) {
     const crypto = require('crypto');
@@ -309,30 +325,30 @@ websiteSchema.pre('save', function(next) {
       attempts: 0
     };
   }
-  
+
   // Ensure website status reflects verification status
   if (this.verification.status === 'verified' && this.status === 'pending') {
     this.status = 'active';
   }
-  
+
   next();
 });
 
 // Instance method to record an impression
-websiteSchema.methods.recordImpression = async function() {
+websiteSchema.methods.recordImpression = async function () {
   try {
     // Get today's date as ISO string (YYYY-MM-DD)
     const today = new Date().toISOString().split('T')[0];
-    
+
     // Find today's stats in dailyStats array
     let todayStats = this.analytics.dailyStats.find(
       (stat: { date: string }) => stat.date === today
     );
-    
+
     if (todayStats) {
       // Update existing stats
       todayStats.impressions += 1;
-      
+
       // Recalculate conversion rate
       if (todayStats.impressions > 0) {
         todayStats.conversionRate = (todayStats.clicks / todayStats.impressions) * 100;
@@ -346,15 +362,15 @@ websiteSchema.methods.recordImpression = async function() {
         conversionRate: 0
       });
     }
-    
+
     // Update total impressions
     this.analytics.totalImpressions += 1;
-    
+
     // Recalculate overall conversion rate
     if (this.analytics.totalImpressions > 0) {
       this.analytics.conversionRate = (this.analytics.totalClicks / this.analytics.totalImpressions) * 100;
     }
-    
+
     // Save the changes
     await this.save();
   } catch (err) {
@@ -363,20 +379,20 @@ websiteSchema.methods.recordImpression = async function() {
 };
 
 // Instance method to record a click
-websiteSchema.methods.recordClick = async function() {
+websiteSchema.methods.recordClick = async function () {
   try {
     // Get today's date as ISO string (YYYY-MM-DD)
     const today = new Date().toISOString().split('T')[0];
-    
+
     // Find today's stats in dailyStats array
     let todayStats = this.analytics.dailyStats.find(
       (stat: { date: string }) => stat.date === today
     );
-    
+
     if (todayStats) {
       // Update existing stats
       todayStats.clicks += 1;
-      
+
       // Recalculate conversion rate
       if (todayStats.impressions > 0) {
         todayStats.conversionRate = (todayStats.clicks / todayStats.impressions) * 100;
@@ -390,15 +406,15 @@ websiteSchema.methods.recordClick = async function() {
         conversionRate: 100 // 100% conversion if click without impression
       });
     }
-    
+
     // Update total clicks
     this.analytics.totalClicks += 1;
-    
+
     // Recalculate overall conversion rate
     if (this.analytics.totalImpressions > 0) {
       this.analytics.conversionRate = (this.analytics.totalClicks / this.analytics.totalImpressions) * 100;
     }
-    
+
     // Save the changes
     await this.save();
   } catch (err) {
@@ -407,7 +423,7 @@ websiteSchema.methods.recordClick = async function() {
 };
 
 // Method to create a formatted response object
-websiteSchema.methods.toResponse = function() {
+websiteSchema.methods.toResponse = function () {
   // First create a clean object with only the data we want
   const verification = this.verification ? {
     status: this.verification.status || 'pending',
@@ -416,7 +432,7 @@ websiteSchema.methods.toResponse = function() {
     verifiedAt: this.verification.verifiedAt || '',
     attempts: this.verification.attempts || 0
   } : {};
-  
+
   const settings = this.settings ? {
     position: this.settings.position || 'bottom-left',
     delay: this.settings.delay || 5,
@@ -437,12 +453,12 @@ websiteSchema.methods.toResponse = function() {
       showHeatmap: false,
     },
   } : {};
-  
-  const dailyStats = Array.isArray(this.analytics?.dailyStats) ? 
-    this.analytics.dailyStats.map((stat: { 
-      date: string; 
-      impressions: number; 
-      clicks: number; 
+
+  const dailyStats = Array.isArray(this.analytics?.dailyStats) ?
+    this.analytics.dailyStats.map((stat: {
+      date: string;
+      impressions: number;
+      clicks: number;
       conversionRate: number;
     }) => ({
       date: stat.date || '',
@@ -450,7 +466,7 @@ websiteSchema.methods.toResponse = function() {
       clicks: stat.clicks || 0,
       conversionRate: stat.conversionRate || 0
     })) : [];
-    
+
   // Then create the final response object
   const responseObj = {
     id: this._id.toString(),
@@ -469,25 +485,25 @@ websiteSchema.methods.toResponse = function() {
     createdAt: this.createdAt || new Date(),
     updatedAt: this.updatedAt || new Date(),
   };
-  
+
   // Force clean JSON serialization to remove any potential circular references
   return JSON.parse(JSON.stringify(responseObj));
 };
 
 // Add retry methods to the schema
-websiteSchema.statics.findOneWithRetry = function(filter: any) {
+websiteSchema.statics.findOneWithRetry = function (filter: any) {
   return retryDbOperation(() => this.findOne(filter));
 };
 
-websiteSchema.statics.findByIdWithRetry = function(id: string) {
+websiteSchema.statics.findByIdWithRetry = function (id: string) {
   return retryDbOperation(() => this.findById(id));
 };
 
-websiteSchema.statics.findWithRetry = function(filter: any) {
+websiteSchema.statics.findWithRetry = function (filter: any) {
   return retryDbOperation(() => this.find(filter));
 };
 
-websiteSchema.statics.updateOneWithRetry = function(filter: any, update: any) {
+websiteSchema.statics.updateOneWithRetry = function (filter: any, update: any) {
   return retryDbOperation(() => this.updateOne(filter, update));
 };
 

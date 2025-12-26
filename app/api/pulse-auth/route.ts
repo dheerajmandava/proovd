@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { connectToDatabase } from '@/app/lib/mongodb';
+import { connectToDatabase } from '@/app/lib/database/connection';
 import Website from '@/app/lib/models/website';
 import jwt from 'jsonwebtoken';
 
@@ -13,10 +13,10 @@ export async function GET(request: NextRequest) {
   try {
     // Connect to the database
     await connectToDatabase();
-    
+
     // Get the current authenticated session
     const session = await getServerSession(authOptions);
-    
+
     // Verify user is authenticated
     if (!session || !session.user) {
       return NextResponse.json(
@@ -24,31 +24,31 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
-    
+
     // Get the website ID from query parameters
     const { searchParams } = new URL(request.url);
     const websiteId = searchParams.get('websiteId');
-    
+
     if (!websiteId) {
       return NextResponse.json(
         { success: false, error: 'Website ID is required' },
         { status: 400 }
       );
     }
-    
+
     // Verify the website exists and belongs to the user
     const website = await Website.findOne({
       _id: websiteId,
       userId: session.user.id
     });
-    
+
     if (!website) {
       return NextResponse.json(
         { success: false, error: 'Website not found' },
         { status: 404 }
       );
     }
-    
+
     // Verify pulse is enabled for this website
     if (!website.settings?.pulse?.enabled) {
       return NextResponse.json(
@@ -56,10 +56,10 @@ export async function GET(request: NextRequest) {
         { status: 403 }
       );
     }
-    
+
     // Get the JWT secret from environment variable
     const jwtSecret = process.env.PROOVDPULSE_JWT_SECRET;
-    
+
     if (!jwtSecret) {
       console.error('PROOVDPULSE_JWT_SECRET is not configured');
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       );
     }
-    
+
     // Generate token with 24 hour expiration
     const token = jwt.sign(
       {
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       jwtSecret,
       { expiresIn: '24h' }
     );
-    
+
     // Return the token
     return NextResponse.json({
       success: true,
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error generating pulse auth token:', error);
-    
+
     return NextResponse.json(
       { success: false, error: 'Failed to generate authentication token' },
       { status: 500 }

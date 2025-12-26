@@ -7,16 +7,16 @@ import { auth } from '@/auth';
 export default async function ServerHydratedSettingsTab({ websiteId }: { websiteId: string }) {
   // Fetch website data from the server
   const website = await getServerSideWebsite(websiteId);
-  
+
   // Get current user session
   const session = await auth();
-  
+
   // Fetch user data if session exists
   let user = null;
   if (session?.user?.id) {
     user = await getUserById(session.user.id);
   }
-  
+
   if (!website) {
     return (
       <div className="alert alert-error shadow-lg">
@@ -29,7 +29,7 @@ export default async function ServerHydratedSettingsTab({ websiteId }: { website
       </div>
     );
   }
-  
+
   // Serialize website data for client component
   const serializedWebsite = {
     userId: website.userId.toString(),
@@ -50,12 +50,19 @@ export default async function ServerHydratedSettingsTab({ websiteId }: { website
       customStyles: website.settings?.customStyles || '',
     },
     allowedDomains: website.allowedDomains || [],
-    createdAt: website.createdAt instanceof Date ? 
-      website.createdAt.toISOString() : 
+    createdAt: website.createdAt instanceof Date ?
+      website.createdAt.toISOString() :
       (typeof website.createdAt === 'string' ? website.createdAt : new Date().toISOString()),
-    updatedAt: website.updatedAt instanceof Date ? 
-      website.updatedAt.toISOString() : 
+    updatedAt: website.updatedAt instanceof Date ?
+      website.updatedAt.toISOString() :
       (typeof website.updatedAt === 'string' ? website.updatedAt : new Date().toISOString()),
+    shopify: (website as any).shopify ? {
+      shop: (website as any).shopify.shop,
+      isActive: (website as any).shopify.isActive,
+      installedAt: (website as any).shopify.installedAt,
+      accessToken: '', // Security: Redacted for client
+      scope: (website as any).shopify.scope || '',
+    } : undefined,
   };
 
   // Serialize user data for client component
@@ -68,19 +75,19 @@ export default async function ServerHydratedSettingsTab({ websiteId }: { website
     plan: user.plan || 'free',
     emailNotifications: user.emailNotifications !== undefined ? user.emailNotifications : true,
     notificationDigest: user.notificationDigest || 'daily',
-    lastLogin: user.lastLogin instanceof Date ? 
-      user.lastLogin.toISOString() : 
+    lastLogin: user.lastLogin instanceof Date ?
+      user.lastLogin.toISOString() :
       (typeof user.lastLogin === 'string' ? user.lastLogin : null),
-    createdAt: user.createdAt instanceof Date ? 
-      user.createdAt.toISOString() : 
+    createdAt: user.createdAt instanceof Date ?
+      user.createdAt.toISOString() :
       (typeof user.createdAt === 'string' ? user.createdAt : new Date().toISOString()),
     updatedAt: user.updatedAt instanceof Date ? user.updatedAt.toISOString() : user.updatedAt,
   } : null;
 
   // Set initial website data in client component
   return (
-    <SettingsTab 
-      websiteId={websiteId} 
+    <SettingsTab
+      websiteId={websiteId}
       initialWebsite={serializedWebsite}
       initialUserData={serializedUser}
     />

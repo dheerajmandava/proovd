@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/mongodb';
+import { connectToDatabase } from '@/app/lib/database/connection';
 import { z } from 'zod';
 
 // Define schema for email validation

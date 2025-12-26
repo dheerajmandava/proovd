@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/app/lib/mongodb';
+import { connectToDatabase } from '@/app/lib/database/connection';
 import Website from '@/app/lib/models/website';
 import fs from 'fs';
 import path from 'path';

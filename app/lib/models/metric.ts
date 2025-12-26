@@ -16,8 +16,18 @@ const metricSchema = new Schema(
     },
     type: {
       type: String,
-      enum: ['impression', 'click'],
+      enum: ['impression', 'click', 'conversion'],
       required: [true, 'Type is required'],
+    },
+    variantId: {
+      type: String,
+      index: true,
+    },
+    conversionValue: {
+      type: Number,
+    },
+    metadata: {
+      type: Schema.Types.Mixed,
     },
     url: {
       type: String,

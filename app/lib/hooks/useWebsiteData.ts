@@ -32,13 +32,20 @@ export type WebsiteData = {
   settings: WebsiteSettings;
   analytics?: WebsiteAnalytics;
   allowedDomains?: string[];
+  shopify?: {
+    shop: string;
+    accessToken: string;
+    scope: string;
+    installedAt: Date;
+    isActive: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 };
 
 const fetcher = async (url: string) => {
   const response = await fetch(url);
-  
+
   if (!response.ok) {
     // Try to get the detailed error message from the response
     try {
@@ -49,7 +56,7 @@ const fetcher = async (url: string) => {
       throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
   }
-  
+
   return response.json();
 };
 
@@ -90,16 +97,16 @@ export function useWebsiteSettings() {
   const updateSettings = async (websiteId: string, settings: Partial<WebsiteSettings> & { allowedDomains?: string[] }) => {
     setIsUpdating(true);
     setError(null);
-    
+
     try {
       // Check if allowedDomains is present in the settings
       const { allowedDomains, ...settingsData } = settings;
-      
+
       // Create appropriate payload depending on what's being updated
-      const payload = allowedDomains !== undefined 
-        ? { settings: settingsData, allowedDomains } 
+      const payload = allowedDomains !== undefined
+        ? { settings: settingsData, allowedDomains }
         : { settings: settingsData };
-      
+
       const response = await fetch(`/api/websites/${websiteId}`, {
         method: 'PATCH',
         headers: {
@@ -107,7 +114,7 @@ export function useWebsiteSettings() {
         },
         body: JSON.stringify(payload),
       });
-      
+
       if (!response.ok) {
         try {
           const errorData = await response.json();
@@ -116,7 +123,7 @@ export function useWebsiteSettings() {
           throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
       }
-      
+
       return await response.json();
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');

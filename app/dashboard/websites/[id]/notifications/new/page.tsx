@@ -1,465 +1,545 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { isValidUrl } from '@/app/lib/utils';
-import NotificationBuilder, { NotificationConfig } from '../components/NotificationBuilder';
 
-// Define notification modes
-type NotificationMode = 'simple' | 'builder';
+// Campaign Types (Simplified)
+const CAMPAIGN_TYPES = [
+  { id: 'ab-test', name: 'A/B Experiment', description: 'Test changes against original content', icon: '🧪' },
+];
 
-export default function NewNotificationPage() {
+// Variant interface
+interface Variant {
+  id: string;
+  name: string;
+  content: {
+    selector: string;
+    action: string;
+    body: string; // Replacement content
+    attributeName?: string;
+    attributeValue?: string;
+  };
+}
+
+// Form state interface
+interface CampaignFormData {
+  name: string;
+  type: 'ab-test';
+  status: 'draft' | 'running' | 'paused';
+  trafficAllocation: number; // 0-100
+  targetUrl: string; // The URL where the experiment runs (for visual editor)
+  targeting: {
+    urlOperator: 'contains' | 'is' | 'regex';
+    urlValue: string;
+    device: 'all' | 'desktop' | 'mobile';
+    visitor: 'all' | 'new' | 'returning';
+  };
+  variants: Variant[];
+}
+
+export default function NewCampaignPage() {
   const router = useRouter();
   const params = useParams();
   const websiteId = params.id as string;
-  
-  // State to track which mode is active (simple form or advanced builder)
-  const [mode, setMode] = useState<NotificationMode>('simple');
-  
-  // State for the simple form
-  const [formData, setFormData] = useState({
-    name: '',
-    type: 'purchase',
-    location: 'global',
-    productName: '',
-    message: '',
-    url: '',
-    image: '',
-    status: 'active',
-    displayRules: {
-      pages: [],
-      frequency: 'always',
-      delay: 0,
-    }
-  });
-  
-  const [customPages, setCustomPages] = useState('');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Handle input changes for simple form
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
-    const { name, value } = e.target;
-    
-    if (name.includes('.')) {
-      // Handle nested properties (e.g., displayRules.frequency)
-      const [parent, child] = name.split('.');
-      
-      if (parent === 'displayRules') {
-        setFormData(prev => ({
-          ...prev,
-          displayRules: {
-            ...prev.displayRules,
-            [child]: child === 'delay' ? Number(value) : value
-          }
-        }));
+  // Visual Editor State
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
+
+  const [formData, setFormData] = useState<CampaignFormData>({
+    name: '',
+    type: 'ab-test',
+    status: 'draft',
+    trafficAllocation: 100,
+    targetUrl: '',
+    targeting: {
+      urlOperator: 'contains',
+      urlValue: '',
+      device: 'all',
+      visitor: 'all',
+    },
+    variants: [
+      // Start with one variant (Variant B)
+      {
+        id: 'variant-b',
+        name: 'Variant B',
+        content: {
+          selector: '',
+          action: 'replaceText',
+          body: '',
+        }
       }
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
+    ],
+  });
+
+  // Update form field
+  function updateField(path: string, value: any) {
+    setFormData(prev => {
+      const newData = { ...prev };
+      const keys = path.split('.');
+      let current: any = newData;
+
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (Array.isArray(current[keys[i]])) {
+          current = current[keys[i]];
+        } else {
+          current[keys[i]] = { ...current[keys[i]] };
+          current = current[keys[i]];
+        }
+      }
+
+      current[keys[keys.length - 1]] = value;
+      return newData;
+    });
   }
 
-  // Handle form submission for simple mode
-  async function handleSubmitSimple(e: React.FormEvent) {
+  // Variant Management
+  function addVariant() {
+    setFormData(prev => ({
+      ...prev,
+      variants: [
+        ...prev.variants,
+        {
+          id: `variant-${prev.variants.length + 2}`, // +2 because +1 for 0-index and +1 for next char (roughly)
+          name: `Variant ${String.fromCharCode(66 + prev.variants.length)}`, // B, C, D...
+          content: {
+            selector: '',
+            action: 'replaceText',
+            body: '',
+          }
+        }
+      ]
+    }));
+  }
+
+  function removeVariant(index: number) {
+    setFormData(prev => ({
+      ...prev,
+      variants: prev.variants.filter((_, i) => i !== index)
+    }));
+  }
+
+  function updateVariant(index: number, field: string, value: any) {
+    setFormData(prev => {
+      const newVariants = [...prev.variants];
+      const variant = { ...newVariants[index] };
+
+      if (field.includes('.')) {
+        const [parent, child] = field.split('.');
+        variant.content = { ...variant.content, [child]: value };
+      } else {
+        (variant as any)[field] = value;
+      }
+
+      newVariants[index] = variant;
+      return { ...prev, variants: newVariants };
+    });
+  }
+
+  // Visual Editor Logic
+  function openVisualEditor(variantIndex: number) {
+    const url = formData.targetUrl;
+    if (!url) {
+      alert('Please enter a Target URL first');
+      return;
+    }
+
+    // Store which variant we are editing
+    // We'll use a temporary ID or index to know where to put the result
+    setActiveVariantId(formData.variants[variantIndex].id);
+
+    const separator = url.includes('?') ? '&' : '?';
+    window.open(`${url}${separator}proovd_editor=true`, '_blank', 'width=1200,height=800');
+    setIsEditorOpen(true);
+  }
+
+  // Listen for messages from visual editor
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PROOVD_ELEMENT_SELECTED') {
+        const { selector, tagName, text } = event.data;
+
+        if (activeVariantId) {
+          setFormData(prev => {
+            const newVariants = prev.variants.map(v => {
+              if (v.id === activeVariantId) {
+                return {
+                  ...v,
+                  content: {
+                    ...v.content,
+                    selector,
+                    // Auto-fill body if empty
+                    body: v.content.body || text
+                  }
+                };
+              }
+              return v;
+            });
+            return { ...prev, variants: newVariants };
+          });
+
+          alert(`Element Selected: ${selector}`);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [activeVariantId]);
+
+  // Handle form submission
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
 
-    // Validate inputs
+    // Validation
     if (!formData.name.trim()) {
-      setError('Notification name is required');
+      setError('Experiment name is required');
       return;
     }
 
-    if (formData.type === 'purchase' && !formData.productName.trim()) {
-      setError('Product name is required for purchase notifications');
+    if (!formData.targetUrl.trim()) {
+      setError('Target URL is required');
       return;
     }
 
-    if (formData.url && !isValidUrl(formData.url)) {
-      setError('Please enter a valid URL');
-      return;
-    }
+    // Build campaign data
+    const campaignData = {
+      name: formData.name,
+      type: 'ab-test',
+      status: formData.status,
+      trafficAllocation: formData.trafficAllocation,
+      // Map targeting to triggers format expected by backend
+      triggers: [
+        {
+          type: 'pageUrl',
+          operator: formData.targeting.urlOperator,
+          value: formData.targeting.urlValue || formData.targetUrl, // Fallback to target URL if rule is empty
+          enabled: true
+        },
+        {
+          type: 'device',
+          operator: 'is',
+          value: formData.targeting.device,
+          enabled: formData.targeting.device !== 'all'
+        },
+        {
+          type: 'isReturning',
+          value: formData.targeting.visitor === 'returning',
+          enabled: formData.targeting.visitor !== 'all'
+        }
+      ].filter(t => t.enabled),
+      // Base content (Control) - usually empty or just metadata
+      content: {
+        title: 'Control',
+        body: 'Original Content'
+      },
+      // Variants
+      variants: formData.variants.map(v => ({
+        id: v.id,
+        content: v.content
+      }))
+    };
 
-    // Process pages
-    let pages: string[] = [];
-    if (formData.location === 'specific' && customPages.trim()) {
-      pages = customPages.split('\n')
-        .map(page => page.trim())
-        .filter(page => page);
-    }
-
-    // Start submission
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/websites/${websiteId}/notifications`, {
+      const response = await fetch(`/api/websites/${websiteId}/campaigns`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          displayRules: {
-            ...formData.displayRules,
-            pages
-          }
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(campaignData),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create notification');
+        throw new Error(data.error || 'Failed to create experiment');
       }
 
-      // Redirect to the website details page
-      router.push(`/dashboard/websites/${websiteId}`);
+      router.push(`/dashboard/websites/${websiteId}?tab=campaigns`);
     } catch (err: any) {
-      setError(err.message || 'An error occurred while creating the notification');
-      setIsSubmitting(false);
-    }
-  }
-  
-  // Handle builder notification save
-  async function handleSaveBuilderNotification(config: NotificationConfig) {
-    setError('');
-    setIsSubmitting(true);
-    
-    try {
-      // Convert builder config to API format
-      const notificationData = {
-        name: config.name,
-        type: 'custom',
-        status: 'active',
-        // Extract main text from components if available
-        message: config.components.find(c => c.type === 'text')?.content || '',
-        // Extract image from avatar if available
-        image: config.components.find(c => c.type === 'avatar')?.image || '',
-        location: 'global',
-        displayRules: {
-          frequency: config.displayRules.frequency,
-          delay: config.displayRules.delay,
-          pages: config.displayRules.pages,
-        },
-        // Store the full builder config as a JSON string in a custom field
-        builderConfig: JSON.stringify(config),
-        theme: config.theme,
-        position: config.position,
-        animation: config.animation,
-        displayDuration: config.displayDuration,
-      };
-      
-      const response = await fetch(`/api/websites/${websiteId}/notifications`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(notificationData),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create notification');
-      }
-
-      // Redirect to the website details page
-      router.push(`/dashboard/websites/${websiteId}`);
-    } catch (err: any) {
-      setError(err.message || 'An error occurred while creating the notification');
+      setError(err.message || 'An error occurred');
       setIsSubmitting(false);
     }
   }
 
   return (
-    <div className="p-4 max-w-6xl mx-auto">
+    <div className="p-4 max-w-4xl mx-auto">
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold mb-1">Add New Notification</h1>
-        <p className="text-neutral-content">
-          Create a new social proof notification for your website
+        <h1 className="text-2xl font-bold mb-1">Create A/B Experiment</h1>
+        <p className="text-base-content/60">
+          Test changes against your original content to optimize conversions
         </p>
       </div>
-      
-      {/* Mode selector */}
-      <div className="card bg-base-100 shadow-lg mb-8">
-        <div className="card-body">
-          <h2 className="card-title text-lg mb-4">Choose Creation Method</h2>
-          
-          <div className="tabs tabs-boxed">
-            <a 
-              className={`tab ${mode === 'simple' ? 'tab-active' : ''}`}
-              onClick={() => setMode('simple')}
-            >
-              Simple Form
-            </a>
-            <a 
-              className={`tab ${mode === 'builder' ? 'tab-active' : ''}`}
-              onClick={() => setMode('builder')}
-            >
-              Visual Builder
-            </a>
-          </div>
-          
-          <div className="mt-4">
-            {mode === 'simple' ? (
-              <p className="text-sm text-base-content/70">
-                <strong>Simple Form:</strong> Quickly create basic notifications with a simple form.
-              </p>
-            ) : (
-              <p className="text-sm text-base-content/70">
-                <strong>Visual Builder:</strong> Create custom notifications with a drag-and-drop interface.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
 
+      {/* Error Alert */}
       {error && (
-        <div className="alert alert-error mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <div className="alert alert-error mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
           <span>{error}</span>
         </div>
       )}
-      
-      {/* Show the appropriate editor based on mode */}
-      {mode === 'simple' ? (
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+
+        {/* Experiment Info */}
         <div className="card bg-base-100 shadow-lg">
           <div className="card-body">
-            <form onSubmit={handleSubmitSimple}>
-              <div className="form-control mb-4">
-                <label className="label" htmlFor="name">
-                  <span className="label-text font-medium">Notification Name</span>
+            <h2 className="card-title text-lg">Experiment Details</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-medium">Experiment Name</span>
                 </label>
                 <input
                   type="text"
-                  id="name"
-                  name="name"
                   value={formData.name}
-                  onChange={handleChange}
-                  placeholder="Black Friday Sale"
-                  className="input input-bordered w-full"
+                  onChange={(e) => updateField('name', e.target.value)}
+                  placeholder="e.g., Homepage Hero Test"
+                  className="input input-bordered"
                   disabled={isSubmitting}
                 />
+              </div>
+
+              <div className="form-control">
                 <label className="label">
-                  <span className="label-text-alt">For your reference only</span>
-                </label>
-              </div>
-
-              <div className="form-control mb-4">
-                <label className="label" htmlFor="type">
-                  <span className="label-text font-medium">Notification Type</span>
-                </label>
-                <select
-                  id="type"
-                  name="type"
-                  value={formData.type}
-                  onChange={handleChange}
-                  className="select select-bordered w-full"
-                  disabled={isSubmitting}
-                >
-                  <option value="purchase">Purchase - Someone purchased a product</option>
-                  <option value="signup">Sign Up - Someone signed up or subscribed</option>
-                  <option value="custom">Custom - Custom notification with any message</option>
-                </select>
-              </div>
-
-              <div className="form-control mb-4">
-                <label className="label" htmlFor="location">
-                  <span className="label-text font-medium">Display Location</span>
-                </label>
-                <select
-                  id="location"
-                  name="location"
-                  value={formData.location}
-                  onChange={handleChange}
-                  className="select select-bordered w-full"
-                  disabled={isSubmitting}
-                >
-                  <option value="global">All Pages</option>
-                  <option value="specific">Specific Pages</option>
-                </select>
-              </div>
-
-              {formData.location === 'specific' && (
-                <div className="form-control mb-4">
-                  <label className="label" htmlFor="pages">
-                    <span className="label-text font-medium">Specific Pages</span>
-                  </label>
-                  <textarea
-                    id="pages"
-                    value={customPages}
-                    onChange={(e) => setCustomPages(e.target.value)}
-                    placeholder="Enter each URL or path on a new line&#10;e.g., /products&#10;https://example.com/about"
-                    className="textarea textarea-bordered h-24"
-                    disabled={isSubmitting}
-                  />
-                  <label className="label">
-                    <span className="label-text-alt">Enter one URL per line</span>
-                  </label>
-                </div>
-              )}
-
-              {formData.type === 'purchase' && (
-                <div className="form-control mb-4">
-                  <label className="label" htmlFor="productName">
-                    <span className="label-text font-medium">Product Name</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="productName"
-                    name="productName"
-                    value={formData.productName}
-                    onChange={handleChange}
-                    placeholder="Premium Plan"
-                    className="input input-bordered w-full"
-                    disabled={isSubmitting}
-                  />
-                </div>
-              )}
-
-              <div className="form-control mb-4">
-                <label className="label" htmlFor="message">
-                  <span className="label-text font-medium">
-                    {formData.type === 'custom' ? 'Message' : 'Additional Message (Optional)'}
-                  </span>
-                </label>
-                <textarea
-                  id="message"
-                  name="message"
-                  value={formData.message}
-                  onChange={handleChange}
-                  placeholder={
-                    formData.type === 'custom'
-                      ? 'John just joined our community!'
-                      : 'Add additional context (optional)'
-                  }
-                  className="textarea textarea-bordered h-20"
-                  disabled={isSubmitting}
-                  required={formData.type === 'custom'}
-                />
-              </div>
-
-              <div className="form-control mb-4">
-                <label className="label" htmlFor="url">
-                  <span className="label-text font-medium">Destination URL (Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  id="url"
-                  name="url"
-                  value={formData.url}
-                  onChange={handleChange}
-                  placeholder="https://example.com/product-page"
-                  className="input input-bordered w-full"
-                  disabled={isSubmitting}
-                />
-                <label className="label">
-                  <span className="label-text-alt">Where users will go when clicking the notification</span>
-                </label>
-              </div>
-
-              <div className="form-control mb-4">
-                <label className="label" htmlFor="image">
-                  <span className="label-text font-medium">Image URL (Optional)</span>
-                </label>
-                <input
-                  type="text"
-                  id="image"
-                  name="image"
-                  value={formData.image}
-                  onChange={handleChange}
-                  placeholder="https://example.com/image.jpg"
-                  className="input input-bordered w-full"
-                  disabled={isSubmitting}
-                />
-                <label className="label">
-                  <span className="label-text-alt">Avatar image URL (we'll use a default if not provided)</span>
-                </label>
-              </div>
-
-              <div className="form-control mb-4">
-                <label className="label" htmlFor="status">
                   <span className="label-text font-medium">Status</span>
                 </label>
                 <select
-                  id="status"
-                  name="status"
                   value={formData.status}
-                  onChange={handleChange}
-                  className="select select-bordered w-full"
+                  onChange={(e) => updateField('status', e.target.value)}
+                  className="select select-bordered"
                   disabled={isSubmitting}
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
                   <option value="draft">Draft</option>
+                  <option value="running">Running</option>
+                  <option value="paused">Paused</option>
                 </select>
               </div>
+            </div>
 
-              <h3 className="font-bold text-lg mt-8 mb-4">Display Settings</h3>
-
-              <div className="form-control mb-4">
-                <label className="label" htmlFor="displayRules.frequency">
-                  <span className="label-text font-medium">Display Frequency</span>
-                </label>
-                <select
-                  id="displayRules.frequency"
-                  name="displayRules.frequency"
-                  value={formData.displayRules.frequency}
-                  onChange={handleChange}
-                  className="select select-bordered w-full"
-                  disabled={isSubmitting}
-                >
-                  <option value="always">Always (show every time)</option>
-                  <option value="once">Once per visitor</option>
-                  <option value="daily">Once per day</option>
-                </select>
-              </div>
-
-              <div className="form-control mb-6">
-                <label className="label" htmlFor="displayRules.delay">
-                  <span className="label-text font-medium">Delay (seconds)</span>
-                </label>
-                <input
-                  type="number"
-                  id="displayRules.delay"
-                  name="displayRules.delay"
-                  value={formData.displayRules.delay}
-                  onChange={handleChange}
-                  min="0"
-                  max="300"
-                  className="input input-bordered w-full"
-                  disabled={isSubmitting}
-                />
-                <label className="label">
-                  <span className="label-text-alt">How long to wait before showing this notification (0-300 seconds)</span>
-                </label>
-              </div>
-
-              <div className="flex justify-between mt-6">
-                <Link href={`/dashboard/websites/${websiteId}`} className="btn btn-outline">
-                  Cancel
-                </Link>
-                <button 
-                  type="submit" 
-                  className={`btn btn-primary ${isSubmitting ? 'loading' : ''}`}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? 'Creating...' : 'Create Notification'}
-                </button>
-              </div>
-            </form>
+            <div className="form-control mt-4">
+              <label className="label">
+                <span className="label-text font-medium">Traffic Allocation ({formData.trafficAllocation}%)</span>
+                <span className="label-text-alt">Percentage of visitors included in experiment</span>
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={formData.trafficAllocation}
+                onChange={(e) => updateField('trafficAllocation', parseInt(e.target.value))}
+                className="range range-primary"
+              />
+            </div>
           </div>
         </div>
-      ) : (
-        <NotificationBuilder 
-          websiteId={websiteId}
-          onSave={handleSaveBuilderNotification}
-        />
-      )}
+
+        {/* Targeting */}
+        <div className="card bg-base-100 shadow-lg">
+          <div className="card-body">
+            <h2 className="card-title text-lg">Targeting Rules</h2>
+            <p className="text-base-content/60 text-sm">Where should this experiment run?</p>
+
+            <div className="space-y-4 mt-4">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-medium">Target URL</span>
+                </label>
+                <div className="join">
+                  <select
+                    value={formData.targeting.urlOperator}
+                    onChange={(e) => updateField('targeting.urlOperator', e.target.value)}
+                    className="select select-bordered join-item"
+                  >
+                    <option value="contains">URL Contains</option>
+                    <option value="is">URL Is Exactly</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={formData.targetUrl}
+                    onChange={(e) => {
+                      updateField('targetUrl', e.target.value);
+                      updateField('targeting.urlValue', e.target.value);
+                    }}
+                    placeholder="https://example.com/pricing"
+                    className="input input-bordered join-item flex-1"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text font-medium">Device</span>
+                  </label>
+                  <select
+                    value={formData.targeting.device}
+                    onChange={(e) => updateField('targeting.device', e.target.value)}
+                    className="select select-bordered"
+                  >
+                    <option value="all">All Devices</option>
+                    <option value="desktop">Desktop Only</option>
+                    <option value="mobile">Mobile Only</option>
+                  </select>
+                </div>
+
+                <div className="form-control">
+                  <label className="label">
+                    <span className="label-text font-medium">Visitor Type</span>
+                  </label>
+                  <select
+                    value={formData.targeting.visitor}
+                    onChange={(e) => updateField('targeting.visitor', e.target.value)}
+                    className="select select-bordered"
+                  >
+                    <option value="all">All Visitors</option>
+                    <option value="new">New Visitors Only</option>
+                    <option value="returning">Returning Visitors Only</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Variations */}
+        <div className="card bg-base-100 shadow-lg">
+          <div className="card-body">
+            <div className="flex justify-between items-center">
+              <h2 className="card-title text-lg">Variations</h2>
+              <button
+                type="button"
+                onClick={addVariant}
+                className="btn btn-sm btn-outline"
+              >
+                + Add Variant
+              </button>
+            </div>
+
+            <div className="space-y-4 mt-4">
+              {/* Control - Always present */}
+              <div className="card bg-base-200 border-l-4 border-base-content/20">
+                <div className="card-body p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold">Control (Original)</h3>
+                      <p className="text-sm text-base-content/60">The original version of your page</p>
+                    </div>
+                    <div className="badge badge-ghost">Reference</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Variants */}
+              {formData.variants.map((variant, index) => (
+                <div key={variant.id} className="card bg-base-200 border-l-4 border-primary">
+                  <div className="card-body p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={variant.name}
+                          onChange={(e) => updateVariant(index, 'name', e.target.value)}
+                          className="input input-sm input-ghost font-bold text-lg px-0 w-40"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openVisualEditor(index)}
+                          className="btn btn-sm btn-primary"
+                        >
+                          🎨 Open Visual Editor
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeVariant(index)}
+                          className="btn btn-sm btn-ghost text-error"
+                          disabled={formData.variants.length <= 1}
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Manual Edit Fallback */}
+                    <div className="collapse collapse-arrow bg-base-100 rounded-box">
+                      <input type="checkbox" />
+                      <div className="collapse-title text-sm font-medium">
+                        Advanced / Manual Edit
+                      </div>
+                      <div className="collapse-content">
+                        <div className="form-control mt-2">
+                          <label className="label">
+                            <span className="label-text">CSS Selector</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={variant.content.selector}
+                            onChange={(e) => updateVariant(index, 'content.selector', e.target.value)}
+                            placeholder="#hero-title"
+                            className="input input-bordered input-sm font-mono"
+                          />
+                        </div>
+                        <div className="form-control mt-2">
+                          <label className="label">
+                            <span className="label-text">Action</span>
+                          </label>
+                          <select
+                            value={variant.content.action}
+                            onChange={(e) => updateVariant(index, 'content.action', e.target.value)}
+                            className="select select-bordered select-sm"
+                          >
+                            <option value="replaceText">Replace Text</option>
+                            <option value="replaceHtml">Replace HTML</option>
+                            <option value="addClass">Add Class</option>
+                            <option value="style">Change Style</option>
+                          </select>
+                        </div>
+                        <div className="form-control mt-2">
+                          <label className="label">
+                            <span className="label-text">Content / Value</span>
+                          </label>
+                          <textarea
+                            value={variant.content.body}
+                            onChange={(e) => updateVariant(index, 'content.body', e.target.value)}
+                            className="textarea textarea-bordered h-20 font-mono text-sm"
+                            placeholder="New content..."
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-between">
+          <Link href={`/dashboard/websites/${websiteId}?tab=campaigns`} className="btn btn-ghost">
+            Cancel
+          </Link>
+          <button
+            type="submit"
+            className={`btn btn-primary ${isSubmitting ? 'loading' : ''}`}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Creating...' : 'Launch Experiment'}
+          </button>
+        </div>
+      </form>
     </div>
   );
-} 
+}

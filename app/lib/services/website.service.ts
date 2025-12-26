@@ -28,6 +28,11 @@ type WebsiteWithAnalytics = {
     [key: string]: any;
   };
   allowedDomains?: string[];
+  shopify?: {
+    shop: string;
+    isActive: boolean;
+    installedAt: Date;
+  };
   cachedStats?: {
     totalImpressions: number;
     totalClicks: number;
@@ -48,7 +53,7 @@ function convertToWebsiteWithAnalytics(website: any): WebsiteWithAnalytics {
     analytics: {
       totalImpressions: website.impressions || 0,
       totalClicks: website.clicks || 0,
-      conversionRate: website.clicks && website.impressions ? 
+      conversionRate: website.clicks && website.impressions ?
         (website.clicks / website.impressions) * 100 : 0
     },
     settings: website.settings || {
@@ -64,6 +69,11 @@ function convertToWebsiteWithAnalytics(website: any): WebsiteWithAnalytics {
       customStyles: ''
     },
     allowedDomains: website.allowedDomains || [],
+    shopify: website.shopify ? {
+      shop: website.shopify.shop,
+      isActive: website.shopify.isActive,
+      installedAt: website.shopify.installedAt
+    } : undefined,
     createdAt: website.createdAt,
     updatedAt: website.updatedAt
   };
@@ -76,11 +86,11 @@ function convertToWebsiteWithAnalytics(website: any): WebsiteWithAnalytics {
  */
 export const getWebsiteById = cache(async (id: string): Promise<WebsiteWithAnalytics | null> => {
   if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
-  
+
   return withDatabaseConnection(async () => {
     const website = await Website.findById(id).lean();
     if (!website) return null;
-    
+
     return convertToWebsiteWithAnalytics(website);
   });
 });
@@ -92,7 +102,7 @@ export const getWebsiteById = cache(async (id: string): Promise<WebsiteWithAnaly
  */
 export const getWebsitesByUserId = cache(async (userId: string): Promise<WebsiteWithAnalytics[]> => {
   if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return [];
-  
+
   return withDatabaseConnection(async () => {
     const websites = await Website.find({ userId }).lean();
     return websites.map(convertToWebsiteWithAnalytics);
@@ -106,11 +116,11 @@ export const getWebsitesByUserId = cache(async (userId: string): Promise<Website
  */
 export async function getWebsiteByDomain(domain: string): Promise<WebsiteWithAnalytics | null> {
   if (!domain) return null;
-  
+
   return withDatabaseConnection(async () => {
     const website = await Website.findOne({ domain: domain.toLowerCase() }).lean();
     if (!website) return null;
-    
+
     return convertToWebsiteWithAnalytics(website);
   });
 }
@@ -129,7 +139,7 @@ export async function createWebsite(websiteData: {
   settings?: Record<string, any>;
 }): Promise<WebsiteWithAnalytics> {
   await connectToDatabase();
-  
+
   const website = new Website({
     name: websiteData.name,
     domain: websiteData.domain.toLowerCase(),
@@ -148,7 +158,7 @@ export async function createWebsite(websiteData: {
       conversionRate: 0
     }
   });
-  
+
   await website.save();
   return website.toObject() as WebsiteWithAnalytics;
 }
@@ -160,17 +170,17 @@ export async function createWebsite(websiteData: {
  * @returns Updated website or null if not found
  */
 export async function updateWebsiteSettings(
-  id: string, 
+  id: string,
   settings: Record<string, any>
 ): Promise<WebsiteWithAnalytics | null> {
   if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
-  
+
   await connectToDatabase();
-  
+
   // Find the website
   const website = await Website.findById(id);
   if (!website) return null;
-  
+
   // Update settings
   if (settings.position) website.settings.position = settings.position;
   if (settings.delay !== undefined) website.settings.delay = parseInt(settings.delay.toString(), 10);
@@ -182,15 +192,15 @@ export async function updateWebsiteSettings(
   if (settings.initialDelay !== undefined) website.settings.initialDelay = parseInt(settings.initialDelay.toString(), 10);
   if (settings.loop !== undefined) website.settings.loop = Boolean(settings.loop);
   if (settings.customStyles !== undefined) website.settings.customStyles = settings.customStyles;
-  
+
   // Update other fields
   if (settings.name) website.name = settings.name;
   if (settings.allowedDomains) website.allowedDomains = settings.allowedDomains;
   if (settings.status) website.status = settings.status;
-  
+
   // Save changes
   await website.save();
-  
+
   // Return updated website
   const updatedWebsite = await Website.findById(id).lean();
   return updatedWebsite ? convertToWebsiteWithAnalytics(updatedWebsite) : null;
@@ -203,16 +213,16 @@ export async function updateWebsiteSettings(
  * @returns Updated website or null if not found
  */
 export async function incrementWebsiteImpressions(
-  id: string, 
+  id: string,
   count: number = 1
 ): Promise<WebsiteWithAnalytics | null> {
   if (!id || !mongoose.Types.ObjectId.isValid(id) || count <= 0) return null;
-  
+
   await connectToDatabase();
-  
+
   const website = await Website.findById(id);
   if (!website) return null;
-  
+
   // Initialize analytics if they don't exist
   if (!website.analytics) {
     website.analytics = {
@@ -221,16 +231,16 @@ export async function incrementWebsiteImpressions(
       conversionRate: 0
     };
   }
-  
+
   // Increment impressions
   website.analytics.totalImpressions += count;
-  
+
   // Recalculate conversion rate
   if (website.analytics.totalImpressions > 0) {
-    website.analytics.conversionRate = 
+    website.analytics.conversionRate =
       (website.analytics.totalClicks / website.analytics.totalImpressions) * 100;
   }
-  
+
   await website.save();
   return website.toObject() as WebsiteWithAnalytics;
 }
@@ -242,16 +252,16 @@ export async function incrementWebsiteImpressions(
  * @returns Updated website or null if not found
  */
 export async function incrementWebsiteClicks(
-  id: string, 
+  id: string,
   count: number = 1
 ): Promise<WebsiteWithAnalytics | null> {
   if (!id || !mongoose.Types.ObjectId.isValid(id) || count <= 0) return null;
-  
+
   await connectToDatabase();
-  
+
   const website = await Website.findById(id);
   if (!website) return null;
-  
+
   // Initialize analytics if they don't exist
   if (!website.analytics) {
     website.analytics = {
@@ -260,16 +270,16 @@ export async function incrementWebsiteClicks(
       conversionRate: 0
     };
   }
-  
+
   // Increment clicks
   website.analytics.totalClicks += count;
-  
+
   // Recalculate conversion rate
   if (website.analytics.totalImpressions > 0) {
-    website.analytics.conversionRate = 
+    website.analytics.conversionRate =
       (website.analytics.totalClicks / website.analytics.totalImpressions) * 100;
   }
-  
+
   await website.save();
   return website.toObject() as WebsiteWithAnalytics;
 }
@@ -281,7 +291,7 @@ export async function incrementWebsiteClicks(
  */
 export async function deleteWebsite(id: string): Promise<boolean> {
   if (!id || !mongoose.Types.ObjectId.isValid(id)) return false;
-  
+
   await connectToDatabase();
   const result = await Website.deleteOne({ _id: id });
   return result.deletedCount > 0;
@@ -292,7 +302,7 @@ export async function deleteWebsite(id: string): Promise<boolean> {
  */
 export async function getWebsiteByApiKey(apiKey: string): Promise<WebsiteWithAnalytics | null> {
   if (!apiKey) return null;
-  
+
   try {
     await connectToDatabase();
     const website = await Website.findOne({ apiKey }).lean();
@@ -311,13 +321,13 @@ export async function getWebsiteByApiKey(apiKey: string): Promise<WebsiteWithAna
  */
 export async function getWebsiteVerification(id: string, userId: string): Promise<any> {
   if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
-  
+
   await connectToDatabase();
   const website = await Website.findOne({
     _id: id,
     userId
   }).lean();
-  
+
   return website;
 }
 
@@ -329,29 +339,29 @@ export async function getWebsiteVerification(id: string, userId: string): Promis
  * @returns Updated website or null if not found
  */
 export async function updateWebsiteVerificationMethod(
-  id: string, 
+  id: string,
   method: string,
   token?: string
 ): Promise<any> {
   if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
-  
+
   await connectToDatabase();
-  
+
   const crypto = require('crypto');
-  
+
   const verification: VerificationDetails = {
     status: VerificationStatus.PENDING,
     method: method as VerificationMethod,
     token: token || crypto.randomBytes(16).toString('hex'),
     attempts: 0
   };
-  
+
   const website = await Website.findByIdAndUpdate(
     id,
     { $set: { verification } },
     { new: true }
   ).lean();
-  
+
   return website;
 }
 
@@ -368,11 +378,11 @@ export async function updateWebsiteVerificationStatus(
   reason?: string
 ): Promise<any> {
   if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
-  
+
   return withDatabaseConnection(async () => {
     const website = await Website.findById(id);
     if (!website) return null;
-    
+
     // Update verification attempts
     if (!website.verification) {
       website.verification = {
@@ -382,14 +392,14 @@ export async function updateWebsiteVerificationStatus(
         attempts: 0
       };
     }
-    
+
     // Ensure the verification object has an attempts field
     if (!website.verification.attempts) {
       website.verification.attempts = 0;
     }
-    
+
     website.verification.attempts = (website.verification.attempts || 0) + 1;
-    
+
     // If verified, update status
     if (isVerified) {
       website.verification.status = VerificationStatus.VERIFIED;
@@ -399,7 +409,7 @@ export async function updateWebsiteVerificationStatus(
       // Only set to pending if not already verified
       website.verification.status = VerificationStatus.PENDING;
     }
-    
+
     await website.save();
     return website.toObject();
   });
@@ -412,9 +422,9 @@ export async function updateWebsiteVerificationStatus(
  */
 export async function getWebsitesRaw(userId: string): Promise<any[]> {
   if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return [];
-  
+
   await connectToDatabase();
   const websites = await Website.find({ userId }).sort({ createdAt: -1 }).lean();
-  
+
   return websites;
 } 

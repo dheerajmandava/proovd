@@ -32,14 +32,14 @@ export async function GET(request, context) {
 
     // Get website to verify ownership
     const website = await getWebsiteById(id);
-    
+
     if (!website) {
       return NextResponse.json(
-        { error: 'Website not found' }, 
+        { error: 'Website not found' },
         { status: 404 }
       );
     }
-    
+
     // Verify ownership
     if (website.userId.toString() !== session.user.id) {
       return NextResponse.json(
@@ -96,14 +96,14 @@ export async function POST(request, props) {
 
     // Get website to verify ownership
     const website = await getWebsiteById(id);
-    
+
     if (!website) {
       return NextResponse.json(
-        { error: 'Website not found' }, 
+        { error: 'Website not found' },
         { status: 404 }
       );
     }
-    
+
     // Verify ownership
     if (website.userId.toString() !== session.user.id) {
       return NextResponse.json(
@@ -114,7 +114,7 @@ export async function POST(request, props) {
 
     // Parse the request body
     const body = await request.json();
-    
+
     // Validate required fields
     if (!body.name) {
       return NextResponse.json(
@@ -134,6 +134,14 @@ export async function POST(request, props) {
       status: body.status || 'active',
       type: body.type || 'custom',
       priority: body.priority ? parseInt(body.priority) : 0,
+      // New Campaign Fields
+      content: body.content,
+      triggers: body.triggers,
+      variants: body.variants,
+      position: body.position,
+      theme: body.theme,
+      displayRules: body.displayRules,
+      displayFrequency: body.displayFrequency,
     });
 
     // Return the new notification

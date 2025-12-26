@@ -18,14 +18,17 @@ export async function createMetric(metricData: {
   clientId?: string;
   isBot: boolean;
   isUnique: boolean;
+  variantId?: string;
+  conversionValue?: number;
+  metadata?: any;
 }): Promise<any> {
   await connectToDatabase();
-  
+
   const metric = new Metric({
     ...metricData,
     timestamp: new Date()
   });
-  
+
   await metric.save();
   return metric.toObject();
 }
@@ -37,18 +40,18 @@ export async function createMetric(metricData: {
  * @returns True if the session has already seen the notification
  */
 export async function hasSessionSeenNotification(
-  notificationId: string, 
+  notificationId: string,
   sessionId: string
 ): Promise<boolean> {
   if (!notificationId || !sessionId) return false;
-  
+
   await connectToDatabase();
-  
+
   const existingImpression = await Metric.findOne({
     notificationId,
     sessionId,
     type: 'impression'
   }).lean();
-  
+
   return !!existingImpression;
 } 

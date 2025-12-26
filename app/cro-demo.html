@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRO Widget Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background: #f5f5f5;
+    }
+    
+    .hero {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 100px 20px;
+      text-align: center;
+    }
+    
+    .hero h1 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+    
+    .hero p {
+      font-size: 1.25rem;
+      opacity: 0.9;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .content {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    
+    .section {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .section h2 {
+      margin-bottom: 15px;
+      color: #4f46e5;
+    }
+    
+    .section p {
+      color: #666;
+      margin-bottom: 15px;
+    }
+    
+    .demo-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    .demo-btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .demo-btn--primary {
+      background: #4f46e5;
+      color: white;
+    }
+    
+    .demo-btn--primary:hover {
+      background: #4338ca;
+      transform: translateY(-1px);
+    }
+    
+    .demo-btn--secondary {
+      background: #e5e7eb;
+      color: #374151;
+    }
+    
+    .demo-btn--secondary:hover {
+      background: #d1d5db;
+    }
+    
+    .spacer {
+      height: 200vh;
+      background: linear-gradient(to bottom, #f5f5f5, #e5e7eb);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    .spacer p {
+      font-size: 1.5rem;
+      color: #666;
+    }
+    
+    .scroll-indicator {
+      animation: bounce 2s infinite;
+    }
+    
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-10px); }
+      60% { transform: translateY(-5px); }
+    }
+    
+    .pricing-section {
+      background: #1f2937;
+      color: white;
+      padding: 60px 20px;
+      text-align: center;
+    }
+    
+    .pricing-section h2 {
+      color: white;
+      margin-bottom: 20px;
+    }
+    
+    .info-box {
+      background: #f0f9ff;
+      border-left: 4px solid #0ea5e9;
+      padding: 15px 20px;
+      margin-top: 20px;
+      border-radius: 4px;
+    }
+    
+    .info-box code {
+      background: #e0f2fe;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <h1>CRO Widget Demo</h1>
+    <p>Test the new behavioral popup and notification widgets. Scroll down, wait, or click the buttons below to trigger different notifications.</p>
+  </section>
+  
+  <div class="content">
+    <div class="section">
+      <h2>🎯 Manual Triggers</h2>
+      <p>Click these buttons to manually trigger different widget types:</p>
+      
+      <div class="demo-buttons">
+        <button class="demo-btn demo-btn--primary" onclick="showPopup()">Show Popup</button>
+        <button class="demo-btn demo-btn--primary" onclick="showStickyBar()">Show Sticky Bar</button>
+        <button class="demo-btn demo-btn--primary" onclick="showSlideIn()">Show Slide-In</button>
+        <button class="demo-btn demo-btn--secondary" onclick="resetNotifications()">Reset All</button>
+      </div>
+      
+      <div class="info-box">
+        <strong>Tip:</strong> Open the browser console to see trigger events logged.
+      </div>
+    </div>
+    
+    <div class="section">
+      <h2>⏱️ Automatic Triggers</h2>
+      <p>These notifications will trigger automatically based on your behavior:</p>
+      <ul>
+        <li><strong>Scroll 50%:</strong> A slide-in will appear when you scroll halfway down the page.</li>
+        <li><strong>Time on page (10s):</strong> A sticky bar will appear after 10 seconds.</li>
+        <li><strong>Exit intent:</strong> Move your mouse to the top of the page to trigger an exit popup.</li>
+      </ul>
+    </div>
+    
+    <div class="section">
+      <h2>📊 Visitor Info</h2>
+      <p>Current detection results:</p>
+      <div id="visitor-info" style="font-family: monospace; background: #f3f4f6; padding: 15px; border-radius: 8px; margin-top: 10px;">
+        Loading...
+      </div>
+    </div>
+  </div>
+  
+  <div class="spacer">
+    <p class="scroll-indicator">👇 Keep scrolling to trigger notifications...</p>
+    <p>Current scroll: <span id="scroll-percent">0%</span></p>
+  </div>
+  
+  <section class="pricing-section">
+    <h2>💰 Pricing</h2>
+    <p>This is the pricing section. In a real app, visiting this page could trigger a specific popup.</p>
+  </section>
+  
+  <div class="content">
+    <div class="section">
+      <h2>✅ You made it!</h2>
+      <p>You've scrolled through the entire demo. The widget system is now set up and ready for integration.</p>
+    </div>
+  </div>
+
+  <!-- Widget Container -->
+  <div id="proovd-container"></div>
+  
+  <script type="module">
+    // Import the widgets directly for testing
+    import { GenericPopup } from './src/pulse-widget/widgets/generic-popup.ts';
+    import { StickyBar } from './src/pulse-widget/widgets/sticky-bar.ts';
+    import { SlideIn } from './src/pulse-widget/widgets/slide-in.ts';
+    import { TriggerManager, NotificationConfig } from './src/pulse-widget/trigger-manager.ts';
+    import { WebsiteActivityTracker } from './src/pulse-widget/activity-tracker.ts';
+    import { widgetRegistry } from './src/pulse-widget/widget-registry.ts';
+    
+    // Get container
+    const container = document.getElementById('proovd-container');
+    widgetRegistry.setContainer(container);
+    
+    // Create a mock socket client for the activity tracker
+    const mockSocket = {
+      isActive: () => false,
+      sendActivity: () => {}
+    };
+    
+    // Initialize activity tracker
+    const tracker = new WebsiteActivityTracker(mockSocket);
+    tracker.start();
+    
+    // Initialize trigger manager
+    const triggerManager = new TriggerManager(tracker);
+    
+    // Define automatic notifications
+    const notifications = [
+      {
+        id: 'scroll-50-notification',
+        type: 'slide-in',
+        content: {
+          title: '👋 You\'re halfway there!',
+          body: 'You\'re exploring our content. Need any help?',
+          ctaText: 'Get Help',
+          ctaUrl: '#help'
+        },
+        triggers: [
+          { type: 'scroll', value: 50, operator: '>' }
+        ],
+        position: 'bottom-right',
+        theme: 'light'
+      },
+      {
+        id: 'time-10s-bar',
+        type: 'sticky-bar',
+        content: {
+          title: '🎉 Limited time offer!',
+          body: 'Get 20% off your first month with code DEMO20',
+          ctaText: 'Claim Offer',
+          ctaUrl: '#offer'
+        },
+        triggers: [
+          { type: 'timeOnPage', value: 10, operator: '>' }
+        ],
+        position: 'top-bar',
+        theme: 'light'
+      },
+      {
+        id: 'exit-intent-popup',
+        type: 'popup',
+        content: {
+          title: 'Wait! Before you go...',
+          body: 'Sign up for our newsletter and get exclusive tips delivered to your inbox.',
+          ctaText: 'Subscribe Now',
+          ctaUrl: '#subscribe',
+          image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&h=200&fit=crop'
+        },
+        triggers: [
+          { type: 'exitIntent' }
+        ],
+        position: 'center-modal',
+        theme: 'light'
+      }
+    ];
+    
+    triggerManager.setNotifications(notifications);
+    triggerManager.start();
+    
+    // Display visitor info
+    const visitorInfo = triggerManager.getVisitorInfo();
+    document.getElementById('visitor-info').innerHTML = `
+      <div><strong>Is Returning Visitor:</strong> ${visitorInfo.isReturning}</div>
+      <div><strong>Device Type:</strong> ${visitorInfo.device}</div>
+      <div><strong>Referrer:</strong> ${visitorInfo.referrer || '(direct)'}</div>
+    `;
+    
+    // Update scroll percentage display
+    window.addEventListener('scroll', () => {
+      const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const scrollPercent = Math.round((window.scrollY / scrollHeight) * 100);
+      document.getElementById('scroll-percent').textContent = scrollPercent + '%';
+    });
+    
+    // Manual trigger functions
+    window.showPopup = function() {
+      const popup = new GenericPopup({
+        content: {
+          title: 'Manual Popup Test',
+          body: 'This popup was triggered manually by clicking a button.',
+          ctaText: 'Got it!',
+          ctaUrl: '#'
+        },
+        variant: 'modal',
+        showBackdrop: true
+      });
+      popup.mount(container);
+      popup.show();
+    };
+    
+    window.showStickyBar = function() {
+      const bar = new StickyBar({
+        content: {
+          text: '🚀 This is a sticky bar notification!',
+          ctaText: 'Learn More',
+          ctaUrl: '#'
+        },
+        barPosition: 'top'
+      });
+      bar.mount(container);
+      bar.show();
+    };
+    
+    window.showSlideIn = function() {
+      const slideIn = new SlideIn({
+        content: {
+          title: 'New message',
+          body: 'This slide-in was triggered manually.',
+          ctaText: 'View',
+          ctaUrl: '#',
+          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix'
+        },
+        position: 'bottom-right'
+      });
+      slideIn.mount(container);
+      slideIn.show();
+    };
+    
+    window.resetNotifications = function() {
+      triggerManager.resetSession();
+      console.log('🔄 All notifications reset');
+    };
+    
+    console.log('🎯 CRO Widget Demo initialized');
+    console.log('Visitor Info:', visitorInfo);
+  </script>
+</body>
+</html>

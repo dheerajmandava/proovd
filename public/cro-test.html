@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProovdCRO Integration Test</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .status {
+            padding: 10px;
+            background: #eee;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>ProovdCRO Integration Test</h1>
+    <div class="status" id="status">Initializing...</div>
+
+    <p>This page tests if the widget can fetch campaigns from the API and display them.</p>
+    <p>Site ID: <strong>694bdac48b22ee70839d1a44</strong></p>
+
+    <div style="height: 200vh; background: linear-gradient(to bottom, #fff, #f0f0f0);">
+        <p>Scroll down to test scroll triggers...</p>
+    </div>
+
+    <!-- Load the widget script -->
+    <script src="/widget.js"></script>
+
+    <script>
+        const SITE_ID = '694bdac48b22ee70839d1a44';
+        const statusEl = document.getElementById('status');
+
+        function log(msg, type = 'info') {
+            console.log(`[Test] ${msg}`);
+            const div = document.createElement('div');
+            div.textContent = msg;
+            if (type === 'success') div.className = 'success';
+            if (type === 'error') div.className = 'error';
+            statusEl.appendChild(div);
+        }
+
+        // Wait for script to load
+        window.onload = async () => {
+            if (typeof Proovd === 'undefined') {
+                log('Error: Proovd global not found. Widget script failed to load.', 'error');
+                return;
+            }
+
+            log('Widget script loaded. Initializing...');
+
+            try {
+                // Initialize ProovdCRO
+                const cro = new Proovd.ProovdCRO({
+                    websiteId: SITE_ID,
+                    debug: true,
+                    // Use local API
+                    apiUrl: 'http://localhost:3000/api'
+                });
+
+                await cro.init();
+                log('ProovdCRO initialized successfully.', 'success');
+
+                // Check if campaigns were fetched (this is internal, but we can check logs or side effects)
+                // We can also try to manually trigger if we knew the ID, but we rely on auto-fetch.
+
+                log('Waiting for campaigns to appear...');
+
+            } catch (error) {
+                log(`Initialization failed: ${error.message}`, 'error');
+                console.error(error);
+            }
+        };
+    </script>
+</body>
+
+</html>

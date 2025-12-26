@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { connectToDatabase } from '@/app/lib/mongodb';
+import { connectToDatabase } from '@/app/lib/database/connection';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { ipLocationService } from '@/app/lib/services/ip-location.service';

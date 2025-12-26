@@ -18,17 +18,17 @@ interface TabNavigationProps {
   initialWebsite: WebsiteData;
 }
 
-export default function TabNavigation({ 
-  websiteId, 
+export default function TabNavigation({
+  websiteId,
   activeTab,
-  initialWebsite 
+  initialWebsite
 }: TabNavigationProps) {
   // Use the provided initial website data
   const [website] = useState<WebsiteData>(initialWebsite);
 
   const tabs = [
     { id: 'overview', name: 'Overview' },
-    { id: 'notifications', name: 'Notifications' },
+    { id: 'campaigns', name: 'Campaigns' },
     { id: 'analytics', name: 'Analytics' },
     { id: 'settings', name: 'Settings' },
   ];
@@ -38,9 +38,9 @@ export default function TabNavigation({
       <div className="mb-4">
         <h1 className="text-3xl font-bold">{website.name}</h1>
         <div className="flex items-center mt-1 text-base-content/70">
-          <a 
-            href={`https://${website.domain}`} 
-            target="_blank" 
+          <a
+            href={`https://${website.domain}`}
+            target="_blank"
             rel="noopener noreferrer"
             className="flex items-center hover:text-primary transition-colors"
           >
@@ -61,11 +61,10 @@ export default function TabNavigation({
           <Link
             key={tab.id}
             href={`/dashboard/websites/${websiteId}?tab=${tab.id}`}
-            className={`pb-2 relative ${
-              activeTab === tab.id
-                ? 'text-primary font-medium border-b-2 border-primary'
-                : 'text-base-content/70 hover:text-primary transition-colors'
-            }`}
+            className={`pb-2 relative ${activeTab === tab.id
+              ? 'text-primary font-medium border-b-2 border-primary'
+              : 'text-base-content/70 hover:text-primary transition-colors'
+              }`}
           >
             {tab.name}
           </Link>

@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { UserData, useWebsiteData, useWebsiteSettings, WebsiteData, WebsiteSettings } from '@/app/lib/hooks';
-import { useUserData, useUpdateUserPreferences } from '@/app/lib/hooks';
-
+import { useState } from 'react';
+import { UserData, WebsiteData } from '@/app/lib/hooks';
+import { toast } from 'react-hot-toast';
 
 interface SettingsTabProps {
   websiteId: string;
@@ -12,496 +11,279 @@ interface SettingsTabProps {
 }
 
 export default function SettingsTab({ websiteId, initialWebsite, initialUserData }: SettingsTabProps) {
-  // State for new domain input
   const [newDomain, setNewDomain] = useState('');
-  const [message, setMessage] = useState({ type: '', text: '' });
-  
-  // Custom hook for fetching website data
+  const [allowedDomains, setAllowedDomains] = useState<string[]>(initialWebsite?.allowedDomains || []);
+  const [isSaving, setIsSaving] = useState(false);
+  const [settings, setSettings] = useState({
+    defaultTheme: initialWebsite?.settings?.theme || 'light',
+    defaultPosition: initialWebsite?.settings?.position || 'bottom-right',
+  });
 
-  // Custom hook for updating website settings
-  const { 
-    updateSettings, 
-    isUpdating: isUpdatingSettings, 
-    error: updateSettingsError 
-  } = useWebsiteSettings();
-  
-  // Custom hooks for user data and preferences
-  const { 
-    user: userData, 
-    isLoading: isLoadingUser, 
-    error: userError 
-  } = useUserData();
-  
-  const { 
-    updatePreferences, 
-    isUpdating: isUpdatingPreferences 
-  } = useUpdateUserPreferences();
-  
-  // Combined loading state
- 
-  
-  // Prepare settings object combining website settings and user preferences
-  const combinedSettings = {
-    // Website settings with defaults
-    position: initialWebsite?.settings?.position || 'bottom-left',
-    delay: initialWebsite?.settings?.delay || 5,
-    displayDuration: initialWebsite?.settings?.displayDuration || 5,
-    maxNotifications: initialWebsite?.settings?.maxNotifications || 5,
-    theme: initialWebsite?.settings?.theme || 'light',
-    displayOrder: initialWebsite?.settings?.displayOrder || 'newest',
-    randomize: initialWebsite?.settings?.randomize || false,
-    initialDelay: initialWebsite?.settings?.initialDelay || 5,
-    loop: initialWebsite?.settings?.loop || false,
-    customStyles: initialWebsite?.settings?.customStyles || '',
-    
-    // User data with defaults
-    email: userData?.email || '',
-    emailNotifications: userData?.emailNotifications !== undefined 
-      ? userData.emailNotifications 
-      : true,
-    notificationDigest: userData?.notificationDigest || 'daily',
-    
-    // Allowed domains
-    allowedDomains: initialWebsite?.allowedDomains || [],
-  };
-  
-  // New state for tracking local changes
-  const [localSettings, setLocalSettings] = useState<Partial<WebsiteSettings> & { allowedDomains?: string[] }>({});
-  const [hasChanges, setHasChanges] = useState(false);
-
-  // Handle form input changes
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    let updatedValue: string | number | boolean = value;
-    
-    // Convert number fields
-    if (name === 'displayDuration' || name === 'delay' || name === 'initialDelay' || name === 'maxNotifications') {
-      updatedValue = parseInt(value, 10);
-    }
-    
-    // Convert checkbox fields
-    if (type === 'checkbox') {
-      updatedValue = (e.target as HTMLInputElement).checked;
-    }
-    
-    // Update local state instead of immediately saving
-    setLocalSettings(prev => ({
-      ...prev,
-      [name]: updatedValue
-    }));
-  };
-
-  // Track changes to see if save button should be enabled
-  useEffect(() => {
-    setHasChanges(Object.keys(localSettings).length > 0);
-  }, [localSettings]);
-
-  // Save all changes at once
-  const handleSaveSettings = () => {
-    if (!hasChanges) return;
-    
-    updateSettings(websiteId, localSettings)
-      .then(() => {   
-        setLocalSettings({});
-        setHasChanges(false);
-        setMessage({ type: 'success', text: 'Settings saved successfully' });
-      })
-      .catch((error) => {
-        setMessage({ type: 'error', text: error.message || 'Failed to save settings' });
+  async function handleSave() {
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/websites/${websiteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: {
+            theme: settings.defaultTheme,
+            position: settings.defaultPosition,
+          },
+          allowedDomains
+        })
       });
-  };
 
-  // Handle slider changes
-  const handleSliderChange = (name: string, value: number) => {
-    setLocalSettings(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
+      if (!res.ok) throw new Error('Failed to save settings');
+      toast.success('Settings saved!');
+    } catch (error) {
+      toast.error('Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
-  // Handle adding a new domain
-  const handleAddDomain = () => {
-    if (!newDomain) return;
-    
-    const domain = newDomain.trim();
-    const currentDomains = localSettings.allowedDomains || combinedSettings.allowedDomains;
-    
-    if (currentDomains.includes(domain)) {
-      setMessage({ type: 'error', text: 'Domain already exists' });
+  function handleAddDomain() {
+    if (!newDomain.trim()) return;
+    const domain = newDomain.trim().toLowerCase();
+    if (allowedDomains.includes(domain)) {
+      toast.error('Domain already added');
       return;
     }
-    
-    const newAllowedDomains = [...currentDomains, domain];
-    
-    // Update local settings instead of making API call directly
-    setLocalSettings(prev => ({
-      ...prev,
-      allowedDomains: newAllowedDomains
-    }));
-    
+    setAllowedDomains([...allowedDomains, domain]);
     setNewDomain('');
-    setMessage({ type: 'success', text: 'Domain added. Click Save Settings to apply changes.' });
-  };
-  
-  // Handle removing a domain
-  const handleRemoveDomain = (domain: string) => {
-    const currentDomains = localSettings.allowedDomains || combinedSettings.allowedDomains;
-    const newAllowedDomains = currentDomains.filter(d => d !== domain);
-    
-    // Update local settings instead of making API call directly
-    setLocalSettings(prev => ({
-      ...prev,
-      allowedDomains: newAllowedDomains
-    }));
-    
-    setMessage({ type: 'success', text: 'Domain removed. Click Save Settings to apply changes.' });
-  };
-  
-  // Combined settings object that prioritizes local changes
-  const displaySettings = {
-    ...combinedSettings,
-    ...localSettings
-  };
-  
-  return (
-    <div>
-      {message.text && (
-        <div className={`alert ${message.type === 'error' ? 'alert-error' : 'alert-success'} mb-6`}>
-          {message.type === 'error' ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          )}
-          <span>{message.text}</span>
-        </div>
-      )}
+  }
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <div className="card bg-base-100 shadow-xl">
-            <div className="card-body">
-              <h2 className="card-title flex items-center">
-                <svg className="h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Website Settings
-              </h2>
-              
-              <div className="mt-4">
-                <div className="mb-6">
-                  <div className="flex justify-between mb-2">
-                    <label className="font-medium">Notification Position</label>
-                    <span className="text-sm capitalize">{displaySettings.position.replace('-', ' ')}</span>
-                  </div>
-                  <select
-                    name="position"
-                    value={displaySettings.position}
-                    onChange={handleChange}
-                    className="select select-bordered w-full"
-                  >
-                    <option value="top-right">Top Right</option>
-                    <option value="top-left">Top Left</option>
-                    <option value="bottom-right">Bottom Right</option>
-                    <option value="bottom-left">Bottom Left</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Where notifications appear on your website</p>
-                </div>
-                
-                <div className="mb-6">
-                  <div className="flex justify-between mb-2">
-                    <label className="font-medium">Delay Between Notifications</label>
-                   
-                  </div>
-                  <div className="w-full max-w-xs">
-                    <input
-                      type="range"
-                      name="delay"
-                      min="0"
-                      max="20"
-                      value={displaySettings.delay}
-                      onChange={handleChange}
-                      className="range range-primary"
-                      step="1"
-                    />
-                    <div className="flex justify-between px-2.5 mt-2 text-xs">
-                      <span>0s</span>
-                      <span>5s</span>
-                      <span>10s</span>
-                      <span>15s</span>
-                      <span>20s</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Current: {displaySettings.delay} seconds</p>
-                </div>
-                
-                <div className="mb-6">
-                  <div className="flex justify-between mb-2">
-                    <label className="font-medium">Maximum Notifications</label>
-                    <span className="text-sm">{displaySettings.maxNotifications}</span>
-                  </div>
-                  <div className="w-full max-w-xs">
-                    <input
-                      type="range"
-                      name="maxNotifications"
-                      min="1"
-                      max="10"
-                      value={displaySettings.maxNotifications}
-                      onChange={handleChange}
-                      className="range range-primary"
-                      step="1"
-                    />
-                    <div className="flex justify-between px-2.5 mt-2 text-xs">
-                      <span>1</span>
-                      <span>3</span>
-                      <span>5</span>
-                      <span>7</span>
-                      <span>10</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Current: {displaySettings.maxNotifications} notifications</p>
-                </div>
-                
-                <div className="mb-6">
-                  <div className="flex justify-between mb-2">
-                    <label className="font-medium">Theme</label>
-                  </div>
-                  <select
-                    name="theme"
-                    value={displaySettings.theme}
-                    onChange={handleChange}
-                    className="select select-bordered w-full"
-                  >
-                    <option value="light">Light</option>
-                    <option value="dark">Dark</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Visual appearance of notifications</p>
-                </div>
-                
-                <div className="mb-6">
-                  <div className="flex justify-between mb-2">
-                    <label className="font-medium">Display Order</label>
-                  </div>
-                  <select
-                    name="displayOrder"
-                    value={displaySettings.displayOrder}
-                    onChange={handleChange}
-                    className="select select-bordered w-full"
-                  >
-                    <option value="newest">Newest First</option>
-                    <option value="oldest">Oldest First</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">How notifications are ordered when displayed</p>
-                </div>
-                
-                <div className="mb-6">
-                  <div className="flex justify-between mb-2">
-                    <label className="font-medium">Initial Delay</label>
-                    <span className="text-sm">{displaySettings.initialDelay} seconds</span>
-                  </div>
-                  <div className="w-full max-w-xs">
-                    <input
-                      type="range"
-                      name="initialDelay"
-                      min="0"
-                      max="30"
-                      value={displaySettings.initialDelay}
-                      onChange={handleChange}
-                      className="range range-primary"
-                      step="1"
-                    />
-                    <div className="flex justify-between px-2.5 mt-2 text-xs">
-                      <span>0s</span>
-                      <span>10s</span>
-                      <span>20s</span>
-                      <span>30s</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Current: {displaySettings.initialDelay} seconds</p>
-                </div>
-                
-                <div className="mb-6">
-                  <p className="font-medium mb-2">Advanced Options</p>
-                  
-                  <div className="form-control mb-2">
-                    <label className="label cursor-pointer justify-start">
-                      <input
-                        type="checkbox"
-                        name="randomize"
-                        checked={displaySettings.randomize}
-                        onChange={handleChange}
-                        className="checkbox checkbox-primary mr-2"
-                      />
-                      <span className="label-text">Randomize Notifications</span>
-                    </label>
-                  </div>
-                  
-                  <div className="form-control">
-                    <label className="label cursor-pointer justify-start">
-                      <input
-                        type="checkbox"
-                        name="loop"
-                        checked={displaySettings.loop}
-                        onChange={handleChange}
-                        className="checkbox checkbox-primary mr-2"
-                      />
-                      <span className="label-text">Loop Notifications</span>
-                    </label>
-                  </div>
-                </div>
-                
-                <div className="mb-6">
-                  <div className="flex justify-between mb-2">
-                    <label className="font-medium">Display Duration</label>
-                    <span className="text-sm">{displaySettings.displayDuration} seconds</span>
-                  </div>
-                  <div className="w-full max-w-xs">
-                    <input
-                      type="range"
-                      name="displayDuration"
-                      min="1"
-                      max="20"
-                      value={displaySettings.displayDuration}
-                      onChange={handleChange}
-                      className="range range-primary"
-                      step="1"
-                    />
-                    <div className="flex justify-between px-2.5 mt-2 text-xs">
-                      <span>1s</span>
-                      <span>5s</span>
-                      <span>10s</span>
-                      <span>15s</span>
-                      <span>20s</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">Current: {displaySettings.displayDuration} seconds</p>
-                </div>
+  function handleRemoveDomain(domain: string) {
+    setAllowedDomains(allowedDomains.filter(d => d !== domain));
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-6">
+        {/* Campaign Defaults */}
+        <div className="card bg-base-100 shadow">
+          <div className="card-body">
+            <h2 className="card-title">Campaign Defaults</h2>
+            <p className="text-sm text-base-content/70 mb-4">
+              Default settings for new campaigns. Individual campaigns can override these.
+            </p>
+
+            <div className="space-y-4">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-medium">Default Theme</span>
+                </label>
+                <select
+                  value={settings.defaultTheme}
+                  onChange={(e) => setSettings({ ...settings, defaultTheme: e.target.value })}
+                  className="select select-bordered"
+                >
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
               </div>
 
-              {/* Add save button at the bottom of the settings card */}
-              <div className="mt-6 flex justify-end">
-                <button
-                  type="button"
-                  className={`btn ${hasChanges ? 'btn-primary' : 'btn-disabled'}`}
-                  onClick={handleSaveSettings}
-                  disabled={!hasChanges}
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-medium">Default Position</span>
+                </label>
+                <select
+                  value={settings.defaultPosition}
+                  onChange={(e) => setSettings({ ...settings, defaultPosition: e.target.value })}
+                  className="select select-bordered"
                 >
-                  Save Settings
-                </button>
+                  <option value="top-left">Top Left</option>
+                  <option value="top-right">Top Right</option>
+                  <option value="bottom-left">Bottom Left</option>
+                  <option value="bottom-right">Bottom Right</option>
+                  <option value="top">Top Bar</option>
+                  <option value="bottom">Bottom Bar</option>
+                </select>
               </div>
             </div>
           </div>
-          
-          <div className="card bg-base-100 shadow-xl mt-6">
-            <div className="card-body">
-              <h2 className="card-title flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Allowed Domains
-              </h2>
-              
-              <p className="text-sm text-gray-600 mt-2">
-                By default, your widget will only load on {initialWebsite?.domain}. Add additional domains where you want to display notifications.
-              </p>
-              
-              {/* Allowed Domains List */}
-              <div className="mt-4">
-                <h3 className="font-medium text-lg mb-2">Allowed Domains</h3>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {(localSettings.allowedDomains || combinedSettings.allowedDomains).map((domain) => (
-                    <div key={domain} className="badge badge-primary badge-lg gap-2">
-                      {domain}
-                      <button 
-                        type="button" 
-                        className="btn btn-xs btn-ghost btn-circle"
-                        onClick={() => handleRemoveDomain(domain)}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                  {(localSettings.allowedDomains || combinedSettings.allowedDomains).length === 0 && (
-                    <p className="text-sm text-base-content/70">No domains added yet. Add domains to allow notifications on additional websites.</p>
-                  )}
+        </div>
+
+        {/* Allowed Domains */}
+        <div className="card bg-base-100 shadow">
+          <div className="card-body">
+            <h2 className="card-title">Allowed Domains</h2>
+            <p className="text-sm text-base-content/70 mb-4">
+              Your widget will only load on {initialWebsite?.domain}. Add additional domains if needed.
+            </p>
+
+            <div className="flex flex-wrap gap-2 mb-4">
+              <div className="badge badge-outline badge-lg">{initialWebsite?.domain} (primary)</div>
+              {allowedDomains.map((domain) => (
+                <div key={domain} className="badge badge-primary badge-lg gap-2">
+                  {domain}
+                  <button onClick={() => handleRemoveDomain(domain)} className="btn btn-ghost btn-xs">×</button>
                 </div>
-                {/* Add Domain Form */}
-                <div className="flex gap-2">
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="subdomain.example.com"
+                value={newDomain}
+                onChange={(e) => setNewDomain(e.target.value)}
+                className="input input-bordered flex-grow"
+                onKeyDown={(e) => e.key === 'Enter' && handleAddDomain()}
+              />
+              <button onClick={handleAddDomain} className="btn btn-outline">Add</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Shopify Integration */}
+        <div className="card bg-base-100 shadow border-l-4 border-l-[#96bf48]">
+          <div className="card-body">
+            <h2 className="card-title flex items-center gap-2">
+              <svg className="w-6 h-6 text-[#96bf48]" viewBox="0 0 24 24" fill="currentColor"><path d="M12.0002 0.000305176C11.5315 0.000305176 11.0844 0.191192 10.7424 0.536691C10.4004 0.882191 10.2082 1.3415 10.2082 1.81231V8.29176H21.2007L16.4805 1.54303C16.3276 1.32569 16.1264 1.14652 15.8953 1.02196C15.6642 0.897405 15.4102 0.831518 15.1565 0.830305H12.0002V0.000305176ZM8.70817 9.79176V2.22256C8.70775 1.95669 8.77884 1.69527 8.91386 1.46618C9.04889 1.23709 9.24278 1.04902 9.47467 0.922055C9.70656 0.795094 9.96767 0.734032 10.2299 0.74543C10.4922 0.756828 10.7456 0.840255 10.9632 0.986805L15.3412 3.92481L23.2372 15.2123C23.5856 15.7107 23.7712 16.3072 23.7712 16.9138C23.7712 18.7913 22.2512 20.3123 20.3752 20.3123H17.8932C17.6186 21.6111 16.4805 22.5838 15.1052 22.5838C13.7297 22.5838 12.5915 21.6111 12.3169 20.3123H8.54117C8.26657 21.6111 7.12842 22.5838 5.75292 22.5838C4.37742 22.5838 3.23927 21.6111 2.96467 20.3123H2.81242C1.25917 20.3123 0 19.0526 0 17.5003V9.79176H8.70817ZM17.2289 18.103H20.375C21.0315 18.103 21.5622 17.5714 21.5622 16.9136C21.5622 16.7018 21.4972 16.4969 21.3757 16.3216L13.8817 5.60156L10.916 9.79105V18.1023L17.2289 18.103ZM15.1042 19.333H12.9794V17.5005H17.2294V19.333H15.1057C15.1053 19.333 15.1049 19.333 15.1042 19.333ZM5.75017 19.333H3.62542V17.5005H7.87542V19.333H5.75017Z" /></svg>
+              Shopify Integration
+            </h2>
+            <p className="text-sm text-base-content/70 mb-4">
+              Connect your Shopify store to enable price testing and automatic product syncing.
+            </p>
+
+            <div className="flex items-center justify-between p-4 bg-base-200 rounded-lg">
+              <div>
+                <div className="text-xs uppercase tracking-wider opacity-70 mb-1">Status</div>
+                {initialWebsite.shopify?.shop ? (
+                  <div className="font-semibold flex items-center gap-2 text-success">
+                    <span className="w-2 h-2 rounded-full bg-success"></span>
+                    Connected to {initialWebsite.shopify.shop}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <div className="font-semibold flex items-center gap-2 text-base-content/50">
+                      <span className="w-2 h-2 rounded-full bg-base-300"></span>
+                      Not Connected
+                    </div>
+                  </div>
+                )}
+              </div>
+              {initialWebsite.shopify?.shop && (
+                <button
+                  onClick={async () => {
+                    try {
+                      toast.loading('Installing widget script...', { id: 'install-script' });
+                      const res = await fetch(`/api/websites/${websiteId}/install-script`, {
+                        method: 'POST',
+                      });
+                      const data = await res.json();
+                      if (res.ok) {
+                        toast.success('Widget script installed! Check your store.', { id: 'install-script' });
+                      } else {
+                        toast.error(data.error || 'Failed to install script', { id: 'install-script' });
+                      }
+                    } catch (err) {
+                      toast.error('Failed to install script', { id: 'install-script' });
+                    }
+                  }}
+                  className="btn btn-sm btn-success gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  Install Widget Script
+                </button>
+              )}
+            </div>
+
+            {/* Manual Connection / Tunnel Override */}
+            <div className="mt-4 pt-4 border-t border-base-200">
+              <p className="text-xs font-semibold mb-2 text-base-content/70">
+                Dev Mode: If you get a "Whitelist" error, enter the Tunnel URL from your terminal below.
+              </p>
+              <div className="flex flex-col gap-2">
+                {!initialWebsite.shopify?.shop && (
                   <input
                     type="text"
-                    placeholder="example.com"
-                    className="input input-bordered flex-grow"
-                    value={newDomain}
-                    onChange={(e) => setNewDomain(e.target.value)}
+                    placeholder="Shop Domain (e.g. store.myshopify.com)"
+                    className="input input-sm input-bordered w-full"
+                    id="connect-shop-input"
                   />
-                  <button 
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleAddDomain}
+                )}
+                <input
+                  type="text"
+                  placeholder="Tunnel URL (e.g. https://xxxx.trycloudflare.com)"
+                  className="input input-sm input-bordered w-full"
+                  id="connect-tunnel-input"
+                />
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      const shopInput = document.getElementById('connect-shop-input') as HTMLInputElement;
+                      const tunnelInput = document.getElementById('connect-tunnel-input') as HTMLInputElement;
+
+                      const shop = initialWebsite.shopify?.shop || shopInput?.value;
+                      const tunnelUrl = tunnelInput?.value;
+
+                      if (!shop) {
+                        toast.error('Please enter your Shopify store domain');
+                        return;
+                      }
+
+                      let url = `/api/shopify/auth?shop=${shop}&websiteId=${websiteId}`;
+                      if (tunnelUrl) {
+                        url += `&tunnel_url=${encodeURIComponent(tunnelUrl)}`;
+                      }
+
+                      window.location.href = url;
+                    }}
+                    className="btn btn-sm btn-primary gap-2"
                   >
-                    Add Domain
+                    {initialWebsite.shopify?.shop ? 'Reconnect with Options' : 'Connect'}
                   </button>
                 </div>
               </div>
             </div>
+
           </div>
         </div>
-        
-        <div className="lg:col-span-1">
-          <div className="card bg-base-100 shadow-xl">
-            <div className="card-body">
-              <h2 className="card-title flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                About Settings
-              </h2>
-              
-              <div className="mt-4 space-y-4">
-                <div>
-                  <p className="font-medium">Position:</p>
-                  <p className="text-sm">Determines where notifications appear on your visitors' screens.</p>
-                </div>
-                
-                <div>
-                  <p className="font-medium">Theme:</p>
-                  <p className="text-sm">Choose between light and dark appearance for notifications.</p>
-                </div>
-                
-                <div>
-                  <p className="font-medium">Display Duration:</p>
-                  <p className="text-sm">How long each notification remains visible.</p>
-                </div>
-                
-                <div>
-                  <p className="font-medium">Delay Between Notifications:</p>
-                  <p className="text-sm">Wait time before showing the next notification.</p>
-                </div>
-                
-                <div>
-                  <p className="font-medium">Maximum Notifications:</p>
-                  <p className="text-sm">Limits how many notifications a visitor sees per session.</p>
-                </div>
-                
-                <div>
-                  <p className="font-medium">Allowed Domains:</p>
-                  <p className="text-sm">Control which domains can display your notifications.</p>
-                </div>
-              </div>
-              
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                <h3 className="font-semibold">Need Help?</h3>
-                <p className="mt-2 text-sm">
-                  Check out our <a href="#" className="text-blue-600 hover:underline">documentation</a> for more information on how to customize your notifications.
-                </p>
-              </div>
+
+        {/* Widget Installation */}
+        <div className="card bg-base-100 shadow">
+          <div className="card-body">
+            <h2 className="card-title">Widget Installation</h2>
+            <p className="text-sm text-base-content/70 mb-4">
+              Add this code to your website to enable campaigns.
+            </p>
+
+            <div className="mockup-code">
+              <pre><code>{`<script src="https://www.proovd.in/api/cdn/w/${websiteId}"></script>`}</code></pre>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <button onClick={handleSave} disabled={isSaving} className="btn btn-primary">
+            {isSaving ? <span className="loading loading-spinner"></span> : 'Save Settings'}
+          </button>
+        </div>
+      </div >
+
+      {/* Sidebar */}
+      < div className="lg:col-span-1" >
+        <div className="card bg-base-100 shadow">
+          <div className="card-body">
+            <h2 className="card-title">About Settings</h2>
+            <div className="prose prose-sm">
+              <p><strong>Campaign Defaults:</strong> Set default theme and position for new campaigns.</p>
+              <p><strong>Allowed Domains:</strong> Control where your widget can load.</p>
+              <p><strong>Widget Code:</strong> Install this on every page where you want campaigns to appear.</p>
+            </div>
+
+            <div className="alert alert-info mt-4">
+              <span>Campaign-specific settings (position, triggers, content) are configured per-campaign in the Campaigns tab.</span>
+            </div>
+          </div>
+        </div>
+      </div >
+    </div >
   );
-} 
+}

@@ -56,10 +56,10 @@ interface DashboardContentProps {
 
 export default function DashboardContent({ userData, websites }: DashboardContentProps) {
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Use first website or return website creation UI
   const website = websites[0];
-  
+
   if (!website) {
     // Show website creation message
     return (
@@ -88,7 +88,7 @@ export default function DashboardContent({ userData, websites }: DashboardConten
 
   // Get recent notifications if available
   const recentNotifications = website.notifications || [];
-  
+
   return (
     <div className="grid gap-6">
       {/* Analytics and Stats */}
@@ -99,10 +99,10 @@ export default function DashboardContent({ userData, websites }: DashboardConten
           onLoadingChange={setIsLoading}
         />
       </div> */}
-      
+
       <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
         <div className="rounded-xl border bg-card p-6">
-          <h2 className="text-xl font-semibold">Recent Notifications</h2>
+          <h2 className="text-xl font-semibold">Recent Campaigns</h2>
           {recentNotifications.length > 0 ? (
             <div className="mt-4 space-y-4">
               {recentNotifications.slice(0, 3).map((notification) => (
@@ -117,19 +117,19 @@ export default function DashboardContent({ userData, websites }: DashboardConten
                   </div>
                 </div>
               ))}
-              <Link href={`/dashboard/websites/${website._id.toString()}/notifications`} className="text-sm text-primary hover:underline">
-                View all notifications &rarr;
+              <Link href={`/dashboard/websites/${website._id.toString()}?tab=campaigns`} className="text-sm text-primary hover:underline">
+                View all campaigns &rarr;
               </Link>
             </div>
           ) : (
-            <p className="mt-4 text-muted-foreground">No notifications yet.</p>
+            <p className="mt-4 text-muted-foreground">No campaigns yet.</p>
           )}
         </div>
-        
+
         <div className="rounded-xl border bg-card p-6">
           <h2 className="text-xl font-semibold">Installation Code</h2>
           <p className="text-sm text-muted-foreground mt-2 mb-4">
-            Add this code to your website to start displaying notifications
+            Add this code to your website to start displaying campaigns
           </p>
           <CodeSection websiteId={website._id.toString()} />
         </div>

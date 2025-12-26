@@ -1,0 +1,23 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "795df4e99985f42c61ccf34678761449"
+name = "proovd"
+application_url = "http://localhost:3000"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-01"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_products,write_script_tags"
+
+[auth]
+redirect_urls = [ 
+  "http://localhost:3000/api/shopify/callback",
+  "http://localhost:3001/api/shopify/callback",
+  "http://localhost:3002/api/shopify/callback"
+]
