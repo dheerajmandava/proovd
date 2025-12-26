@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     let clientId = body.clientId;
 
     // Validate required fields
-    if ((!siteId && !apiKey) || !action) {
+    if ((!siteId && !apiKey && !body.shop) || !action) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400, headers }
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get website
+    let website;
     let website;
     if (siteId) {
       // TODO: Add getWebsiteById to imports if not present, or use existing service
@@ -55,11 +56,15 @@ export async function POST(request: NextRequest) {
       website = await getWebsiteById(siteId);
     } else if (apiKey) {
       website = await getWebsiteByApiKey(apiKey);
+    } else if (body.shop) {
+      // Support lookup by shop domain for zero-config installation
+      const { getWebsiteByShopifyDomain } = await import('@/app/lib/services');
+      website = await getWebsiteByShopifyDomain(body.shop);
     }
 
     if (!website) {
       return NextResponse.json(
-        { error: 'Invalid Website ID or API key' },
+        { error: 'Invalid Website ID, API key, or Shop Domain' },
         { status: 401, headers }
       );
     }

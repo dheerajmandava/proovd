@@ -174,8 +174,9 @@ export class ProovdCRO {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     siteId: this.options.websiteId,
+                    shop: this.options.shopDomain,
                     campaignId,
-                    eventType: 'impression',
+                    type: 'impression',
                     variantId: variant.variantId,
                     price: variant.price,
                     cost: variant.cost || 0
