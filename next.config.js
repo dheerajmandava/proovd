@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone', // Optimized for Docker/Coolify deployments
   transpilePackages: ["mongoose"],
   images: {
     domains: ['images.unsplash.com'],
