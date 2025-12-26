@@ -84,6 +84,8 @@
     "@rollup/plugin-replace": "^6.0.2",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^12.1.2",
+    "@shopify/app": "^3.58.2",
+    "@shopify/cli": "^3.88.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/node-fetch": "^2.6.12",

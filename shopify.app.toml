@@ -16,7 +16,7 @@ api_version = "2026-01"
 scopes = "read_products,write_script_tags"
 
 [auth]
-redirect_urls = [ 
+redirect_urls = [
   "http://localhost:3000/api/shopify/callback",
   "http://localhost:3001/api/shopify/callback",
   "http://localhost:3002/api/shopify/callback",
