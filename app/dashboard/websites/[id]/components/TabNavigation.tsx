@@ -47,12 +47,7 @@ export default function TabNavigation({
             {website.domain}
             <ArrowTopRightOnSquareIcon className="h-4 w-4 ml-1" />
           </a>
-          {website.status === 'verified' && (
-            <div className="flex items-center ml-2 text-green-600 bg-green-100 rounded-full px-2 py-0.5 text-xs">
-              <CheckCircleIcon className="h-4 w-4 mr-1" />
-              Verified
-            </div>
-          )}
+          {/* Domain verification badge removed for Shopify-first workflow */}
         </div>
       </div>
 

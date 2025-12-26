@@ -27,21 +27,21 @@ export default function WebsiteList({ websites }: WebsiteListProps) {
   // Function to confirm deletion
   const confirmDelete = async () => {
     if (!deletingId) return;
-    
+
     setIsDeleting(true);
     setDeleteError(null);
-    
+
     try {
       const response = await fetch(`/api/websites?id=${deletingId}`, {
         method: 'DELETE',
       });
-      
+
       const result = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(result.error || 'Failed to delete website');
       }
-      
+
       // Close modal and refresh data
       setIsDeleteConfirmOpen(false);
       setDeletingId(null);
@@ -67,7 +67,7 @@ export default function WebsiteList({ websites }: WebsiteListProps) {
         return 'badge-ghost';
     }
   };
-  
+
   if (websites.length === 0) {
     return (
       <div className="text-center py-10">
@@ -86,9 +86,8 @@ export default function WebsiteList({ websites }: WebsiteListProps) {
         <table className="table w-full">
           <thead>
             <tr>
-              <th>Website</th>
+              <th>Store Name</th>
               <th>Domain</th>
-              <th>Status</th>
               <th>Created</th>
               <th>Actions</th>
             </tr>
@@ -98,11 +97,6 @@ export default function WebsiteList({ websites }: WebsiteListProps) {
               <tr key={website.id} className="hover">
                 <td className="font-medium">{website.name}</td>
                 <td>{website.domain}</td>
-                <td>
-                  <span className={`badge ${getStatusBadgeClass(website.status)}`}>
-                    {website.status}
-                  </span>
-                </td>
                 <td>{format(new Date(website.createdAt), 'MMM d, yyyy')}</td>
                 <td>
                   <div className="flex gap-2">
@@ -112,14 +106,6 @@ export default function WebsiteList({ websites }: WebsiteListProps) {
                     >
                       Details
                     </Link>
-                    {website.status === 'pending' && (
-                      <Link
-                        href={`/dashboard/websites/${website.id}/verify`}
-                        className="btn btn-xs btn-primary"
-                      >
-                        Verify
-                      </Link>
-                    )}
                     <button
                       onClick={() => handleDeleteClick(website.id)}
                       className="btn btn-xs btn-ghost btn-error"
@@ -133,7 +119,7 @@ export default function WebsiteList({ websites }: WebsiteListProps) {
           </tbody>
         </table>
       </div>
-      
+
       {/* Delete confirmation modal */}
       {isDeleteConfirmOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -142,24 +128,24 @@ export default function WebsiteList({ websites }: WebsiteListProps) {
             <p className="py-4">
               Are you sure you want to delete this website? This action cannot be undone.
             </p>
-            
+
             {deleteError && (
               <div className="alert alert-error mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 <span>{deleteError}</span>
               </div>
             )}
-            
+
             <div className="modal-action">
-              <button 
+              <button
                 className="btn btn-outline"
                 onClick={() => setIsDeleteConfirmOpen(false)}
                 disabled={isDeleting}
               >
                 Cancel
               </button>
-              <button 
-                className="btn btn-error" 
+              <button
+                className="btn btn-error"
                 onClick={confirmDelete}
                 disabled={isDeleting}
               >
