@@ -90,12 +90,27 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
 
     // Check Shopify connection on mount
     useEffect(() => {
-        if (isEditing) {
+        if (isEditing && initialData) {
             console.log('EDIT MODE: Initial Data:', JSON.stringify(initialData, null, 2));
-            console.log('EDIT MODE: Form Data State:', JSON.stringify(formData, null, 2));
+            setFormData({
+                name: initialData.name || '',
+                type: 'pricing',
+                status: (initialData.status as any) || 'draft',
+                pricingConfig: {
+                    productId: initialData.pricingConfig?.productId || '',
+                    productHandle: initialData.pricingConfig?.productHandle || '',
+                    productUrl: initialData.pricingConfig?.productUrl || '',
+                    variants: Array.isArray(initialData.pricingConfig?.variants)
+                        ? initialData.pricingConfig.variants.map((v: any) => ({
+                            ...v,
+                            id: v.id || v._id || `variant-${Math.random()}`
+                        }))
+                        : []
+                }
+            });
         }
         checkShopifyConnection();
-    }, [websiteId]);
+    }, [websiteId, initialData, isEditing]);
 
     const checkShopifyConnection = async () => {
         try {
