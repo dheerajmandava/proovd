@@ -71,10 +71,10 @@ export default function WebsiteList({ websites }: WebsiteListProps) {
   if (websites.length === 0) {
     return (
       <div className="text-center py-10">
-        <h3 className="text-lg font-semibold mb-2">No websites yet</h3>
-        <p className="mb-4">Get started by adding your first website</p>
-        <Link href="/dashboard/websites/add" className="btn btn-primary">
-          Add Website
+        <h3 className="text-lg font-semibold mb-2">No stores connected</h3>
+        <p className="mb-4">Get started by connecting your first Shopify store</p>
+        <Link href="/dashboard/websites/new" className="btn btn-primary">
+          Connect Store
         </Link>
       </div>
     );

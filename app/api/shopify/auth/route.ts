@@ -1,12 +1,16 @@
-/**
- * Shopify OAuth - Initiate Auth Flow
- * GET /api/shopify/auth?shop=store.myshopify.com&websiteId=xxx
- */
 import { NextRequest, NextResponse } from 'next/server';
-// import { shopify } from '@/app/lib/shopify/config'; // Unused and incorrect import
 import crypto from 'crypto';
+import { auth } from '@/auth';
 
 export async function GET(request: NextRequest) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json(
+            { error: 'Unauthorized' },
+            { status: 401 }
+        );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const shop = searchParams.get('shop');
     const websiteId = searchParams.get('websiteId');
@@ -30,8 +34,12 @@ export async function GET(request: NextRequest) {
     // Generate state token for CSRF protection
     const state = crypto.randomBytes(16).toString('hex');
 
-    // Store state with websiteId in a cookie (will be validated in callback)
-    const stateData = JSON.stringify({ state, websiteId });
+    // Store state with websiteId and userId in a cookie
+    const stateData = JSON.stringify({
+        state,
+        websiteId,
+        userId: session.user.id
+    });
 
     // Build OAuth URL
     // Build OAuth URL

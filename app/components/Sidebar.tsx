@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { 
-  HomeIcon, 
-  ChartBarIcon, 
-  CogIcon, 
-  BellIcon, 
+import {
+  HomeIcon,
+  ChartBarIcon,
+  CogIcon,
+  BellIcon,
   CreditCardIcon,
   QuestionMarkCircleIcon,
   GlobeAltIcon,
@@ -20,11 +20,11 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [activeWebsiteId, setActiveWebsiteId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Fetch current website ID from localStorage or URL
   useEffect(() => {
     setIsLoading(true);
-    
+
     // Try to get website ID from URL path
     const matches = pathname.match(/\/dashboard\/websites\/([a-f0-9]{24})\/?.*/);
     if (matches && matches[1]) {
@@ -37,13 +37,13 @@ export default function Sidebar() {
         setActiveWebsiteId(storedId);
       }
     }
-    
+
     setIsLoading(false);
   }, [pathname]);
-  
+
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-    { name: 'Websites', href: '/dashboard/websites', icon: GlobeAltIcon },
+    { name: 'Stores', href: '/dashboard/websites', icon: GlobeAltIcon },
     // { 
     //   name: 'Analytics', 
     //   href: activeWebsiteId 
@@ -60,13 +60,13 @@ export default function Sidebar() {
     // { name: 'Billing', href: '/dashboard/billing', icon: CreditCardIcon },
     { name: 'Help', href: '/dashboard/help', icon: QuestionMarkCircleIcon },
   ];
-  
+
   // Handle website selection
   const handleWebsiteSelect = (id: string) => {
     setActiveWebsiteId(id);
     localStorage.setItem('activeWebsiteId', id);
   };
-  
+
   return (
     <div className="drawer-side z-20">
       <label htmlFor="drawer-toggle" className="drawer-overlay"></label>
@@ -80,16 +80,16 @@ export default function Sidebar() {
             <span className="text-base-content">Proovd</span>
           </Link>
         </div>
-        
+
         {/* Website Selector */}
         <div className="px-4 py-4 border-b border-base-200">
-          <label className="text-sm font-medium text-base-content/70 mb-2 block">Your Website</label>
-          <WebsiteSelector 
-            activeWebsiteId={activeWebsiteId} 
-            onSelect={handleWebsiteSelect} 
+          <label className="text-sm font-medium text-base-content/70 mb-2 block">Selected Store</label>
+          <WebsiteSelector
+            activeWebsiteId={activeWebsiteId}
+            onSelect={handleWebsiteSelect}
           />
         </div>
-        
+
         {/* Main Navigation */}
         <div className="px-3 py-4 flex-grow overflow-y-auto">
           <ul className="menu bg-base-100 rounded-box gap-1">
@@ -112,7 +112,7 @@ export default function Sidebar() {
             })}
           </ul>
         </div>
-        
+
         <div className="px-4 py-4 mt-auto border-t border-base-200">
           <div className="card bg-base-200 shadow-lg">
             <div className="card-body p-4">

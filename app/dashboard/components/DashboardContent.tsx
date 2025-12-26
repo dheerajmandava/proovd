@@ -66,11 +66,11 @@ export default function DashboardContent({ userData, websites }: DashboardConten
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-180px)]">
         <div className="card w-full max-w-xl bg-base-200 shadow-xl">
           <div className="card-body items-center text-center">
-            <h2 className="card-title text-2xl">No websites yet!</h2>
-            <p className="py-4">You haven't added any websites to your account yet. Get started by adding your first website.</p>
+            <h2 className="card-title text-2xl">No stores connected yet!</h2>
+            <p className="py-4">You haven't connected any Shopify stores to your account yet. Get started by connecting your first store.</p>
             <div className="card-actions justify-center">
               <Link href="/dashboard/websites/new" className="btn btn-primary">
-                Add Website
+                Connect Store
               </Link>
             </div>
           </div>
@@ -126,13 +126,16 @@ export default function DashboardContent({ userData, websites }: DashboardConten
           )}
         </div>
 
-        <div className="rounded-xl border bg-card p-6">
-          <h2 className="text-xl font-semibold">Installation Code</h2>
-          <p className="text-sm text-muted-foreground mt-2 mb-4">
-            Add this code to your website to start displaying campaigns
-          </p>
-          <CodeSection websiteId={website._id.toString()} />
-        </div>
+        {/* Only show manual installation code if not connected to Shopify */
+          !(website as any).shopify?.isActive && (
+            <div className="rounded-xl border bg-card p-6">
+              <h2 className="text-xl font-semibold">Installation Code</h2>
+              <p className="text-sm text-muted-foreground mt-2 mb-4">
+                Add this code to your website to start displaying campaigns. (Not needed for Shopify stores)
+              </p>
+              <CodeSection websiteId={website._id.toString()} />
+            </div>
+          )}
       </div>
     </div>
   );

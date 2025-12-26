@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
     }
 
     let websiteId: string | null = null;
+    let userId: string | null = null;
+
     try {
         const parsed = JSON.parse(storedStateData);
         if (parsed.state !== state) {
@@ -33,6 +35,7 @@ export async function GET(request: NextRequest) {
             );
         }
         websiteId = parsed.websiteId;
+        userId = parsed.userId;
     } catch (e) {
         return NextResponse.json(
             { error: 'Invalid state data' },
@@ -109,7 +112,52 @@ export async function GET(request: NextRequest) {
         // Store in database
         await connectToDatabase();
 
-        if (websiteId) {
+        if (websiteId === 'new' && userId) {
+            // userId is already extracted from state
+            const domain = shop.replace('.myshopify.com', '');
+
+            // Checks if website already exists for this user and domain
+            let website = await Website.findOne({ userId, domain });
+
+            if (!website) {
+                // Create new website
+                website = await Website.create({
+                    userId,
+                    name: shop.replace('.myshopify.com', ''),
+                    domain: domain,
+                    status: 'active',
+                    shopify: {
+                        shop,
+                        accessToken: access_token,
+                        scope,
+                        installedAt: new Date(),
+                        isActive: true,
+                    },
+                    verification: {
+                        status: 'verified',
+                        method: 'DNS', // Defaulting to DNS enum but marking verified
+                        verifiedAt: new Date(),
+                        token: crypto.randomBytes(16).toString('hex')
+                    }
+                });
+            } else {
+                // Update existing
+                await Website.findByIdAndUpdate(website._id, {
+                    $set: {
+                        shopify: {
+                            shop,
+                            accessToken: access_token,
+                            scope,
+                            installedAt: new Date(),
+                            isActive: true,
+                        },
+                        status: 'active', // Ensure it's active
+                        'verification.status': 'verified'
+                    },
+                });
+            }
+            websiteId = website._id.toString();
+        } else if (websiteId) {
             // Update existing website with Shopify credentials
             await Website.findByIdAndUpdate(websiteId, {
                 $set: {
@@ -123,7 +171,9 @@ export async function GET(request: NextRequest) {
                     domain: shop.replace('.myshopify.com', ''),
                 },
             });
+        }
 
+        if (websiteId) {
             // Register ScriptTag
             try {
                 // Dynamic host detection to ensure we use the correct tunnel URL
@@ -164,9 +214,7 @@ export async function GET(request: NextRequest) {
         // Clear the state cookie
         const response = NextResponse.redirect(
             new URL(
-                websiteId
-                    ? `/dashboard/websites/${websiteId}?shopify=connected`
-                    : '/dashboard?shopify=connected',
+                `/dashboard/websites/${websiteId}?shopify=connected`,
                 request.url
             )
         );
