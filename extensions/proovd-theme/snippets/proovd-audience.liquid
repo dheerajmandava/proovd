@@ -1,0 +1,62 @@
+{% comment %}
+  Proovd A/B Testing - Audience Targeting
+  
+  Evaluates audience rules server-side in Liquid.
+  Returns true/false in proovd_audience_match variable.
+  
+  Usage: 
+    {% render 'proovd-audience', test: test %}
+    {% if proovd_audience_match %}...{% endif %}
+{% endcomment %}
+
+{% assign proovd_audience_match = true %}
+
+{% if test.audience %}
+  {% comment %} Device targeting {% endcomment %}
+  {% if test.audience.device and test.audience.device != 'all' %}
+    {% assign is_mobile = false %}
+    {% if request.user_agent contains 'Mobile' or request.user_agent contains 'Android' %}
+      {% assign is_mobile = true %}
+    {% endif %}
+    
+    {% if test.audience.device == 'mobile' and is_mobile == false %}
+      {% assign proovd_audience_match = false %}
+    {% elsif test.audience.device == 'desktop' and is_mobile == true %}
+      {% assign proovd_audience_match = false %}
+    {% endif %}
+  {% endif %}
+
+  {% comment %} Country targeting {% endcomment %}
+  {% if test.audience.country and test.audience.country != 'all' and proovd_audience_match %}
+    {% assign target_countries = test.audience.country | split: ',' %}
+    {% assign country_match = false %}
+    {% for country in target_countries %}
+      {% assign trimmed_country = country | strip %}
+      {% if localization.country.iso_code == trimmed_country %}
+        {% assign country_match = true %}
+        {% break %}
+      {% endif %}
+    {% endfor %}
+    {% unless country_match %}
+      {% assign proovd_audience_match = false %}
+    {% endunless %}
+  {% endif %}
+
+  {% comment %} Customer-only targeting {% endcomment %}
+  {% if test.audience.customerOnly and test.audience.customerOnly == true and proovd_audience_match %}
+    {% unless customer %}
+      {% assign proovd_audience_match = false %}
+    {% endunless %}
+  {% endif %}
+
+  {% comment %} New vs returning visitor targeting {% endcomment %}
+  {% if test.audience.visitorType and test.audience.visitorType != 'all' and proovd_audience_match %}
+    {% comment %} 
+      Note: True new/returning detection requires client-side.
+      In Liquid, we can only check if customer exists.
+    {% endcomment %}
+    {% if test.audience.visitorType == 'returning' and customer == blank %}
+      {% assign proovd_audience_match = false %}
+    {% endif %}
+  {% endif %}
+{% endif %}

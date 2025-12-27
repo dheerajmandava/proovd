@@ -47,7 +47,6 @@ export async function POST(request: NextRequest) {
 
     // Get website
     let website;
-    let website;
     if (siteId) {
       // TODO: Add getWebsiteById to imports if not present, or use existing service
       // For now assuming getWebsiteById is available or we use getWebsiteByApiKey if siteId is not valid

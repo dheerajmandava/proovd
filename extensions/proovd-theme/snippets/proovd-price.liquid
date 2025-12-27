@@ -1,0 +1,35 @@
+{% comment %}
+  Proovd A/B Testing - Price Snippet
+  
+  Renders the correct test price at server time. No JavaScript DOM manipulation.
+  
+  Usage: {% render 'proovd-price', price: product.price, compare_price: product.compare_at_price %}
+{% endcomment %}
+
+{% comment %} Ensure proovd session is initialized {% endcomment %}
+{% unless proovd_multiplier %}
+  {% assign proovd_multiplier = 1.0 %}
+{% endunless %}
+
+{% comment %} Calculate test price {% endcomment %}
+{% assign proovd_price = price | times: proovd_multiplier %}
+
+{% comment %} Handle compare-at price if provided {% endcomment %}
+{% if compare_price and compare_price > 0 %}
+  {% assign proovd_compare_price = compare_price | times: proovd_multiplier %}
+{% endif %}
+
+{% comment %} Render price with data attributes for debugging/analytics {% endcomment %}
+<span class="proovd-price" 
+      data-proovd-group="{{ proovd_group | default: 'control' }}"
+      data-proovd-original="{{ price | money_without_currency }}"
+      data-proovd-test="{{ proovd_test_id | default: '' }}">
+  {{ proovd_price | money }}
+</span>
+
+{% if proovd_compare_price and proovd_compare_price > proovd_price %}
+  <span class="proovd-compare-price" 
+        data-proovd-group="{{ proovd_group | default: 'control' }}">
+    <s>{{ proovd_compare_price | money }}</s>
+  </span>
+{% endif %}

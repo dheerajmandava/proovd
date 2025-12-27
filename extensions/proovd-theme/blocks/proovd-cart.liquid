@@ -1,0 +1,28 @@
+{% comment %}
+  Proovd A/B Testing - Cart Properties Block
+  
+  Injects hidden inputs to persist test group and price through checkout.
+  Place inside cart form.
+{% endcomment %}
+
+{% for item in cart.items %}
+  {% comment %} Only add if not already present {% endcomment %}
+  {% unless item.properties['_proovd_group'] %}
+    <input type="hidden" 
+           name="updates[{{ item.key }}][properties][_proovd_group]" 
+           value="{{ proovd_group | default: 'control' }}">
+    <input type="hidden" 
+           name="updates[{{ item.key }}][properties][_proovd_test]" 
+           value="{{ proovd_test_id | default: '' }}">
+    {% if proovd_multiplier and proovd_multiplier != 1.0 %}
+      {% assign item_test_price = item.original_price | times: proovd_multiplier %}
+      <input type="hidden" 
+             name="updates[{{ item.key }}][properties][_proovd_price]" 
+             value="{{ item_test_price | round }}">
+    {% endif %}
+  {% endunless %}
+{% endfor %}
+
+{% comment %} Also store session-level data for Shopify Function {% endcomment %}
+<input type="hidden" name="attributes[_proovd_session]" value="{{ proovd_id }}">
+<input type="hidden" name="attributes[_proovd_group]" value="{{ proovd_group | default: 'control' }}">

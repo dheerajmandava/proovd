@@ -1,0 +1,83 @@
+{% comment %}
+  Proovd A/B Testing - Initialization Block
+  
+  This snippet initializes the Proovd session using Shopify's native identifiers.
+  No localStorage or cookies needed - uses cart token or customer ID.
+{% endcomment %}
+
+{% comment %} Get user identifier from Shopify session {% endcomment %}
+{% assign proovd_id = customer.id | default: cart.token %}
+{% if proovd_id == blank %}
+  {% comment %} Fallback: generate from timestamp + random {% endcomment %}
+  {% assign proovd_id = 'now' | date: '%s%N' | slice: 0, 12 %}
+{% endif %}
+
+{% comment %} Load test configuration from shop metafields {% endcomment %}
+{% assign proovd_config = shop.metafields.proovd.tests.value %}
+{% assign proovd_enabled = false %}
+
+{% if proovd_config != blank and proovd_config.tests != blank %}
+  {% for test in proovd_config.tests %}
+    {% if test.status == 'active' %}
+      {% assign proovd_enabled = true %}
+      {% break %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{% comment %} Calculate test bucket (0-99) from user ID {% endcomment %}
+{% assign proovd_hash = proovd_id | sha256 | slice: 0, 4 %}
+{% assign proovd_bucket = 0 %}
+{% assign hex_chars = '0123456789abcdef' %}
+{% for i in (0..3) %}
+  {% assign char = proovd_hash | slice: i, 1 | downcase %}
+  {% assign char_idx = 0 %}
+  {% for j in (0..15) %}
+    {% assign hex_char = hex_chars | slice: j, 1 %}
+    {% if char == hex_char %}
+      {% assign char_idx = j %}
+      {% break %}
+    {% endif %}
+  {% endfor %}
+  {% assign proovd_bucket = proovd_bucket | plus: char_idx %}
+{% endfor %}
+{% assign proovd_bucket = proovd_bucket | modulo: 100 %}
+
+{% comment %} Determine test group based on bucket {% endcomment %}
+{% assign proovd_group = 'control' %}
+{% assign proovd_multiplier = 1.0 %}
+
+{% if proovd_config != blank and proovd_config.tests != blank %}
+  {% for test in proovd_config.tests %}
+    {% if test.status == 'active' %}
+      {% assign cumulative = 0 %}
+      {% for group in test.groups %}
+        {% assign cumulative = cumulative | plus: group.weight %}
+        {% if proovd_bucket < cumulative %}
+          {% assign proovd_group = group.id %}
+          {% assign proovd_multiplier = group.multiplier | default: 1.0 %}
+          {% assign proovd_test_id = test.id %}
+          {% break %}
+        {% endif %}
+      {% endfor %}
+      {% break %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{% comment %} Expose session to JavaScript for SPA/headless support {% endcomment %}
+<script id="proovd-session" type="application/json">
+{
+  "id": "{{ proovd_id }}",
+  "bucket": {{ proovd_bucket }},
+  "group": "{{ proovd_group }}",
+  "multiplier": {{ proovd_multiplier }},
+  "testId": "{{ proovd_test_id | default: '' }}",
+  "enabled": {{ proovd_enabled }},
+  "isCustomer": {{ customer.id | default: 'null' }}
+}
+</script>
+
+<script>
+  window.proovdSession = JSON.parse(document.getElementById('proovd-session').textContent);
+</script>
