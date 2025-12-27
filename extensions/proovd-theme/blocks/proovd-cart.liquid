@@ -26,3 +26,11 @@
 {% comment %} Also store session-level data for Shopify Function {% endcomment %}
 <input type="hidden" name="attributes[_proovd_session]" value="{{ proovd_id }}">
 <input type="hidden" name="attributes[_proovd_group]" value="{{ proovd_group | default: 'control' }}">
+
+{% schema %}
+{
+  "name": "Proovd Cart Sync",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}

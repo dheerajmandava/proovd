@@ -1,0 +1,15 @@
+api_version = "2024-10"
+
+[[extensions]]
+name = "Proovd A/B Testing"
+handle = "proovd-theme"
+uid = "4e05508e-7ab5-0fb2-e1cb-ee2674e423a06f836e1c"
+type = "theme"
+
+  [[extensions.theme.app_embed_blocks]]
+  name = "Proovd Init"
+  template = "blocks/proovd-init.liquid"
+
+  [[extensions.theme.app_embed_blocks]]
+  name = "Proovd Cart Sync"
+  template = "blocks/proovd-cart.liquid"

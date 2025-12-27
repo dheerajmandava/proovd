@@ -76,32 +76,45 @@ export async function GET(request: NextRequest) {
 
     try {
         // Debug logging
+        const tokenUrl = `https://${shop}/admin/oauth/access_token`;
         console.log('Token Exchange Debug:', {
             shop,
             code: code?.substring(0, 10) + '...',
-            hasClientId: !!process.env.SHOPIFY_CLIENT_ID,
-            hasClientSecret: !!process.env.SHOPIFY_CLIENT_SECRET,
-            tokenUrl: `https://${shop}/admin/oauth/access_token`
+            tokenUrl,
         });
 
         // Exchange code for access token
-        const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                client_id: process.env.SHOPIFY_CLIENT_ID,
-                client_secret: process.env.SHOPIFY_CLIENT_SECRET,
-                code,
-            }),
-        });
+        let tokenResponse;
+        try {
+            tokenResponse = await fetch(tokenUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    client_id: process.env.SHOPIFY_CLIENT_ID,
+                    client_secret: process.env.SHOPIFY_CLIENT_SECRET,
+                    code,
+                }),
+            });
+        } catch (fetchError) {
+            console.error('Fetch error details:', {
+                message: fetchError instanceof Error ? fetchError.message : String(fetchError),
+                cause: fetchError instanceof Error ? (fetchError as any).cause : undefined,
+                code: (fetchError as any).code
+            });
+            throw fetchError;
+        }
 
         if (!tokenResponse.ok) {
             const errorText = await tokenResponse.text();
-            console.error('Token exchange failed:', errorText);
+            console.error('Token exchange failed:', {
+                status: tokenResponse.status,
+                statusText: tokenResponse.statusText,
+                body: errorText
+            });
             return NextResponse.json(
-                { error: 'Failed to exchange authorization code' },
+                { error: 'Failed to exchange authorization code', details: errorText },
                 { status: 500 }
             );
         }

@@ -13,11 +13,22 @@
 {% endif %}
 
 {% comment %} Load test configuration from shop metafields {% endcomment %}
-{% assign proovd_config = shop.metafields.proovd.tests.value %}
+{% assign proovd_raw = shop.metafields.proovd.tests.value %}
 {% assign proovd_enabled = false %}
+{% assign proovd_tests = nil %}
 
-{% if proovd_config != blank and proovd_config.tests != blank %}
-  {% for test in proovd_config.tests %}
+{% comment %} Handle both structures: {tests:[...]} or [...] directly {% endcomment %}
+{% if proovd_raw != blank %}
+  {% if proovd_raw.tests %}
+    {% assign proovd_tests = proovd_raw.tests %}
+  {% elsif proovd_raw.first.id %}
+    {% comment %} It's already an array {% endcomment %}
+    {% assign proovd_tests = proovd_raw %}
+  {% endif %}
+{% endif %}
+
+{% if proovd_tests != blank %}
+  {% for test in proovd_tests %}
     {% if test.status == 'active' %}
       {% assign proovd_enabled = true %}
       {% break %}
@@ -47,8 +58,8 @@
 {% assign proovd_group = 'control' %}
 {% assign proovd_multiplier = 1.0 %}
 
-{% if proovd_config != blank and proovd_config.tests != blank %}
-  {% for test in proovd_config.tests %}
+{% if proovd_tests != blank %}
+  {% for test in proovd_tests %}
     {% if test.status == 'active' %}
       {% assign cumulative = 0 %}
       {% for group in test.groups %}
@@ -57,6 +68,10 @@
           {% assign proovd_group = group.id %}
           {% assign proovd_multiplier = group.multiplier | default: 1.0 %}
           {% assign proovd_test_id = test.id %}
+          {% assign proovd_test_type = test.type | default: 'price' %}
+          {% if proovd_test_type == 'split' %}
+            {% assign proovd_target_variant = group.variant_id %}
+          {% endif %}
           {% break %}
         {% endif %}
       {% endfor %}
@@ -73,11 +88,26 @@
   "group": "{{ proovd_group }}",
   "multiplier": {{ proovd_multiplier }},
   "testId": "{{ proovd_test_id | default: '' }}",
+  "testType": "{{ proovd_test_type | default: 'price' }}",
+  "targetVariant": "{{ proovd_target_variant | default: '' }}",
   "enabled": {{ proovd_enabled }},
-  "isCustomer": {{ customer.id | default: 'null' }}
+  "isCustomer": {{ customer.id | default: 'null' }},
+  "_debug": {
+    "metafieldRaw": {{ proovd_raw | json | default: 'null' }},
+    "testsFound": {{ proovd_tests.size | default: 0 }}
+  }
 }
 </script>
 
+<script src="{{ 'proovd-core.js' | asset_url }}" defer></script>
 <script>
   window.proovdSession = JSON.parse(document.getElementById('proovd-session').textContent);
 </script>
+
+{% schema %}
+{
+  "name": "Proovd Init",
+  "target": "head",
+  "settings": []
+}
+{% endschema %}
