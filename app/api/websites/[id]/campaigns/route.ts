@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getWebsiteById, getCampaignsByWebsite, createCampaign } from '@/app/lib/services';
+import { syncShopifyMetafields } from '@/app/lib/services/shopify.service';
 import { sanitizeInput, isValidObjectId } from '@/app/lib/server-utils';
 import { auth } from '@/auth';
 import { handleApiError } from '@/app/lib/utils/server-error';
@@ -78,24 +79,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
         const campaign = await createCampaign({
             name: sanitizeInput(body.name),
-            message: body.message ? sanitizeInput(body.message) : '',
-            components: body.components || [],
+            // message: body.message ? sanitizeInput(body.message) : '', // Not in type
+            // components: body.components || [], // Not in type
             siteId: website._id,
-            url: body.url ? sanitizeInput(body.url) : '',
-            image: body.image ? sanitizeInput(body.image) : '',
-            status: body.status || 'active',
-            type: body.type || 'popup',
-            priority: body.priority ? parseInt(body.priority) : 0,
-            content: body.content,
-            triggers: body.triggers,
-            variants: body.variants,
-            position: body.position,
-            theme: body.theme,
-            displayRules: body.displayRules,
-            displayFrequency: body.displayFrequency,
-            trafficAllocation: body.trafficAllocation,
-            goals: body.goals,
+            siteId: website._id,
+            status: body.status || 'draft',
+            type: body.type || 'pricing',
+            pricingConfig: body.pricingConfig,
         });
+
+        // Automatically sync to Shopify if active
+        // Ideally we should await this or fire-and-forget
+        // For reliability, we await it here, but could move to background job
+        await syncShopifyMetafields(website._id.toString());
 
         return NextResponse.json({ success: true, campaign }, { status: 201 });
     } catch (error) {

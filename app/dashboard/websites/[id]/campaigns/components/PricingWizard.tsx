@@ -42,6 +42,8 @@ interface PricingFormData {
     name: string;
     type: 'pricing';
     status: 'draft' | 'running' | 'paused';
+    // New fields
+    testType: 'price_test' | 'split_test';
     pricingConfig: {
         productId: string;
         productHandle: string;
@@ -74,6 +76,8 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
     const [formData, setFormData] = useState<PricingFormData>({
         name: initialData?.name || '',
         type: 'pricing',
+        // Default to price test for backward compat
+        testType: (initialData as any)?.testType || 'price_test',
         status: (initialData?.status as any) || 'draft',
         pricingConfig: {
             productId: initialData?.pricingConfig?.productId || '',
@@ -95,6 +99,7 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
             setFormData({
                 name: initialData.name || '',
                 type: 'pricing',
+                testType: (initialData as any)?.testType || 'price_test',
                 status: (initialData.status as any) || 'draft',
                 pricingConfig: {
                     productId: initialData.pricingConfig?.productId || '',
@@ -170,13 +175,50 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
         setSelectedProduct(product);
 
         // Auto-populate form with product variants
-        const variants: PricingVariant[] = product.variants.slice(0, 5).map((v, idx) => ({
-            id: `variant-${idx}`,
-            variantId: v.id.replace('gid://shopify/ProductVariant/', ''),
-            name: v.title || `Price ${String.fromCharCode(65 + idx)}`,
-            price: parseFloat(v.price) || 0,
-            trafficPercent: Math.floor(100 / Math.min(product.variants.length, 5))
-        }));
+        // If Price Test: Default to 1st variant (Control) and add 1 fake variant
+        // If Split Test: Default to top 2 variants as Control vs B
+
+        let variants: PricingVariant[];
+
+        if (formData.testType === 'split_test') {
+            // Split Test: Use real variants
+            variants = product.variants.slice(0, 2).map((v, idx) => ({
+                id: `variant-${idx}`,
+                variantId: v.id.replace('gid://shopify/ProductVariant/', ''),
+                name: v.title || `Variant ${idx + 1}`,
+                price: parseFloat(v.price) || 0,
+                trafficPercent: 50
+            }));
+            // If only 1 variant exists, add a placeholder
+            if (variants.length < 2) {
+                variants.push({
+                    id: `variant-1`,
+                    variantId: '',
+                    name: 'Select Variant B',
+                    price: 0,
+                    trafficPercent: 50
+                });
+            }
+        } else {
+            // Price Test: Clone the 1st variant for testing
+            const firstVariant = product.variants[0];
+            variants = [
+                {
+                    id: `variant-0`,
+                    variantId: firstVariant.id.replace('gid://shopify/ProductVariant/', ''),
+                    name: `Original: ${firstVariant.title}`,
+                    price: parseFloat(firstVariant.price),
+                    trafficPercent: 50
+                },
+                {
+                    id: `variant-1`,
+                    variantId: firstVariant.id.replace('gid://shopify/ProductVariant/', ''), // Same ID!
+                    name: `Test Price A`,
+                    price: (parseFloat(firstVariant.price) * 0.9), // Default 10% off
+                    trafficPercent: 50
+                }
+            ];
+        }
 
         setFormData(prev => ({
             ...prev,
@@ -205,13 +247,30 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
         const newVariants = [...formData.pricingConfig.variants];
         const newPercent = Math.floor(100 / (newVariants.length + 1));
         newVariants.forEach(v => v.trafficPercent = newPercent);
-        newVariants.push({
-            id: `variant-${Date.now()}`,
-            variantId: '',
-            name: `Price ${String.fromCharCode(65 + newVariants.length)}`,
-            price: 0,
-            trafficPercent: newPercent
-        });
+
+        if (formData.testType === 'split_test') {
+            // Add empty slot for real variant
+            newVariants.push({
+                id: `variant-${Date.now()}`,
+                variantId: '',
+                name: 'Select Variant',
+                price: 0,
+                trafficPercent: newPercent
+            });
+        } else {
+            // Add price clone of selected product
+            // TODO: Ideally allow cloning specific variant if product has multiple
+            const basePrice = selectedProduct ? parseFloat(selectedProduct.variants[0].price) : 0;
+            const baseId = selectedProduct ? selectedProduct.variants[0].id.replace('gid://shopify/ProductVariant/', '') : '';
+
+            newVariants.push({
+                id: `variant-${Date.now()}`,
+                variantId: baseId,
+                name: `Test Price ${String.fromCharCode(64 + newVariants.length + 1)}`,
+                price: basePrice,
+                trafficPercent: newPercent
+            });
+        }
         updatePricingConfig('variants', newVariants);
     };
 
@@ -322,6 +381,37 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
                                 className="input input-bordered w-full"
                                 placeholder="e.g. Premium Widget Price Test"
                             />
+                        </div>
+
+                        <div className="form-control">
+                            <label className="label text-xs font-bold uppercase text-base-content/50">Test Type</label>
+                            <div className="flex gap-4">
+                                <label className={`flex-1 border rounded-lg p-4 cursor-pointer hover:border-emerald-500 transition-colors ${formData.testType === 'price_test' ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500' : 'border-base-200'}`}>
+                                    <input
+                                        type="radio"
+                                        name="testType"
+                                        value="price_test"
+                                        checked={formData.testType === 'price_test'}
+                                        onChange={() => setFormData(prev => ({ ...prev, testType: 'price_test' }))}
+                                        className="sr-only"
+                                    />
+                                    <div className="font-bold mb-1">Price Test</div>
+                                    <div className="text-xs text-base-content/60">Test different prices for the <br />SAME product variant.</div>
+                                </label>
+
+                                <label className={`flex-1 border rounded-lg p-4 cursor-pointer hover:border-emerald-500 transition-colors ${formData.testType === 'split_test' ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500' : 'border-base-200'}`}>
+                                    <input
+                                        type="radio"
+                                        name="testType"
+                                        value="split_test"
+                                        checked={formData.testType === 'split_test'}
+                                        onChange={() => setFormData(prev => ({ ...prev, testType: 'split_test' }))}
+                                        className="sr-only"
+                                    />
+                                    <div className="font-bold mb-1">Split Test</div>
+                                    <div className="text-xs text-base-content/60">Test DIFFERENT variants against each other (A/B).</div>
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -465,15 +555,41 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
 
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         <div className="form-control md:col-span-2">
-                                            <label className="label text-[10px] font-bold uppercase text-base-content/40">Shopify Variant ID</label>
-                                            <input
-                                                type="text"
-                                                value={variant.variantId}
-                                                onChange={e => updateVariant(idx, 'variantId', e.target.value)}
-                                                className="input input-sm input-bordered font-mono"
-                                                placeholder="e.g. 45779434701121"
-                                                disabled={formData.status === 'running' || !!variant.variantId}
-                                            />
+                                            <label className="label text-[10px] font-bold uppercase text-base-content/40">Shopify Variant</label>
+
+                                            {formData.testType === 'split_test' ? (
+                                                <select
+                                                    value={variant.variantId}
+                                                    onChange={e => {
+                                                        const v = selectedProduct.variants.find(v => v.id.endsWith(e.target.value));
+                                                        if (v) {
+                                                            updateVariant(idx, 'variantId', e.target.value);
+                                                            updateVariant(idx, 'name', v.title);
+                                                            updateVariant(idx, 'price', parseFloat(v.price));
+                                                        }
+                                                    }}
+                                                    className="select select-sm select-bordered font-mono"
+                                                    disabled={formData.status === 'running'}
+                                                >
+                                                    <option value="">Select a variant...</option>
+                                                    {selectedProduct.variants.map((pv) => {
+                                                        const cleanId = pv.id.replace('gid://shopify/ProductVariant/', '');
+                                                        return (
+                                                            <option key={pv.id} value={cleanId}>
+                                                                {pv.title} - ${pv.price}
+                                                            </option>
+                                                        )
+                                                    })}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    type="text"
+                                                    value={variant.variantId}
+                                                    readOnly
+                                                    className="input input-sm input-bordered font-mono bg-base-200 cursor-not-allowed text-base-content/50"
+                                                    title="Price tests use the same variant ID"
+                                                />
+                                            )}
                                         </div>
                                         <div className="form-control">
                                             <label className="label text-[10px] font-bold uppercase text-base-content/40">Price (₹)</label>
@@ -482,7 +598,7 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
                                                 value={variant.price || ''}
                                                 onChange={e => updateVariant(idx, 'price', parseFloat(e.target.value) || 0)}
                                                 className="input input-sm input-bordered"
-                                                disabled={formData.status === 'running' || !!variant.variantId}
+                                                disabled={formData.status === 'running'} // Price can be edited in Price Test mode
                                             />
                                         </div>
 
@@ -522,6 +638,18 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
                         </div>
                     </section>
                 )}
+
+                {/* Section 5: Target Audience (Placeholder for now) */}
+                <section className="relative pl-8 border-l-2 border-base-200 opacity-50">
+                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-base-200 ring-4 ring-base-100"></div>
+                    <div className="mb-4">
+                        <h2 className="text-lg font-semibold">Target Audience</h2>
+                        <p className="text-sm text-base-content/50">Who should see this test?</p>
+                    </div>
+                    <div className="p-4 bg-base-50 rounded-lg border border-base-200 italic text-sm">
+                        Audience targeting coming soon (Country, Device, User Type)
+                    </div>
+                </section>
             </div>
 
             {/* Sticky Footer */}
@@ -531,14 +659,14 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
                         <select
                             value={formData.status}
                             onChange={e => setFormData(prev => ({ ...prev, status: e.target.value as any }))}
-                            className="select select-sm select-bordered bg-transparent"
+                            className={`select select-sm select-bordered ${formData.status === 'running' ? 'text-emerald-600 font-bold' : ''}`}
                         >
                             <option value="draft">Draft</option>
-                            <option value="running">Active</option>
+                            <option value="running">Active (Running)</option>
                             <option value="paused">Paused</option>
                         </select>
                         <span className="text-xs text-base-content/40 hidden md:inline">
-                            {formData.pricingConfig.variants.length} price variants
+                            {formData.pricingConfig.variants.length} variations • {totalTraffic}% traffic details
                         </span>
                     </div>
                     <div className="flex gap-3">
@@ -549,7 +677,7 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
                             disabled={isSubmitting || totalTraffic !== 100 || !shopifyConnected}
                         >
                             <RocketLaunchIcon className="w-4 h-4" />
-                            {isSubmitting ? 'Saving...' : (isEditing ? 'Update Test' : 'Launch Price Test')}
+                            {isSubmitting ? 'Saving...' : (isEditing ? 'Update Test' : 'Launch Experiment')}
                         </button>
                     </div>
                 </div>

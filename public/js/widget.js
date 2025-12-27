@@ -8,7 +8,7 @@
  * @version 1.0.0
  */
 
-(function() {
+(function () {
   // Configuration defaults
   const DEFAULT_CONFIG = {
     position: 'bottom-left', // bottom-left, bottom-right, top-left, top-right
@@ -31,8 +31,8 @@
   let notificationsShown = 0;
   let isActive = false;
   let timer = null;
-  let baseUrl = 'https://proovd.vercel.app'; // Replace with your actual API base URL
-  
+  let baseUrl = 'https://proovd.in/api'; // Replace with your actual API base URL
+
   // DOM Helpers
   function createStyle() {
     const styleEl = document.createElement('style');
@@ -180,13 +180,13 @@
   function createNotificationElement(notification) {
     const el = document.createElement('div');
     el.className = `sp-notification ${config.theme}`;
-    
+
     if (config.pulsateEffect) {
       el.classList.add('sp-pulse');
     }
 
     const timeAgo = formatTimeAgo(new Date(notification.timestamp));
-    
+
     el.innerHTML = `
       <div class="sp-avatar">
         <img src="${notification.image || `${baseUrl}/placeholder-avatar.png`}" alt="${notification.name || 'User'}">
@@ -198,45 +198,45 @@
       </div>
       <div class="sp-close" title="Close"></div>
     `;
-    
+
     // Add click event to notification
     el.addEventListener('click', (e) => {
       if (e.target.classList.contains('sp-close')) {
         hideNotification(el);
         return;
       }
-      
+
       // Track click
       trackEvent('click', notification.id);
-      
+
       // Open URL if available
       if (notification.url) {
         window.open(notification.url, '_blank');
       }
     });
-    
+
     return el;
   }
 
   function showNotification(notification) {
     if (!containerEl || !notification) return;
-    
+
     // Track impression
     trackEvent('impression', notification.id);
-    
+
     const notificationEl = createNotificationElement(notification);
     containerEl.appendChild(notificationEl);
     currentNotification = {
       element: notificationEl,
       data: notification
     };
-    
+
     // Trigger reflow to ensure the transition works
     notificationEl.offsetHeight;
     notificationEl.classList.add('active');
-    
+
     notificationsShown++;
-    
+
     // Set timeout to hide notification
     timer = setTimeout(() => {
       hideNotification(notificationEl);
@@ -245,16 +245,16 @@
 
   function hideNotification(el) {
     if (!el) return;
-    
+
     el.classList.remove('active');
-    
+
     setTimeout(() => {
       if (el.parentNode) {
         el.parentNode.removeChild(el);
       }
-      
+
       currentNotification = null;
-      
+
       // Show next notification after a gap, if there are more
       if (isActive && notifications.length > notificationIndex && notificationsShown < config.maxNotifications) {
         timer = setTimeout(() => {
@@ -268,7 +268,7 @@
 
   function showNextNotification() {
     if (!isActive || currentNotification) return;
-    
+
     if (notificationIndex < notifications.length) {
       showNotification(notifications[notificationIndex]);
       notificationIndex++;
@@ -290,7 +290,7 @@
     const diffMin = Math.floor(diffSec / 60);
     const diffHour = Math.floor(diffMin / 60);
     const diffDay = Math.floor(diffHour / 24);
-    
+
     if (diffSec < 60) {
       return 'just now';
     } else if (diffMin < 60) {
@@ -306,7 +306,7 @@
 
   function trackEvent(type, notificationId) {
     if (!apiKey || !notificationId) return;
-    
+
     // Don't wait for the response
     fetch(`${baseUrl}/api/track`, {
       method: 'POST',
@@ -329,27 +329,27 @@
       console.error('Proovd: API key is required');
       return;
     }
-    
+
     try {
       const response = await fetch(`${baseUrl}/api/notifications?apiKey=${apiKey}&url=${encodeURIComponent(window.location.href)}`);
-      
+
       if (!response.ok) {
         throw new Error(`Proovd API error: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (Array.isArray(data.notifications)) {
         notifications = data.notifications;
         if (notifications.length > 0 && isActive) {
           // Reset notification index
           notificationIndex = 0;
-          
+
           // Clear any existing timer
           if (timer) {
             clearTimeout(timer);
           }
-          
+
           // Start showing notifications
           if (!currentNotification) {
             timer = setTimeout(() => {
@@ -370,99 +370,99 @@
      * @param {string} key - Your Proovd API key
      * @param {Object} options - Configuration options
      */
-    init: function(key, options = {}) {
+    init: function (key, options = {}) {
       if (!key) {
         console.error('Proovd: API key is required');
         return;
       }
-      
+
       // Already initialized
       if (apiKey) {
         console.warn('Proovd: Widget already initialized');
         return;
       }
-      
+
       apiKey = key;
       config = { ...DEFAULT_CONFIG, ...options };
-      
+
       // Create widget elements
       createStyle();
       createContainer();
-      
+
       // Fetch initial notifications
       fetchNotifications();
-      
+
       // Set refresh interval
       setInterval(fetchNotifications, 60000); // Refresh every minute
-      
+
       // Start showing notifications
       isActive = true;
-      
+
       console.log('Proovd: Widget initialized');
     },
-    
+
     /**
      * Start showing notifications
      */
-    start: function() {
+    start: function () {
       if (!apiKey) {
         console.error('Proovd: Widget not initialized');
         return;
       }
-      
+
       isActive = true;
       notificationsShown = 0; // Reset count
-      
+
       if (!currentNotification && notifications.length > 0) {
         timer = setTimeout(() => {
           showNextNotification();
         }, config.delay);
       }
     },
-    
+
     /**
      * Stop showing notifications
      */
-    stop: function() {
+    stop: function () {
       isActive = false;
-      
+
       if (timer) {
         clearTimeout(timer);
         timer = null;
       }
-      
+
       if (currentNotification) {
         hideNotification(currentNotification.element);
       }
     },
-    
+
     /**
      * Update widget configuration
      * @param {Object} options - New configuration options
      */
-    updateConfig: function(options) {
+    updateConfig: function (options) {
       if (!apiKey) {
         console.error('Proovd: Widget not initialized');
         return;
       }
-      
+
       config = { ...config, ...options };
-      
+
       // Update container position if it was changed
       if (containerEl) {
         containerEl.className = `sp-notification-container ${config.position}`;
       }
     },
-    
+
     /**
      * Manually refresh notifications
      */
-    refresh: function() {
+    refresh: function () {
       if (!apiKey) {
         console.error('Proovd: Widget not initialized');
         return;
       }
-      
+
       fetchNotifications();
     }
   };
