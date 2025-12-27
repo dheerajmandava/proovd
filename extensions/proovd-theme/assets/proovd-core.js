@@ -90,31 +90,45 @@
         }
 
         hideOtherVariants(allowedVariantId) {
-            // Common selectors for Shopify themes
+            // 1. Selector-based hiding (Standard inputs/options)
             const selectors = [
-                `input[name="id"][value]:not([value="${allowedVariantId}"])`, // Radio buttons
-                `option[value]:not([value="${allowedVariantId}"])`, // Dropdown options
-                `a[href*="variant="]:not([href*="${allowedVariantId}"])` // Link swatches
+                `input[name="id"][value]:not([value="${allowedVariantId}"])`, // Radio
+                `option[value]:not([value="${allowedVariantId}"])`, // Dropdown
+                `a[href*="variant="]:not([href*="${allowedVariantId}"])` // Links
             ];
 
             selectors.forEach(selector => {
                 document.querySelectorAll(selector).forEach(el => {
-                    // If it's a radio label, we often need to hide the parent or label
-                    if (el.tagName === 'INPUT') {
+                    this.hardHide(el);
+
+                    // Hide associated labels for inputs (swatches/pills)
+                    if (el.tagName === 'INPUT' && el.id) {
                         const label = document.querySelector(`label[for="${el.id}"]`);
-                        if (label) label.style.display = 'none';
-                        el.style.display = 'none';
-                    }
-
-                    if (el.tagName === 'OPTION') {
-                        el.remove(); // Actually remove options to prevent selection
-                    }
-
-                    if (el.tagName === 'A') {
-                        el.style.display = 'none';
+                        if (label) this.hardHide(label);
                     }
                 });
             });
+
+            // 2. Force click/select the target variant if needed
+            const targetInput = document.querySelector(`input[value="${allowedVariantId}"]`);
+            if (targetInput && !targetInput.checked) {
+                targetInput.checked = true;
+                targetInput.click();
+            }
+
+            const targetOption = document.querySelector(`option[value="${allowedVariantId}"]`);
+            if (targetOption && !targetOption.selected) {
+                targetOption.selected = true;
+                targetOption.parentElement.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+
+        hardHide(el) {
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('opacity', '0', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+            el.setAttribute('hidden', '');
+            el.classList.add('proovd-hidden');
         }
 
         /**
