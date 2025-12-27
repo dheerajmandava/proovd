@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getWebsiteByApiKey,
-  getNotificationById,
-  updateNotification,
   createMetric,
   hasSessionSeenNotification
 } from '@/app/lib/services';
 import { sanitizeInput } from '@/app/lib/server-utils';
 import { isBot } from '@/app/lib/bot-detection';
 import { handleApiError } from '@/app/lib/utils/server-error';
+
+export const dynamic = 'force-dynamic';
 
 /**
  * API endpoint for tracking impressions and clicks on notifications
@@ -68,15 +68,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If campaignId is provided, validate it
-    let notification;
-    if (campaignId) {
-      notification = await getNotificationById(campaignId);
-      if (!notification || notification.siteId.toString() !== website._id.toString()) {
-        // If not found, it might be a general site event, but if campaignId was sent, it should exist
-        // For now, allow continuing if it's a general event, but warn
-      }
-    }
+    // If campaignId is provided, just validate it matches site (optional logic removed for simplicity as notification service is gone)
+    // We can trust the tracking for now or implement campaign existence check via campaign service later.
 
     // Get request information for bot detection
     const userAgent = request.headers.get('user-agent');
@@ -117,24 +110,10 @@ export async function POST(request: NextRequest) {
         conversionValue
       });
 
-      // Update notification counts
-      if (!detectedAsBot && (action !== 'impression' || isUnique)) {
-        const updates: any = {};
-
-        if (action === 'impression') {
-          updates.impressions = (notification?.impressions || 0) + 1;
-        } else if (action === 'click') {
-          updates.clicks = (notification?.clicks || 0) + 1;
-        } else if (action === 'conversion') {
-          // Add conversion tracking to notification model if needed, or just rely on metrics
-          // For now, let's assume we might want to track total conversions on the notification object too
-          // updates.conversions = (notification?.conversions || 0) + 1; 
-        }
-
-        if (Object.keys(updates).length > 0) {
-          await updateNotification(campaignId, updates);
-        }
-      }
+      // Update notification counts - REMOVED (Legacy Social Proof)
+      // if (!detectedAsBot && (action !== 'impression' || isUnique)) {
+      //   // We only track metrics now, no aggregate updates on notification model
+      // }
     }
 
     return NextResponse.json(

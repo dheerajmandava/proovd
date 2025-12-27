@@ -10,6 +10,8 @@ import Website from '@/app/lib/models/website';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 
+export const dynamic = 'force-dynamic';
+
 const METAFIELD_NAMESPACE = 'proovd';
 const METAFIELD_KEY = 'tests';
 
