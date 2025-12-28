@@ -1,14 +1,13 @@
 {% comment %}
   Proovd A/B Testing - Initialization Block
   
-  This snippet initializes the Proovd session using Shopify's native identifiers.
-  No localStorage or cookies needed - uses cart token or customer ID.
+  This snippet initializes the Proovd session and passes ALL active tests
+  to JavaScript for product-aware price matching on any page.
 {% endcomment %}
 
 {% comment %} Get user identifier from Shopify session {% endcomment %}
 {% assign proovd_id = customer.id | default: cart.token %}
 {% if proovd_id == blank %}
-  {% comment %} Fallback: generate from timestamp + random {% endcomment %}
   {% assign proovd_id = 'now' | date: '%s%N' | slice: 0, 12 %}
 {% endif %}
 
@@ -22,7 +21,6 @@
   {% if proovd_raw.tests %}
     {% assign proovd_tests = proovd_raw.tests %}
   {% elsif proovd_raw.first.id %}
-    {% comment %} It's already an array {% endcomment %}
     {% assign proovd_tests = proovd_raw %}
   {% endif %}
 {% endif %}
@@ -54,59 +52,22 @@
 {% endfor %}
 {% assign proovd_bucket = proovd_bucket | modulo: 100 %}
 
-{% comment %} Determine test group based on bucket {% endcomment %}
-{% assign proovd_group = 'control' %}
-{% assign proovd_multiplier = 1.0 %}
+{% comment %} Get current product context if on product page {% endcomment %}
+{% assign current_product_id = product.id | append: '' %}
+{% assign current_product_handle = product.handle %}
 
-{% if proovd_tests != blank %}
-  {% for test in proovd_tests %}
-    {% comment %} Only apply test if it's active AND matches the current product {% endcomment %}
-    {% if test.status == 'active' or test.id != blank %}
-      {% assign test_matches = false %}
-      {% if product.id != blank %}
-         {% assign p_id = product.id | append: '' %}
-         {% if test.product_id == p_id or test.product_handle == product.handle %}
-            {% assign test_matches = true %}
-         {% endif %}
-      {% endif %}
-
-      {% if test_matches %}
-        {% assign cumulative = 0 %}
-        {% for group in test.groups %}
-          {% assign cumulative = cumulative | plus: group.weight %}
-          {% if proovd_bucket < cumulative %}
-            {% assign proovd_group = group.id %}
-            {% assign proovd_multiplier = group.multiplier | default: 1.0 %}
-            {% assign proovd_price = group.price | default: 0 %}
-            {% assign proovd_test_id = test.id %}
-            {% assign proovd_test_type = test.type | default: 'ab-test' %}
-            {% assign proovd_target_variant = group.variant_id %}
-            {% break %}
-          {% endif %}
-        {% endfor %}
-        {% break %}
-      {% endif %}
-    {% endif %}
-  {% endfor %}
-{% endif %}
-
-{% comment %} Expose session to JavaScript for SPA/headless support {% endcomment %}
+{% comment %} Expose ALL tests to JavaScript for product-aware price matching {% endcomment %}
 <script id="proovd-session" type="application/json">
 {
   "id": "{{ proovd_id }}",
   "bucket": {{ proovd_bucket }},
-  "group": "{{ proovd_group }}",
-  "multiplier": {{ proovd_multiplier }},
-  "price": {{ proovd_price | default: 0 }},
-  "testId": "{{ proovd_test_id | default: '' }}",
-  "testType": "{{ proovd_test_type | default: 'ab-test' }}",
-  "targetVariant": "{{ proovd_target_variant | default: '' }}",
   "enabled": {{ proovd_enabled }},
   "isCustomer": {{ customer.id | default: 'null' }},
-  "_debug": {
-    "metafieldRaw": {{ proovd_raw | json | default: 'null' }},
-    "testsFound": {{ proovd_tests.size | default: 0 }}
-  }
+  "currentProduct": {
+    "id": "{{ current_product_id | default: '' }}",
+    "handle": "{{ current_product_handle | default: '' }}"
+  },
+  "tests": {{ proovd_tests | json | default: '[]' }}
 }
 </script>
 
