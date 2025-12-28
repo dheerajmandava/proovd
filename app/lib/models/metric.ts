@@ -12,7 +12,7 @@ const metricSchema = new Schema(
     notificationId: {
       type: Schema.Types.ObjectId,
       required: [true, 'Notification ID is required'],
-      ref: 'Notification',
+      ref: 'Campaign',
     },
     type: {
       type: String,
