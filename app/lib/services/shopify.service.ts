@@ -67,19 +67,12 @@ export async function syncShopifyMetafields(siteId: string) {
     const tests = campaigns.map((campaign: any) => {
         // Map variants to groups
         const groups = (campaign.pricingConfig?.variants || []).map((v: any) => {
-            // Calculate multiplier if needed (e.g. price test)
-            // For split test, we just pass the variant ID
-
-            // Getting base price for multiplier calc is tricky if we don't store it perfect.
-            // But if it's a split test, multiplier effectively is 1.0 (unless price is also different)
-
-            // Simplification: We assume the stored 'price' and 'trafficPercent' are what matters
-
             return {
-                id: v.id,
+                id: v._id?.toString() || v.variantId, // Use Mongoose ID or fallback to variant ID
                 weight: v.trafficPercent,
                 variant_id: v.variantId,
-                multiplier: 1.0 // TODO: Calculate actual multiplier if doing price test
+                multiplier: 1.0,
+                price: v.price
             };
         });
 
@@ -87,10 +80,13 @@ export async function syncShopifyMetafields(siteId: string) {
             id: campaign._id.toString(),
             product_id: campaign.pricingConfig?.productId,
             product_handle: campaign.pricingConfig?.productHandle,
-            type: campaign.type === 'pricing' ? 'price' : 'split', // Map 'pricing' type to specific behavior
+            type: campaign.type === 'pricing' ? 'price' : 'split',
+            status: 'active', // Since it was filtered by 'running' in the query
             groups
         };
     });
+
+    console.log(`Syncing Payload to ${website.shopify.shop}:`, JSON.stringify(tests, null, 2));
 
     // Better Type Inference logic
     const testsWithTypes = tests.map((t: any) => {

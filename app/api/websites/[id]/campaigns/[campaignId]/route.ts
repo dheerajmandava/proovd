@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { getWebsiteById, getCampaignById, updateCampaign, deleteCampaign } from '@/app/lib/services';
+import { getWebsiteById, getCampaignById } from '@/app/lib/services';
 import Campaign from '@/app/lib/models/campaign';
+import { syncShopifyMetafields } from '@/app/lib/services/shopify.service';
 import { handleApiError } from '@/app/lib/utils/server-error';
 import { isValidObjectId } from '@/app/lib/server-utils';
 import { revalidatePath } from 'next/cache';
@@ -80,6 +81,14 @@ export async function PUT(
 
         if (!updatedCampaign) {
             return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+        }
+
+        // Trigger sync to Shopify
+        try {
+            const { syncShopifyMetafields } = await import('@/app/lib/services/shopify.service');
+            await syncShopifyMetafields(websiteId);
+        } catch (syncError) {
+            console.error('Failed to trigger background sync:', syncError);
         }
 
         revalidatePath(`/dashboard/websites/${websiteId}/campaigns`);
