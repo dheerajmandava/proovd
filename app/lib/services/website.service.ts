@@ -314,6 +314,22 @@ export async function getWebsiteByApiKey(apiKey: string): Promise<WebsiteWithAna
 }
 
 /**
+ * Get a website by Shopify shop domain
+ */
+export async function getWebsiteByShopifyDomain(shop: string): Promise<WebsiteWithAnalytics | null> {
+  if (!shop) return null;
+
+  try {
+    await connectToDatabase();
+    const website = await Website.findOne({ 'shopify.shop': shop }).lean();
+    return website ? convertToWebsiteWithAnalytics(website) : null;
+  } catch (error) {
+    console.error('Error fetching website by Shopify domain:', error);
+    return null;
+  }
+}
+
+/**
  * Get website verification details
  * @param id Website ID
  * @param userId User ID

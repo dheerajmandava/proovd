@@ -114,6 +114,7 @@
             if (targetInput && !targetInput.checked) {
                 targetInput.checked = true;
                 targetInput.click();
+                targetInput.dispatchEvent(new Event('change', { bubbles: true }));
             }
 
             const targetOption = document.querySelector(`option[value="${allowedVariantId}"]`);
