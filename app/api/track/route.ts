@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  getWebsiteByApiKey,
-  createMetric,
-  hasSessionSeenNotification
-} from '@/app/lib/services';
+import { getWebsiteByApiKey } from '@/app/lib/services/website.service';
+import { createMetric, hasSessionSeenNotification } from '@/app/lib/services/metric.service';
 import { sanitizeInput } from '@/app/lib/server-utils';
 import { isBot } from '@/app/lib/bot-detection';
 import { handleApiError } from '@/app/lib/utils/server-error';

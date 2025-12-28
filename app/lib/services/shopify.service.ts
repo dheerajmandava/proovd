@@ -85,15 +85,9 @@ export async function syncShopifyMetafields(siteId: string) {
 
         return {
             id: campaign._id.toString(),
+            product_id: campaign.pricingConfig?.productId,
+            product_handle: campaign.pricingConfig?.productHandle,
             type: campaign.type === 'pricing' ? 'price' : 'split', // Map 'pricing' type to specific behavior
-            // We can add a 'subtype' field later if needed, e.g. 'split' vs 'dynamic_price'
-            // For now, let's infer 'split' if multiple variants are targeted?
-            // Actually, let's just use what user defines.
-
-            // HACK: Since current Schema only has 'pricing' type, we'll default to 'price' 
-            // unless we add specific flag. For now, let's look at the variant IDs. 
-            // If variants are DIFFERENT, it's a split test. If same variant ID but different price, it's price test.
-
             groups
         };
     });

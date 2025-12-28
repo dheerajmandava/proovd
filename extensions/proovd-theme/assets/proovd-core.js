@@ -31,7 +31,7 @@
             this.injectAntiFlickerStyle();
 
             // 2. Split Test Logic
-            if (this.config.testType === 'split_test' && this.config.targetVariant) {
+            if (this.config.testType === 'split' && this.config.targetVariant) {
                 this.enforceVariant(this.config.targetVariant);
             }
 
@@ -40,8 +40,41 @@
                 this.enforcePrice(this.config.multiplier);
             }
 
+            // 4. Analytics Tracking
+            this.trackImpression();
+
             // Remove anti-flicker after short delay
             setTimeout(() => this.removeAntiFlicker(), 500);
+        }
+
+        async trackImpression() {
+            if (!this.config.testId || this.config.group === 'control') return;
+
+            try {
+                // Determine current host for API
+                const apiHost = 'https://proovd.in'; // Production default
+
+                await fetch(`${apiHost}/api/track`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        shop: window.Shopify?.shop,
+                        websiteId: this.config.websiteId,
+                        campaignId: this.config.testId,
+                        type: 'impression',
+                        data: {
+                            variantId: this.config.targetVariant,
+                            group: this.config.group
+                        },
+                        sessionId: this.config.id,
+                        url: window.location.href,
+                        referrer: document.referrer
+                    })
+                });
+                console.log('Proovd: Impression tracked');
+            } catch (e) {
+                console.warn('Proovd: Tracking failed', e);
+            }
         }
 
         injectAntiFlickerStyle() {
@@ -94,7 +127,9 @@
             const selectors = [
                 `input[name="id"][value]:not([value="${allowedVariantId}"])`, // Radio
                 `option[value]:not([value="${allowedVariantId}"])`, // Dropdown
-                `a[href*="variant="]:not([href*="${allowedVariantId}"])` // Links
+                `a[href*="variant="]:not([href*="${allowedVariantId}"])`, // Links
+                `[data-variant-id]:not([data-variant-id="${allowedVariantId}"])`, // Data attr
+                `[data-variant]:not([data-variant="${allowedVariantId}"])` // Data attr
             ];
 
             selectors.forEach(selector => {
@@ -106,6 +141,14 @@
                         const label = document.querySelector(`label[for="${el.id}"]`);
                         if (label) this.hardHide(label);
                     }
+
+                    // Also try to find a parent pill/swatch container if it's a data-attr
+                    if (el.hasAttribute('data-variant-id') || el.hasAttribute('data-variant')) {
+                        const parent = el.closest('.swatch-element, .swatch__item, .product-form__input');
+                        if (parent && !parent.querySelector(`[data-variant-id="${allowedVariantId}"], [data-variant="${allowedVariantId}"]`)) {
+                            this.hardHide(parent);
+                        }
+                    }
                 });
             });
 
@@ -114,14 +157,30 @@
             if (targetInput && !targetInput.checked) {
                 targetInput.checked = true;
                 targetInput.click();
-                targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+                this.dispatchLegacyEvents(allowedVariantId);
             }
 
             const targetOption = document.querySelector(`option[value="${allowedVariantId}"]`);
             if (targetOption && !targetOption.selected) {
                 targetOption.selected = true;
                 targetOption.parentElement.dispatchEvent(new Event('change', { bubbles: true }));
+                this.dispatchLegacyEvents(allowedVariantId);
             }
+
+            const targetData = document.querySelector(`[data-variant-id="${allowedVariantId}"], [data-variant="${allowedVariantId}"]`);
+            if (targetData) {
+                // only click if not "active" class
+                if (!targetData.classList.contains('active') && !targetData.classList.contains('selected')) {
+                    targetData.click();
+                    this.dispatchLegacyEvents(allowedVariantId);
+                }
+            }
+        }
+
+        dispatchLegacyEvents(variantId) {
+            // Match the old widget's event dispatching
+            window.dispatchEvent(new CustomEvent("variant:change", { detail: { variant: { id: parseInt(variantId) } } }));
+            document.dispatchEvent(new CustomEvent("shopify:variant:change", { detail: { variantId: variantId } }));
         }
 
         hardHide(el) {

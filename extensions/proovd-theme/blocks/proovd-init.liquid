@@ -60,22 +60,33 @@
 
 {% if proovd_tests != blank %}
   {% for test in proovd_tests %}
-    {% if test.status == 'active' %}
-      {% assign cumulative = 0 %}
-      {% for group in test.groups %}
-        {% assign cumulative = cumulative | plus: group.weight %}
-        {% if proovd_bucket < cumulative %}
-          {% assign proovd_group = group.id %}
-          {% assign proovd_multiplier = group.multiplier | default: 1.0 %}
-          {% assign proovd_test_id = test.id %}
-          {% assign proovd_test_type = test.type | default: 'price' %}
-          {% if proovd_test_type == 'split' %}
-            {% assign proovd_target_variant = group.variant_id %}
+    {% comment %} Only apply test if it's active AND matches the current product {% endcomment %}
+    {% if test.status == 'active' or test.id != blank %}
+      {% assign test_matches = false %}
+      {% if product.id != blank %}
+         {% assign p_id = product.id | append: '' %}
+         {% if test.product_id == p_id or test.product_handle == product.handle %}
+            {% assign test_matches = true %}
+         {% endif %}
+      {% endif %}
+
+      {% if test_matches %}
+        {% assign cumulative = 0 %}
+        {% for group in test.groups %}
+          {% assign cumulative = cumulative | plus: group.weight %}
+          {% if proovd_bucket < cumulative %}
+            {% assign proovd_group = group.id %}
+            {% assign proovd_multiplier = group.multiplier | default: 1.0 %}
+            {% assign proovd_test_id = test.id %}
+            {% assign proovd_test_type = test.type | default: 'price' %}
+            {% if proovd_test_type == 'split' %}
+              {% assign proovd_target_variant = group.variant_id %}
+            {% endif %}
+            {% break %}
           {% endif %}
-          {% break %}
-        {% endif %}
-      {% endfor %}
-      {% break %}
+        {% endfor %}
+        {% break %}
+      {% endif %}
     {% endif %}
   {% endfor %}
 {% endif %}
