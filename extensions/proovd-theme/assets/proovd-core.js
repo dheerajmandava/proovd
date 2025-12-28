@@ -35,8 +35,8 @@
                 this.enforceVariant(this.config.targetVariant);
             }
 
-            // 3. Price Test Logic
-            if (this.config.multiplier !== 1.0) {
+            // 3. Price Test Logic (when a custom price is configured)
+            if (this.config.price && this.config.price > 0) {
                 this.enforcePrice(this.config.multiplier);
             }
 
@@ -196,10 +196,97 @@
         }
 
         /**
-         * PRICE TEST: Enforce calculated price
+         * PRICE TEST: Find price elements and replace with test price
+         * Uses the `price` value from config (set per-group in metafield)
          */
         enforcePrice(multiplier) {
-            // TODO: Port robust price manipulation logic here
+            const testPrice = this.config.price; // Direct price from metafield group
+            if (!testPrice) {
+                console.warn('[Proovd] Price test configured but no price value found in config.');
+                return;
+            }
+
+            console.log(`[Proovd] Enforcing test price: ${testPrice}`);
+
+            // Common Shopify price selectors
+            const priceSelectors = [
+                '.price__regular .price-item--regular',
+                '.price-item--regular',
+                '.product__price',
+                '.product-single__price',
+                '[data-product-price]',
+                '[data-price]',
+                '.price .money',
+                '.product-price',
+                '.current-price',
+                '.ProductMeta__Price',
+                '.product__info-price .price',
+                '.product-form__price',
+                '.product__price--regular',
+                '.price-container .price',
+                '.price__current',
+                'span.money',
+                '.shopify-price',
+                '.product-card__price'
+            ];
+
+            // Get currency format from Shopify
+            const formatMoney = (cents) => {
+                const format = window.Shopify?.currency?.format || '${{amount}}';
+                const amount = (cents / 100).toFixed(2);
+                return format
+                    .replace('{{amount}}', amount)
+                    .replace('{{amount_no_decimals}}', Math.round(cents / 100))
+                    .replace('{{amount_with_comma_separator}}', amount.replace('.', ','))
+                    .replace('{{amount_no_decimals_with_comma_separator}}', Math.round(cents / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
+            };
+
+            // Convert test price to cents if not already
+            const priceInCents = testPrice > 1000 ? testPrice : testPrice * 100;
+            const formattedPrice = formatMoney(priceInCents);
+
+            // Replace prices
+            const replacePrices = () => {
+                priceSelectors.forEach(selector => {
+                    document.querySelectorAll(selector).forEach(el => {
+                        // Skip if already processed or is inside a cart/checkout
+                        if (el.dataset.proovdProcessed) return;
+                        if (el.closest('.cart, .cart-drawer, #cart, .mini-cart')) return;
+
+                        // Only process if on product page or in product card matching our product
+                        const productContainer = el.closest('[data-product-id], .product, .product-card, .product-single');
+                        if (productContainer) {
+                            const containerId = productContainer.dataset?.productId;
+                            // If container has a product ID and it doesn't match, skip
+                            if (containerId && this.config._debug?.metafieldRaw?.tests?.[0]?.product_id) {
+                                const testProductId = this.config._debug.metafieldRaw.tests[0].product_id;
+                                if (containerId !== testProductId && !testProductId.includes(containerId)) {
+                                    return;
+                                }
+                            }
+                        }
+
+                        // Store original for potential rollback
+                        if (!el.dataset.proovdOriginal) {
+                            el.dataset.proovdOriginal = el.textContent;
+                        }
+
+                        // Replace text content
+                        el.textContent = formattedPrice;
+                        el.dataset.proovdProcessed = 'true';
+                        console.log('[Proovd] Replaced price:', el);
+                    });
+                });
+            };
+
+            // Initial replacement
+            replacePrices();
+
+            // Watch for dynamic content changes
+            const observer = new MutationObserver(() => {
+                replacePrices();
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
         }
     }
 

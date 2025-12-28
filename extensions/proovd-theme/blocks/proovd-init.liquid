@@ -77,6 +77,7 @@
           {% if proovd_bucket < cumulative %}
             {% assign proovd_group = group.id %}
             {% assign proovd_multiplier = group.multiplier | default: 1.0 %}
+            {% assign proovd_price = group.price | default: 0 %}
             {% assign proovd_test_id = test.id %}
             {% assign proovd_test_type = test.type | default: 'ab-test' %}
             {% assign proovd_target_variant = group.variant_id %}
@@ -96,8 +97,9 @@
   "bucket": {{ proovd_bucket }},
   "group": "{{ proovd_group }}",
   "multiplier": {{ proovd_multiplier }},
+  "price": {{ proovd_price | default: 0 }},
   "testId": "{{ proovd_test_id | default: '' }}",
-  "testType": "{{ proovd_test_type | default: 'price' }}",
+  "testType": "{{ proovd_test_type | default: 'ab-test' }}",
   "targetVariant": "{{ proovd_target_variant | default: '' }}",
   "enabled": {{ proovd_enabled }},
   "isCustomer": {{ customer.id | default: 'null' }},
