@@ -57,18 +57,20 @@ export async function syncShopifyMetafields(siteId: string) {
         return;
     }
 
-    // 2. Fetch Active Campaigns
+    // 2. Fetch All Campaigns for this site to sync state
     const campaigns = await Campaign.find({
-        siteId,
-        status: 'running' // Only sync active campaigns
+        siteId
     }).lean();
 
-    // 3. Transform to Storefront JSON format
-    const tests = campaigns.map((campaign: any) => {
+    // 3. Filter for active tests to be sent to Shopify
+    const activeCampaigns = campaigns.filter((c: any) => c.status === 'running');
+
+    // 4. Transform ONLY active campaigns to Storefront JSON format
+    const tests = activeCampaigns.map((campaign: any) => {
         // Map variants to groups
         const groups = (campaign.pricingConfig?.variants || []).map((v: any) => {
             return {
-                id: v._id?.toString() || v.variantId, // Use Mongoose ID or fallback to variant ID
+                id: v._id?.toString() || v.variantId,
                 weight: v.trafficPercent,
                 variant_id: v.variantId,
                 multiplier: 1.0,
@@ -80,30 +82,15 @@ export async function syncShopifyMetafields(siteId: string) {
             id: campaign._id.toString(),
             product_id: campaign.pricingConfig?.productId,
             product_handle: campaign.pricingConfig?.productHandle,
-            type: campaign.type === 'pricing' ? 'price' : 'split',
-            status: 'active', // Since it was filtered by 'running' in the query
+            type: 'ab-test', // Unified type as requested
+            status: 'active',
             groups
         };
     });
 
-    console.log(`Syncing Payload to ${website.shopify.shop}:`, JSON.stringify(tests, null, 2));
+    console.log(`Payload for ${website.shopify.shop}:`, JSON.stringify({ tests }, null, 2));
 
-    // Better Type Inference logic
-    const testsWithTypes = tests.map((t: any) => {
-        const variantIds = t.groups.map((g: any) => g.variant_id);
-        const uniqueVariants = new Set(variantIds);
-
-        // If multiple DIFFERENT Shopify variants are involved, it's a SPLIT test
-        if (uniqueVariants.size > 1) {
-            t.type = 'split';
-        } else {
-            t.type = 'price';
-            // Logic to calculate multiplier would go here if we had original price reference easily accessible
-        }
-        return t;
-    });
-
-    const configPayload = { tests: testsWithTypes };
+    const configPayload = { tests };
 
     try {
         // 4. Get Shop GID

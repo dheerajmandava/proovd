@@ -76,8 +76,8 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
     const [formData, setFormData] = useState<PricingFormData>({
         name: initialData?.name || '',
         type: 'pricing',
-        // Default to price test for backward compat
-        testType: (initialData as any)?.testType || 'price_test',
+        // Default to split test for maximum flexibility
+        testType: 'split_test',
         status: (initialData?.status as any) || 'draft',
         pricingConfig: {
             productId: initialData?.pricingConfig?.productId || '',
@@ -352,8 +352,8 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
                         <CurrencyDollarIcon className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold">{isEditing ? 'Edit' : 'New'} Price Test</h1>
-                        <p className="text-base-content/60 text-sm">Test different price points to maximize profit</p>
+                        <h1 className="text-2xl font-bold">{isEditing ? 'Edit' : 'New'} A/B Experiment</h1>
+                        <p className="text-base-content/60 text-sm">Test different variants or prices to maximize conversions</p>
                     </div>
                 </div>
             </div>
@@ -383,35 +383,9 @@ export default function PricingWizard({ websiteId, initialData, campaignId, isEd
                             />
                         </div>
 
-                        <div className="form-control">
+                        <div className="form-control hidden">
                             <label className="label text-xs font-bold uppercase text-base-content/50">Test Type</label>
-                            <div className="flex gap-4">
-                                <label className={`flex-1 border rounded-lg p-4 cursor-pointer hover:border-emerald-500 transition-colors ${formData.testType === 'price_test' ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500' : 'border-base-200'}`}>
-                                    <input
-                                        type="radio"
-                                        name="testType"
-                                        value="price_test"
-                                        checked={formData.testType === 'price_test'}
-                                        onChange={() => setFormData(prev => ({ ...prev, testType: 'price_test' }))}
-                                        className="sr-only"
-                                    />
-                                    <div className="font-bold mb-1">Price Test</div>
-                                    <div className="text-xs text-base-content/60">Test different prices for the <br />SAME product variant.</div>
-                                </label>
-
-                                <label className={`flex-1 border rounded-lg p-4 cursor-pointer hover:border-emerald-500 transition-colors ${formData.testType === 'split_test' ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500' : 'border-base-200'}`}>
-                                    <input
-                                        type="radio"
-                                        name="testType"
-                                        value="split_test"
-                                        checked={formData.testType === 'split_test'}
-                                        onChange={() => setFormData(prev => ({ ...prev, testType: 'split_test' }))}
-                                        className="sr-only"
-                                    />
-                                    <div className="font-bold mb-1">Split Test</div>
-                                    <div className="text-xs text-base-content/60">Test DIFFERENT variants against each other (A/B).</div>
-                                </label>
-                            </div>
+                            <input type="hidden" value="split_test" />
                         </div>
                     </div>
                 </section>

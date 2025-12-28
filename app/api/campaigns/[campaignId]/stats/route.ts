@@ -57,27 +57,54 @@ export async function GET(
             }
         ]);
 
-        // Format output
+        // Format output for the dashboard
         const totalImpressions = stats.reduce((acc, curr) => acc + curr.impressions, 0);
         const totalConversions = stats.reduce((acc, curr) => acc + curr.conversions, 0);
+        const totalClicks = stats.reduce((acc, curr) => acc + curr.clicks, 0);
+
+        // Create a map for variant names from campaign config
+        const variantNames: Record<string, string> = {};
+        campaign.pricingConfig?.variants?.forEach((v: any) => {
+            variantNames[v.variantId] = v.name || 'Unnamed Variant';
+        });
 
         const formattedVariants = stats.map(s => ({
-            variantId: s._id,
+            id: s._id,
+            name: variantNames[s._id] || 'Control',
             impressions: s.impressions,
             conversions: s.conversions,
             clicks: s.clicks,
-            conversionRate: s.impressions > 0 ? (s.conversions / s.impressions) * 100 : 0
+            ctr: s.impressions > 0 ? ((s.clicks / s.impressions) * 100).toFixed(2) : "0.00",
+            conversionRate: s.impressions > 0 ? ((s.conversions / s.impressions) * 100).toFixed(2) : "0.00"
         }));
+
+        // Find winner if applicable
+        let winner = null;
+        if (formattedVariants.length > 1) {
+            const sorted = [...formattedVariants].sort((a, b) => parseFloat(b.conversionRate) - parseFloat(a.conversionRate));
+            if (sorted[0].impressions >= 100) {
+                winner = sorted[0].id;
+            }
+        }
 
         return NextResponse.json({
             success: true,
             stats: {
-                totalImpressions,
-                totalConversions,
-                conversionRate: totalImpressions > 0 ? (totalConversions / totalImpressions) * 100 : 0,
-                variants: formattedVariants,
-                updatedAt: new Date().toISOString()
-            }
+                impressions: totalImpressions || 0,
+                conversions: totalConversions || 0,
+                clicks: totalClicks || 0,
+                ctr: totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : "0.00",
+                conversionRate: totalImpressions > 0 ? ((totalConversions / totalImpressions) * 100).toFixed(2) : "0.00",
+            },
+            variants: formattedVariants || [],
+            winner: winner,
+            campaign: {
+                id: campaign._id.toString(),
+                name: campaign.name,
+                hasVariants: (campaign.pricingConfig?.variants?.length || 0) > 1
+            },
+            chartData: [],
+            updatedAt: new Date().toISOString()
         });
 
     } catch (error) {
