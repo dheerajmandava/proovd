@@ -78,10 +78,8 @@
             {% assign proovd_group = group.id %}
             {% assign proovd_multiplier = group.multiplier | default: 1.0 %}
             {% assign proovd_test_id = test.id %}
-            {% assign proovd_test_type = test.type | default: 'price' %}
-            {% if proovd_test_type == 'split' %}
-              {% assign proovd_target_variant = group.variant_id %}
-            {% endif %}
+            {% assign proovd_test_type = test.type | default: 'ab-test' %}
+            {% assign proovd_target_variant = group.variant_id %}
             {% break %}
           {% endif %}
         {% endfor %}

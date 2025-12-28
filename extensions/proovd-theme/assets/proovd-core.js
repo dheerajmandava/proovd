@@ -30,8 +30,8 @@
             // 1. Anti-Flicker (Immediate)
             this.injectAntiFlickerStyle();
 
-            // 2. Split Test Logic
-            if (this.config.testType === 'split' && this.config.targetVariant) {
+            // 2. Variant Enforcement (Split/AB Test)
+            if (this.config.targetVariant) {
                 this.enforceVariant(this.config.targetVariant);
             }
 
@@ -174,6 +174,10 @@
                     targetData.click();
                     this.dispatchLegacyEvents(allowedVariantId);
                 }
+            }
+
+            if (!targetInput && !targetOption && !targetData) {
+                console.warn(`[Proovd] CRITICAL: Target Variant ${allowedVariantId} was not found on this page. Check if IDs match your current store.`);
             }
         }
 
